@@ -26,7 +26,9 @@ $buildings = [
 
 ### 2. Set the building name on the new site
 
-In the new building's site, find the footer Custom HTML block that contains the script and change `BUILDING_NAME`:
+In Namecheap Website Builder, go to **Settings** (top right menu) → **Pages**. At the top, select **Default**, then paste the script below into the **After `<body>`** section on the right side of the panel.
+
+Change only the `BUILDING_NAME` value to match the new building:
 
 ```html
 <script>
