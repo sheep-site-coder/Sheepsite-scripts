@@ -190,7 +190,7 @@ Button size: **350×34px**, Roboto 16px, dark purple-to-pink gradient with a das
 **Button pointing to the root Public folder:**
 ```html
 <a href="#" class="gdrive-link"
-   style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:350px; height:34px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:2px dashed rgba(255,255,255,0.6); font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
+   style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:350px; height:35px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:2px dashed rgba(255,255,255,0.6); font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
   &#128196; Click to open
 </a>
 ```
@@ -198,7 +198,7 @@ Button size: **350×34px**, Roboto 16px, dark purple-to-pink gradient with a das
 **Button pointing to a specific subfolder:**
 ```html
 <a href="#" class="gdrive-link" data-subdir="Forms"
-   style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:350px; height:34px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:2px dashed rgba(255,255,255,0.6); font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
+   style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:350px; height:35px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:2px dashed rgba(255,255,255,0.6); font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
   &#128196; Click to open
 </a>
 ```
