@@ -3,38 +3,38 @@
 // Auto-fills building name into all Google Drive file
 // listing buttons on the page.
 //
+// NOTE: Namecheap Website Builder does not support loading
+// this as an external script. Use the inline approach below.
+//
 // SETUP:
-// 1. Add this to your site template/header (change the name per site):
+// Add a single Custom HTML block to your site FOOTER
+// (change BUILDING_NAME per site — that's the only edit needed):
 //
-//      <script>const BUILDING_NAME = 'QGscratch';</script>
+//  <script>
+//  const BUILDING_NAME = 'QGscratch';
 //
-// 2. Add this script to your template/footer:
+//  document.addEventListener('DOMContentLoaded', function () {
+//    const BASE_URL = 'https://sheepsite.com/Scripts/display-gdrive-sites.php';
+//    document.querySelectorAll('.gdrive-link').forEach(function (btn) {
+//      var url = BASE_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+//      var subdir = btn.getAttribute('data-subdir');
+//      if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+//      btn.href = url;
+//    });
+//  });
+//  </script>
 //
-//      <script src="https://sheepsite.com/Scripts/gdrive-links.js"></script>
+// BUTTON FORMAT (Custom HTML block anywhere on the page):
 //
-// 3. Use this format for any button/link on the page:
+//  <!-- Root Public folder -->
+//  <a href="#" class="gdrive-link"
+//     style="display:inline-block; padding:0.5rem 1.2rem; background:#0070f3; color:#fff; text-decoration:none; border-radius:4px; font-family:sans-serif;">
+//    View All Files
+//  </a>
 //
-//      <!-- Root Public folder -->
-//      <a href="#" class="gdrive-link">View All Files</a>
-//
-//      <!-- Specific subfolder -->
-//      <a href="#" class="gdrive-link" data-subdir="Forms">View Forms</a>
+//  <!-- Specific subfolder -->
+//  <a href="#" class="gdrive-link" data-subdir="Forms"
+//     style="display:inline-block; padding:0.5rem 1.2rem; background:#0070f3; color:#fff; text-decoration:none; border-radius:4px; font-family:sans-serif;">
+//    View Forms
+//  </a>
 // -------------------------------------------------------
-
-(function () {
-  const BASE_URL = 'https://sheepsite.com/Scripts/display-gdrive-sites.php';
-
-  if (typeof BUILDING_NAME === 'undefined' || !BUILDING_NAME) {
-    console.warn('gdrive-links.js: BUILDING_NAME is not defined.');
-    return;
-  }
-
-  document.querySelectorAll('.gdrive-link').forEach(function (btn) {
-    var url = BASE_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
-    var subdir = btn.getAttribute('data-subdir');
-    if (subdir) {
-      url += '&subdir=' + encodeURIComponent(subdir);
-    }
-    btn.href = url;
-  });
-})();
