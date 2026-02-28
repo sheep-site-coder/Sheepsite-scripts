@@ -185,19 +185,21 @@ The PHP lookup table stores the ID of the **Public** folder. All navigation from
 
 Buttons are added as **Custom HTML blocks** in Namecheap Website Builder.
 
+Dimensions are matched to the site's existing buttons: **136×34px**, Roboto 16px, purple-to-magenta gradient with a dashed white border.
+
 **Button pointing to the root Public folder:**
 ```html
 <a href="#" class="gdrive-link"
-   style="display:inline-block; padding:0.5rem 1.2rem; background:#0070f3; color:#fff; text-decoration:none; border-radius:4px; font-family:sans-serif;">
-  View All Files
+   style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:136px; height:34px; background:linear-gradient(to right, #7B00D4, #CC00CC); color:#fff; text-decoration:none; border-radius:5px; border:2px dashed rgba(255,255,255,0.6); font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
+  &#128196; Click to open
 </a>
 ```
 
 **Button pointing to a specific subfolder:**
 ```html
 <a href="#" class="gdrive-link" data-subdir="Forms"
-   style="display:inline-block; padding:0.5rem 1.2rem; background:#0070f3; color:#fff; text-decoration:none; border-radius:4px; font-family:sans-serif;">
-  View Forms
+   style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:136px; height:34px; background:linear-gradient(to right, #7B00D4, #CC00CC); color:#fff; text-decoration:none; border-radius:5px; border:2px dashed rgba(255,255,255,0.6); font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
+  &#128196; Click to open
 </a>
 ```
 
