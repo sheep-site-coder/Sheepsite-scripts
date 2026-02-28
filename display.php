@@ -4,7 +4,7 @@
 // Each entry points to:  buildingName/WebSite/Public
 // -------------------------------------------------------
 $buildings = [
-  'oak_manor'    => '1L9jR4pkJGa4_924msS-ZVh8NMXXdgL25',  // oak_manor/WebSite/Public
+  'QGscratch'    => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',  // oak_manor/WebSite/Public
   'pine_ridge'   => 'FOLDER_ID_FOR_PINE_RIDGE',             // pine_ridge/WebSite/Public
   'sunset_plaza' => 'FOLDER_ID_FOR_SUNSET_PLAZA',           // sunset_plaza/WebSite/Public
   // add more buildings here...
