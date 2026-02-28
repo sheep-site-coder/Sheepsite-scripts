@@ -10,20 +10,31 @@ function doGet(e) {
   // Start at the Public folder for this building
   let folder = DriveApp.getFolderById(folderId);
 
-  // If a subdirectory name was supplied, navigate into it
+  // Navigate into subdir path (supports multiple levels e.g. "Forms/2024")
   if (subdir) {
-    const subfolders = folder.getFoldersByName(subdir);
-    if (subfolders.hasNext()) {
-      folder = subfolders.next();
-    } else {
-      return ContentService.createTextOutput(JSON.stringify({ error: 'Subdirectory not found: ' + subdir }))
-        .setMimeType(ContentService.MimeType.JSON);
+    const parts = subdir.split('/');
+    for (const part of parts) {
+      const subfolders = folder.getFoldersByName(part);
+      if (subfolders.hasNext()) {
+        folder = subfolders.next();
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({ error: 'Folder not found: ' + part }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
     }
   }
 
-  const files    = folder.getFiles();
-  const fileList = [];
+  // Collect subfolders
+  const folderList = [];
+  const folders = folder.getFolders();
+  while (folders.hasNext()) {
+    const f = folders.next();
+    folderList.push({ name: f.getName() });
+  }
 
+  // Collect files
+  const fileList = [];
+  const files = folder.getFiles();
   while (files.hasNext()) {
     const file = files.next();
     fileList.push({
@@ -34,6 +45,6 @@ function doGet(e) {
     });
   }
 
-  return ContentService.createTextOutput(JSON.stringify(fileList))
+  return ContentService.createTextOutput(JSON.stringify({ folders: folderList, files: fileList }))
     .setMimeType(ContentService.MimeType.JSON);
 }
