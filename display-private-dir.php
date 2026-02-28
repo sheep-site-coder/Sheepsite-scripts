@@ -5,8 +5,16 @@
 // Building name → URL of that building's dir-list-private.php
 // -------------------------------------------------------
 $buildings = [
-  'cvelyndhursth' => 'https://cvelyndhursth.com/Scripts/dir-list-private.php',
-  'QGscratch'     => 'https://qgscratch.website/Scripts/dir-list-private.php',
+  'cvelyndhursth' => [
+    'url'  => 'https://cvelyndhursth.com/Scripts/dir-list-private.php',
+    'user' => 'YOUR_USERNAME',
+    'pass' => 'YOUR_PASSWORD',
+  ],
+  'QGscratch' => [
+    'url'  => 'https://qgscratch.website/Scripts/dir-list-private.php',
+    'user' => 'YOUR_USERNAME',
+    'pass' => 'YOUR_PASSWORD',
+  ],
   // add more buildings here...
 ];
 
@@ -20,8 +28,22 @@ if (!$building || !array_key_exists($building, $buildings)) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 
-$dirListURL = $buildings[$building];
-$buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
+$buildingConfig = $buildings[$building];
+$dirListURL     = $buildingConfig['url'];
+$buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+
+// -------------------------------------------------------
+// HTTP Basic Auth — prompt user for credentials
+// -------------------------------------------------------
+$authUser = $_SERVER['PHP_AUTH_USER'] ?? '';
+$authPass = $_SERVER['PHP_AUTH_PW']   ?? '';
+
+if ($authUser !== $buildingConfig['user'] || $authPass !== $buildingConfig['pass']) {
+  header('WWW-Authenticate: Basic realm="' . $buildLabel . ' – Private Files"');
+  header('HTTP/1.0 401 Unauthorized');
+  echo '<p>Login required.</p>';
+  exit;
+}
 
 // -------------------------------------------------------
 // Build breadcrumb from path
