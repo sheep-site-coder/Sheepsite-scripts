@@ -2,18 +2,26 @@
 // -------------------------------------------------------
 // display-private-dir.php
 // Place this file on sheepsite.com/Scripts/
-// Building name → URL of that building's dir-list-private.php
+// Building name → credentials + token + dir-list URL
 // -------------------------------------------------------
 $buildings = [
   'cvelyndhursth' => [
-    'url'  => 'https://cvelyndhursth.com/Scripts/dir-list-private.php',
-    'user' => 'YOUR_USERNAME',
-    'pass' => 'YOUR_PASSWORD',
+    'url'   => 'https://cvelyndhursth.com/Scripts/dir-list-private.php',
+    'user'  => 'LyndhurstH',
+    'pass'  => 'Owners##$447',
+    'token' => 'REPLACE_WITH_UNIQUE_RANDOM_TOKEN',  // must match dir-list-private.php on cvelyndhursth.com
+  ],
+  'cvelyndhursti' => [
+    'url'   => 'https://cvelyndhursti.com/Scripts/dir-list-private.php',
+    'user'  => 'LyndhurstI',
+    'pass'  => 'Owners2025##@',
+    'token' => 'REPLACE_WITH_UNIQUE_RANDOM_TOKEN',  // must match dir-list-private.php on cvelyndhursti.com
   ],
   'QGscratch' => [
-    'url'  => 'https://qgscratch.website/Scripts/dir-list-private.php',
-    'user' => 'YOUR_USERNAME',
-    'pass' => 'YOUR_PASSWORD',
+    'url'   => 'https://qgscratch.website/Scripts/dir-list-private.php',
+    'user'  => 'QGscratch',
+    'pass'  => 'QGTest4510!@#',
+    'token' => 'REPLACE_WITH_UNIQUE_RANDOM_TOKEN',  // must match dir-list-private.php on qgscratch.website
   ],
   // add more buildings here...
 ];
@@ -29,7 +37,6 @@ if (!$building || !array_key_exists($building, $buildings)) {
 }
 
 $buildingConfig = $buildings[$building];
-$dirListURL     = $buildingConfig['url'];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
 
 // -------------------------------------------------------
@@ -46,6 +53,44 @@ if ($authUser !== $buildingConfig['user'] || $authPass !== $buildingConfig['pass
 }
 
 // -------------------------------------------------------
+// Proxy download — stream file through this page
+// Token is never exposed to the user
+// -------------------------------------------------------
+if (isset($_GET['download'])) {
+  $filename    = basename($_GET['download'] ?? '');
+  $downloadURL = $buildingConfig['url']
+               . '?token=' . urlencode($buildingConfig['token'])
+               . '&path='  . urlencode($path)
+               . '&download=' . urlencode($filename);
+
+  $content = @file_get_contents($downloadURL);
+  if ($content === false) {
+    die('<p style="color:red;">Could not retrieve file.</p>');
+  }
+
+  foreach ($http_response_header as $h) {
+    if (preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i', $h)) {
+      header($h);
+    }
+  }
+  echo $content;
+  exit;
+}
+
+// -------------------------------------------------------
+// Fetch folder + file listing from dir-list-private.php
+// -------------------------------------------------------
+$listURL  = $buildingConfig['url']
+          . '?token=' . urlencode($buildingConfig['token'])
+          . ($path ? '&path=' . urlencode($path) : '');
+
+$response = file_get_contents($listURL);
+$data     = json_decode($response, true);
+$folders  = $data['folders'] ?? [];
+$files    = $data['files']   ?? [];
+$error    = $data['error']   ?? null;
+
+// -------------------------------------------------------
 // Build breadcrumb from path
 // -------------------------------------------------------
 $parts      = $path ? explode('/', $path) : [];
@@ -55,17 +100,6 @@ foreach ($parts as $part) {
   $pathSoFar    = $pathSoFar ? $pathSoFar . '/' . $part : $part;
   $breadcrumb[] = ['label' => $part, 'path' => $pathSoFar];
 }
-
-// -------------------------------------------------------
-// Fetch file + folder list from building's dir-list-private.php
-// -------------------------------------------------------
-$url = $dirListURL . ($path ? '?path=' . urlencode($path) : '');
-
-$response = file_get_contents($url);
-$data     = json_decode($response, true);
-$folders  = $data['folders'] ?? [];
-$files    = $data['files']   ?? [];
-$error    = $data['error']   ?? null;
 
 $baseURL = '?building=' . urlencode($building);
 ?>
@@ -134,10 +168,15 @@ $baseURL = '?building=' . urlencode($building);
     <?php if (!empty($files)): ?>
       <div class="section-title">Files</div>
       <?php foreach ($files as $file): ?>
+        <?php
+          $downloadURL = $baseURL
+            . ($path ? '&path=' . urlencode($path) : '')
+            . '&download=' . urlencode($file['name']);
+        ?>
         <div class="file-card">
           <span class="file-name"><?= htmlspecialchars($file['name']) ?></span>
           <span class="file-info"><?= htmlspecialchars($file['size']) ?></span>
-          <a href="<?= htmlspecialchars($file['url']) ?>" class="download-btn">Download</a>
+          <a href="<?= htmlspecialchars($downloadURL) ?>" class="download-btn">Download</a>
         </div>
       <?php endforeach; ?>
     <?php endif; ?>
