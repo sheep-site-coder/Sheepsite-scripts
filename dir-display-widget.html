@@ -1,0 +1,24 @@
+<div id="file-container" class="my-custom-style">
+  <p>Loading files...</p>
+</div>
+
+<script>
+  const scriptURL = 'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec';
+
+  fetch(scriptURL)
+    .then(response => response.json())
+    .then(data => {
+      const container = document.getElementById('file-container');
+      container.innerHTML = ''; // Clear loading text
+
+      data.forEach(file => {
+        const fileItem = `
+          <div class="file-card">
+            <span class="file-name">${file.name}</span>
+            <span class="file-info">${file.size}</span>
+            <a href="${file.url}" class="download-btn">Download</a>
+          </div>`;
+        container.innerHTML += fileItem;
+      });
+    });
+</script>
