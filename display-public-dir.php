@@ -1,118 +1,55 @@
 <?php
 // -------------------------------------------------------
-// display-private-dir.php
-// Place this file on sheepsite.com/Scripts/
+// Building name → Google Drive "Public" folder ID
+// Each entry points to:  buildingName/WebSite/Public
 // -------------------------------------------------------
-
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
-
-// Building name → HTTP Basic Auth credentials + Google Drive Private folder ID
 $buildings = [
-  'QGscratch' => [
-    'folderId' => '1cnHRemgPPNWbY9QlyrsHXq6Mzdu09tSu',  // QGscratch/WebSite/Private
-    'user'     => 'QGscratch',
-    'pass'     => 'QGTest4510!@#',
-  ],
-  'cvelyndhursth' => [
-    'folderId' => '11WXnAU2P-ShZPtj9p5PG0bFR7ehDXUSS',  // cvelyndhursth/WebSite/Private
-    'user'     => 'LyndhurstH',
-    'pass'     => 'Owners##$447',
-  ],
-  'cvelyndhursti' => [
-    'folderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',  // cvelyndhursti/WebSite/Private
-    'user'     => 'LyndhurstI',
-    'pass'     => 'Owners2025##@',
-  ],
+  'QGscratch'  => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',  // QGscratch/WebSite/Public
+  'LyndhurstH' => '1nJyAbZ8vCAMSKKheU-39DDZB2hXvC97g',  // LyndhurstH/WebSite/Public
+  'LyndhurstI' => '1zL9-FMMKn1uufMZWUw24lywflCVL44Rc',  // LyndhurstI/WebSite/Public
   // add more buildings here...
 ];
+
+$appsScriptURL = 'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec';
 
 // -------------------------------------------------------
 // Get and validate parameters
 // -------------------------------------------------------
 $building = $_GET['building'] ?? '';
-$path     = trim($_GET['path'] ?? '', '/');
+$subdir   = trim($_GET['subdir'] ?? '', '/');
 
 if (!$building || !array_key_exists($building, $buildings)) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 
-$buildingConfig = $buildings[$building];
-$buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
-$returnURL      = $_GET['return'] ?? '';
+$folderId   = $buildings[$building];
+$buildLabel = ucwords(str_replace('_', ' ', $building));
+$returnURL  = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
 
 // -------------------------------------------------------
-// HTTP Basic Auth — prompt user for credentials
-// -------------------------------------------------------
-$authUser = $_SERVER['PHP_AUTH_USER'] ?? '';
-$authPass = $_SERVER['PHP_AUTH_PW']   ?? '';
-
-if ($authUser !== $buildingConfig['user'] || $authPass !== $buildingConfig['pass']) {
-  header('WWW-Authenticate: Basic realm="' . $buildLabel . ' – Private Files"');
-  header('HTTP/1.0 401 Unauthorized');
-  echo '<p>Login required.</p>';
-  exit;
-}
-
-// -------------------------------------------------------
 // JSON mode — called by browser fetch, returns listing
-// Auth check above already passed before reaching here
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
-  $scriptURL = APPS_SCRIPT_URL
-             . '?action=listPrivate'
-             . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-             . '&folderId=' . urlencode($buildingConfig['folderId'])
-             . ($path ? '&subdir=' . urlencode($path) : '');
-  $response = @file_get_contents($scriptURL);
+  $url = $appsScriptURL
+       . '?action=list'
+       . '&folderId=' . urlencode($folderId)
+       . ($subdir ? '&subdir=' . urlencode($subdir) : '');
+  $response = @file_get_contents($url);
   header('Content-Type: application/json');
   echo $response ?: json_encode(['error' => 'Could not reach Apps Script']);
   exit;
 }
 
 // -------------------------------------------------------
-// Proxy download — fetch file via Apps Script, stream to browser
-// Token is never exposed to the user
+// Build breadcrumb from subdir path
 // -------------------------------------------------------
-if (isset($_GET['fileId'])) {
-  $fileId = $_GET['fileId'];
-
-  if (!preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
-    die('<p style="color:red;">Invalid file ID.</p>');
-  }
-
-  $scriptURL = APPS_SCRIPT_URL
-             . '?action=download'
-             . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
-             . '&fileId=' . urlencode($fileId);
-
-  $response = @file_get_contents($scriptURL);
-  if ($response === false) {
-    die('<p style="color:red;">Could not retrieve file.</p>');
-  }
-
-  $data = json_decode($response, true);
-  if (!empty($data['error'])) {
-    die('<p style="color:red;">' . htmlspecialchars($data['error']) . '</p>');
-  }
-
-  $disposition = isset($_GET['inline']) ? 'inline' : 'attachment';
-  header('Content-Type: ' . $data['mimeType']);
-  header('Content-Disposition: ' . $disposition . '; filename="' . str_replace('"', '\\"', $data['name']) . '"');
-  echo base64_decode($data['data']);
-  exit;
-}
-
-// -------------------------------------------------------
-// Build breadcrumb from path
-// -------------------------------------------------------
-$parts      = $path ? explode('/', $path) : [];
-$breadcrumb = [['label' => 'Private', 'path' => '']];
+$parts      = $subdir ? explode('/', $subdir) : [];
+$breadcrumb = [['label' => 'Public', 'subdir' => '']];
 $pathSoFar  = '';
 foreach ($parts as $part) {
   $pathSoFar    = $pathSoFar ? $pathSoFar . '/' . $part : $part;
-  $breadcrumb[] = ['label' => $part, 'path' => $pathSoFar];
+  $breadcrumb[] = ['label' => $part, 'subdir' => $pathSoFar];
 }
 
 $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urlencode($returnURL) : '');
@@ -121,7 +58,7 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title><?= htmlspecialchars($buildLabel) ?> – Private Files</title>
+  <title><?= htmlspecialchars($buildLabel) ?> – Files</title>
   <style>
     body           { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
     h1             { margin-bottom: 0.25rem; }
@@ -150,14 +87,14 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
   <?php if ($returnURL): ?>
     <a href="<?= htmlspecialchars($returnURL) ?>" class="back-btn">← Back to site</a>
   <?php endif; ?>
-  <h1><?= htmlspecialchars($buildLabel) ?> – Private Files</h1>
+  <h1><?= htmlspecialchars($buildLabel) ?></h1>
 
   <!-- Breadcrumb -->
   <div class="breadcrumb">
     <?php foreach ($breadcrumb as $i => $crumb): ?>
       <?= $i > 0 ? ' / ' : '' ?>
       <?php if ($i < count($breadcrumb) - 1): ?>
-        <a href="<?= $baseURL . ($crumb['path'] ? '&path=' . urlencode($crumb['path']) : '') ?>">
+        <a href="<?= $baseURL . ($crumb['subdir'] ? '&subdir=' . urlencode($crumb['subdir']) : '') ?>">
           <?= htmlspecialchars($crumb['label']) ?>
         </a>
       <?php else: ?>
@@ -171,9 +108,9 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
   <script>
   (function () {
     var building = <?= json_encode($building) ?>;
-    var path     = <?= json_encode($path) ?>;
+    var subdir   = <?= json_encode($subdir) ?>;
     var baseURL  = '?building=' + encodeURIComponent(building);
-    var fetchURL = baseURL + (path ? '&path=' + encodeURIComponent(path) : '') + '&json=1';
+    var fetchURL = baseURL + (subdir ? '&subdir=' + encodeURIComponent(subdir) : '') + '&json=1';
 
     fetch(fetchURL)
       .then(function (r) { return r.json(); })
@@ -188,8 +125,8 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
       if (data.folders && data.folders.length) {
         html += '<div class="section-title">Folders</div>';
         data.folders.forEach(function (f) {
-          var folderPath = path ? path + '/' + f.name : f.name;
-          var href = baseURL + '&path=' + encodeURIComponent(folderPath);
+          var folderSubdir = subdir ? subdir + '/' + f.name : f.name;
+          var href = baseURL + '&subdir=' + encodeURIComponent(folderSubdir);
           html += '<a href="' + esc(href) + '" class="folder-card">'
                 + '<span class="folder-icon">📁</span>'
                 + '<span class="folder-name">' + esc(f.name) + '</span>'
@@ -200,13 +137,11 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
       if (data.files && data.files.length) {
         html += '<div class="section-title">Files</div>';
         data.files.forEach(function (f) {
-          var fileBase   = baseURL + (path ? '&path=' + encodeURIComponent(path) : '') + '&fileId=' + encodeURIComponent(f.id);
-          var previewURL = fileBase + '&inline=1';
-          var downloadURL = fileBase;
+          var previewURL = 'https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view';
           html += '<div class="file-card">'
                 + '<a href="' + esc(previewURL) + '" target="_blank" class="file-name">' + esc(f.name) + '</a>'
                 + '<span class="file-info">' + esc(f.size) + '</span>'
-                + '<a href="' + esc(downloadURL) + '" class="download-btn">Download</a>'
+                + '<a href="' + esc(f.url) + '" class="download-btn">Download</a>'
                 + '</div>';
         });
       }

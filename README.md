@@ -1,6 +1,6 @@
 # Sheepsite Scripts
 
-Utilities for displaying Google Drive and private cPanel directory contents on building websites.
+Utilities for displaying Google Drive folder contents on building websites. Public folders are open access; Private folders require a building-specific password.
 
 ---
 
@@ -10,47 +10,48 @@ When a new site template is copied for a new building, complete all steps below.
 
 ---
 
-### Step 1 — Add the building to the Google Drive lookup table
+### Step 1 — Create the Google Drive folders
 
-Open `display-gdrive-sites.php` on **sheepsite.com/Scripts/** and add one line to the `$buildings` array:
+In the SheepSite Google Drive, create this structure for the new building:
+
+```
+NewBuildingName/
+  WebSite/
+    Public/    ← set sharing to "Anyone with the link" (Viewer)
+    Private/   ← leave restricted (only SheepSite account has access)
+```
+
+Copy the folder ID from the URL for each:
+`https://drive.google.com/drive/folders/`**`THIS_PART_IS_THE_ID`**
+
+---
+
+### Step 2 — Add the building to the public lookup table
+
+Open `display-public-dir.php` on **sheepsite.com/Scripts/** and add one line to the `$buildings` array:
 
 ```php
 $buildings = [
   'QGscratch'       => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',
-  'NewBuildingName' => 'GOOGLE_DRIVE_FOLDER_ID_FOR_PUBLIC',  // ← add this
+  'NewBuildingName' => 'GOOGLE_DRIVE_PUBLIC_FOLDER_ID',  // ← add this
 ];
 ```
 
 - **Key** (`NewBuildingName`): must match exactly what is set as `BUILDING_NAME` on the building's site
-- **Value**: the Google Drive folder ID for that building's `buildingName/WebSite/Public` folder
-  - To find the folder ID: open the folder in Google Drive, copy the ID from the URL:
-    `https://drive.google.com/drive/folders/`**`THIS_PART_IS_THE_ID`**
+- **Value**: the folder ID for `NewBuildingName/WebSite/Public`
 
 ---
 
-### Step 2 — Add the building to the private directory lookup table
+### Step 3 — Add the building to the private lookup table
 
 Open `display-private-dir.php` on **sheepsite.com/Scripts/** and add an entry to the `$buildings` array:
 
 ```php
 'NewBuildingName' => [
-  'url'   => 'https://newbuilding.com/Scripts/dir-list-private.php',
-  'user'  => 'USERNAME',       // must match cPanel directory lock credentials
-  'pass'  => 'PASSWORD',       // must match cPanel directory lock credentials
-  'token' => 'UNIQUE_TOKEN',   // must match SECRET_TOKEN in dir-list-private.php on that site
+  'folderId' => 'GOOGLE_DRIVE_PRIVATE_FOLDER_ID',  // NewBuildingName/WebSite/Private
+  'user'     => 'USERNAME',
+  'pass'     => 'PASSWORD',
 ],
-```
-
-Generate a strong unique token (32+ random characters) for each building. The same token goes in both `display-private-dir.php` and `dir-list-private.php` on the building's site.
-
----
-
-### Step 3 — Deploy `dir-list-private.php` on the new building site
-
-Upload `dir-list-private.php` to `newbuilding.com/Scripts/` and set the token at the top of the file:
-
-```php
-define('SECRET_TOKEN', 'UNIQUE_TOKEN');  // must match token in display-private-dir.php
 ```
 
 ---
@@ -66,20 +67,20 @@ Change only the `BUILDING_NAME` value to match the new building:
 const BUILDING_NAME = 'NewBuildingName';
 
 document.addEventListener('DOMContentLoaded', function () {
-  const GDRIVE_URL = 'https://sheepsite.com/Scripts/display-gdrive-sites.php';
-  const LOCAL_URL  = 'https://sheepsite.com/Scripts/display-private-dir.php';
+  const PUBLIC_URL  = 'https://sheepsite.com/Scripts/display-public-dir.php';
+  const PRIVATE_URL = 'https://sheepsite.com/Scripts/display-private-dir.php';
 
-  // Google Drive buttons
+  // Public Google Drive buttons
   document.querySelectorAll('.gdrive-link').forEach(function (btn) {
-    var url = GDRIVE_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var url = PUBLIC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
     var subdir = btn.getAttribute('data-subdir');
     if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
     btn.href = url;
   });
 
-  // Private cPanel directory buttons
+  // Private directory buttons
   document.querySelectorAll('.local-link').forEach(function (btn) {
-    var url = LOCAL_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var url = PRIVATE_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
     var path = btn.getAttribute('data-path');
     if (path) url += '&path=' + encodeURIComponent(path);
     btn.href = url;
@@ -94,7 +95,7 @@ That's it. All buttons on the site will automatically point to the correct build
 
 ## Architecture Overview
 
-### Google Drive file listing
+### Public folder listing
 
 ```
 Building Website (e.g. cvelyndhursth.com)
@@ -105,24 +106,26 @@ Building Website (e.g. cvelyndhursth.com)
 │  [User clicks button]
 │
 ▼
-sheepsite.com/Scripts/display-gdrive-sites.php
+sheepsite.com/Scripts/display-public-dir.php
 │  ?building=cvelyndhursth&subdir=Forms
 │
-│  Looks up Google Drive folder ID for 'cvelyndhursth'
-│  Calls Apps Script with folderId + subdir
+│  Looks up Google Drive Public folder ID for 'cvelyndhursth'
+│  Calls Apps Script (action=list) with folderId + subdir
 │
 ▼
 Google Apps Script (Dir Display Bridge)
-│  Navigates Drive folder, returns JSON of folders + files
+│  Navigates Drive folder, returns JSON of folders + files with download URLs
 │
 ▼
-display-gdrive-sites.php renders page:
+display-public-dir.php renders page:
   - Breadcrumb navigation
   - Clickable folder cards
-  - File cards with Download buttons
+  - File cards with Download buttons (direct Drive URLs)
+
+No authentication required.
 ```
 
-### Private cPanel directory listing
+### Private folder listing
 
 ```
 Building Website (e.g. cvelyndhursth.com)
@@ -134,28 +137,31 @@ Building Website (e.g. cvelyndhursth.com)
 │
 ▼
 sheepsite.com/Scripts/display-private-dir.php
-│  ?building=cvelyndhursth&path=Private
+│  ?building=cvelyndhursth&path=SubFolder
 │
 │  Browser challenged for username + password (HTTP Basic Auth)
-│  Calls dir-list-private.php with secret token
+│  Calls Apps Script (action=listPrivate) with folderId + subdir + token
 │
 ▼
-cvelyndhursth.com/Scripts/dir-list-private.php
-│  Validates secret token — rejects requests without it
-│  Reads SiteFolders/ from filesystem
-│  Returns JSON of folders + files (no direct file URLs)
+Google Apps Script (Dir Display Bridge)
+│  Runs as SheepSite account — can access restricted Private folder
+│  Returns JSON of folders + file IDs (no direct download URLs)
 │
 ▼
 display-private-dir.php renders page:
   - Breadcrumb navigation
   - Clickable folder cards
-  - File cards with Download buttons (proxied — token never exposed)
+  - File cards with Download buttons (proxied — Drive URLs never exposed)
+
+For downloads:
+  display-private-dir.php → Apps Script (action=download) → base64 file bytes
+  → decoded and streamed to browser by PHP
 
 Security layers:
-  - cPanel lock on SiteFolders/ → blocks direct file URL access
-  - HTTP Basic Auth on display page → user must log in
-  - Secret token → dir-list-private.php rejects calls without it
-  - Download proxy → files stream through display page, token hidden
+  - Private folder restricted in Google Drive → only SheepSite account can access
+  - HTTP Basic Auth on display page → user must log in with building password
+  - Secret token → Apps Script rejects calls without it
+  - Download proxy → files stream through PHP, token and Drive URLs never exposed
 ```
 
 ---
@@ -167,22 +173,23 @@ Security layers:
 **Location:** Google Apps Script project called "Dir Display Bridge"
 **Deployed at:** `https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec`
 
-Reads a Google Drive folder and returns its contents as JSON.
+Handles all Drive access on behalf of the SheepSite account. Three actions:
+
+| Action         | Token required | Description |
+|----------------|---------------|-------------|
+| `list`         | No            | Lists a Public folder — returns folders + files with download URLs |
+| `listPrivate`  | Yes           | Lists a Private folder — returns folders + file IDs (no URLs) |
+| `download`     | Yes           | Fetches a file by ID — returns base64-encoded bytes for PHP to stream |
 
 **Parameters:**
 
-| Parameter  | Required | Description |
-|------------|----------|-------------|
-| `folderId` | Yes      | Google Drive folder ID to read from |
-| `subdir`   | No       | Subfolder name or path (e.g. `Forms` or `Forms/2024`) |
-
-**Response format:**
-```json
-{
-  "folders": [{ "name": "Forms" }],
-  "files":   [{ "name": "document.pdf", "url": "https://...", "size": "142 KB", "type": "application/pdf" }]
-}
-```
+| Parameter  | Action(s)               | Description |
+|------------|-------------------------|-------------|
+| `action`   | all                     | `list`, `listPrivate`, or `download` |
+| `folderId` | `list`, `listPrivate`   | Google Drive folder ID |
+| `subdir`   | `list`, `listPrivate`   | Subfolder path (e.g. `Forms` or `Forms/2024`) |
+| `fileId`   | `download`              | Google Drive file ID |
+| `token`    | `listPrivate`, `download` | Must match `SECRET_TOKEN` in the script |
 
 **How to redeploy after code changes:**
 1. Open the Apps Script project
@@ -193,11 +200,11 @@ Reads a Google Drive folder and returns its contents as JSON.
 
 ---
 
-### `display-gdrive-sites.php` — Google Drive File Listing Page
+### `display-public-dir.php` — Public Directory File Listing Page
 
-**Location:** `sheepsite.com/Scripts/display-gdrive-sites.php`
+**Location:** `sheepsite.com/Scripts/display-public-dir.php`
 
-Central file browser for Google Drive content. Called from any building site.
+Central file browser for the Public Google Drive folder. No login required. Called from any building site.
 
 **URL parameters:**
 
@@ -208,41 +215,31 @@ Central file browser for Google Drive content. Called from any building site.
 
 **Example URLs:**
 ```
-https://sheepsite.com/Scripts/display-gdrive-sites.php?building=QGscratch
-https://sheepsite.com/Scripts/display-gdrive-sites.php?building=QGscratch&subdir=Forms
-https://sheepsite.com/Scripts/display-gdrive-sites.php?building=QGscratch&subdir=Forms/2024
+https://sheepsite.com/Scripts/display-public-dir.php?building=QGscratch
+https://sheepsite.com/Scripts/display-public-dir.php?building=QGscratch&subdir=Forms
+https://sheepsite.com/Scripts/display-public-dir.php?building=QGscratch&subdir=Forms/2024
 ```
 
 ---
 
-### `display-private-dir.php` — Private cPanel Directory Listing Page
+### `display-private-dir.php` — Private Directory File Listing Page
 
 **Location:** `sheepsite.com/Scripts/display-private-dir.php`
 
-Central file browser for password-protected cPanel directories. Requires login before displaying anything. Downloads are proxied through this page so the secret token is never exposed.
+Central file browser for the Private Google Drive folder. Requires building-specific login before displaying anything. Downloads are proxied through this page so Drive URLs and the secret token are never exposed.
 
 **URL parameters:**
 
 | Parameter  | Required | Description |
 |------------|----------|-------------|
 | `building` | Yes      | Building name — must match a key in `$buildings` array |
-| `path`     | No       | Subdirectory path under SiteFolders/ (e.g. `Private`) |
+| `path`     | No       | Subfolder path within Private (e.g. `Financials`) |
 
 **Example URLs:**
 ```
 https://sheepsite.com/Scripts/display-private-dir.php?building=cvelyndhursth
-https://sheepsite.com/Scripts/display-private-dir.php?building=cvelyndhursth&path=Private
+https://sheepsite.com/Scripts/display-private-dir.php?building=cvelyndhursth&path=Financials
 ```
-
----
-
-### `dir-list-private.php` — Private Directory JSON Provider
-
-**Location:** Each building site at `buildingsite.com/Scripts/dir-list-private.php`
-
-Reads the building site's `SiteFolders/` directory and returns JSON. Rejects all requests that do not include the correct secret token. Handles file downloads by streaming directly from the filesystem.
-
-**Security:** Keep the `Scripts/` folder unlocked in cPanel. Keep `SiteFolders/` locked. The token protects `dir-list-private.php` from direct access.
 
 ---
 
@@ -257,20 +254,13 @@ Documents the footer script and button HTML for building sites. See this file fo
 ```
 buildingName/
   WebSite/
-    Public/          ← this folder's ID goes in display-gdrive-sites.php
+    Public/    ← "Anyone with the link" — ID goes in display-public-dir.php
       Forms/
       Maintenance/
       ...
-```
-
-## cPanel Folder Structure
-
-```
-buildingName/
-  SiteFolders/       ← locked in cPanel (HTTP Basic Auth)
-    Private/
-    ...
-  Scripts/           ← unlocked, contains dir-list-private.php
+    Private/   ← Restricted to SheepSite account — ID goes in display-private-dir.php
+      Financials/
+      ...
 ```
 
 ---
@@ -281,7 +271,7 @@ Buttons are added as **Custom HTML blocks** in Namecheap Website Builder.
 
 Button style: **350×35px**, Roboto 16px, dark purple-to-pink gradient, no border.
 
-### Google Drive button (`class="gdrive-link"`)
+### Public folder button (`class="gdrive-link"`)
 
 ```html
 <!-- Root Public folder -->
@@ -297,17 +287,17 @@ Button style: **350×35px**, Roboto 16px, dark purple-to-pink gradient, no borde
 </a>
 ```
 
-### Private cPanel directory button (`class="local-link"`)
+### Private folder button (`class="local-link"`)
 
 ```html
-<!-- Root SiteFolders -->
+<!-- Root Private folder -->
 <a href="#" class="local-link"
    style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:350px; height:35px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:none; font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
   &#128196; Click to open
 </a>
 
-<!-- Specific subdirectory (change data-path) -->
-<a href="#" class="local-link" data-path="Private"
+<!-- Specific subfolder (change data-path) -->
+<a href="#" class="local-link" data-path="Financials"
    style="display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; width:350px; height:35px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:none; font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
   &#128196; Click to open
 </a>
