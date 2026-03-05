@@ -205,8 +205,9 @@ $currentUser = $_SESSION[$sessionKey];
     h1             { margin-bottom: 0.25rem; }
     .top-bar       { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     .user-info     { font-size: 0.85rem; color: #666; }
-    .logout-btn    { font-size: 0.85rem; color: #0070f3; text-decoration: none; margin-left: 0.75rem; }
-    .logout-btn:hover { text-decoration: underline; }
+    .user-actions  { font-size: 0.85rem; }
+    .user-actions a { color: #0070f3; text-decoration: none; margin-left: 0.75rem; }
+    .user-actions a:hover { text-decoration: underline; }
     .breadcrumb    { font-size: 0.9rem; color: #666; margin-bottom: 1.5rem; }
     .breadcrumb a  { color: #0070f3; text-decoration: none; }
     .breadcrumb a:hover { text-decoration: underline; }
@@ -237,7 +238,10 @@ $currentUser = $_SESSION[$sessionKey];
     <h1><?= htmlspecialchars($buildLabel) ?> – Private Files</h1>
     <div>
       <span class="user-info"><?= htmlspecialchars($currentUser) ?></span>
-      <a href="<?= htmlspecialchars($baseURL) ?>&logout=1" class="logout-btn">Log out</a>
+      <span class="user-actions">
+        <a href="change-password.php?building=<?= urlencode($building) ?><?= $returnURL ? '&return=' . urlencode($returnURL) : '' ?>">Change password</a>
+        <a href="<?= htmlspecialchars($baseURL) ?>&logout=1">Log out</a>
+      </span>
     </div>
   </div>
 
