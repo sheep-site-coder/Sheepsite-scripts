@@ -107,10 +107,12 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
 
   <script>
   (function () {
-    var building = <?= json_encode($building) ?>;
-    var subdir   = <?= json_encode($subdir) ?>;
-    var baseURL  = '?building=' + encodeURIComponent(building);
-    var fetchURL = baseURL + (subdir ? '&subdir=' + encodeURIComponent(subdir) : '') + '&json=1';
+    var building  = <?= json_encode($building) ?>;
+    var subdir    = <?= json_encode($subdir) ?>;
+    var returnURL = <?= json_encode($returnURL) ?>;
+    var baseURL   = '?building=' + encodeURIComponent(building)
+                  + (returnURL ? '&return=' + encodeURIComponent(returnURL) : '');
+    var fetchURL  = baseURL + (subdir ? '&subdir=' + encodeURIComponent(subdir) : '') + '&json=1';
 
     fetch(fetchURL)
       .then(function (r) { return r.json(); })

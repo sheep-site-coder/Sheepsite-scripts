@@ -1,6 +1,6 @@
 # Sheepsite Scripts
 
-Utilities for displaying Google Drive folder contents on building websites. Public folders are open access; Private folders require a building-specific password.
+Utilities for displaying Google Drive folder contents on building websites. Public folders are open access; Private folders require owners to log in with individual usernames and passwords.
 
 ---
 
@@ -40,6 +40,8 @@ $buildings = [
 - **Key** (`NewBuildingName`): must match exactly what is set as `BUILDING_NAME` on the building's site
 - **Value**: the folder ID for `NewBuildingName/WebSite/Public`
 
+Also add the same building to `get-doc-byname.php` if the building will use embedded Google Doc pages.
+
 ---
 
 ### Step 3 — Add the building to the private lookup table
@@ -49,14 +51,40 @@ Open `display-private-dir.php` on **sheepsite.com/Scripts/** and add an entry to
 ```php
 'NewBuildingName' => [
   'folderId' => 'GOOGLE_DRIVE_PRIVATE_FOLDER_ID',  // NewBuildingName/WebSite/Private
-  'user'     => 'USERNAME',
-  'pass'     => 'PASSWORD',
 ],
 ```
 
 ---
 
-### Step 4 — Set the building name on the new site
+### Step 4 — Add the building to the user management page
+
+Open `manage-users.php` on **sheepsite.com/Scripts/** and add an entry to both the `$buildings` array:
+
+```php
+'NewBuildingName' => ['adminUser' => 'admin', 'adminPass' => 'CHOOSE_A_PASSWORD'],
+```
+
+Then create an empty credentials file on the server at:
+```
+sheepsite.com/Scripts/credentials/NewBuildingName.json
+```
+with the contents `[]`.
+
+---
+
+### Step 5 — Add owners as users
+
+Go to the building's user management URL and log in with the building's admin credentials:
+
+```
+https://sheepsite.com/Scripts/manage-users.php?building=NewBuildingName
+```
+
+Add a username and password for each owner. They will use these to log in to the private files section.
+
+---
+
+### Step 6 — Set the building name on the new site
 
 In Namecheap Website Builder, go to **Settings** (top right menu) → **Pages**. At the top, select **Default**, then paste the script below into the **After `<body>`** section on the right side of the panel.
 
@@ -75,6 +103,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var url = PUBLIC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
     var subdir = btn.getAttribute('data-subdir');
     if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+    url += '&return=' + encodeURIComponent(window.location.href);
     btn.href = url;
   });
 
@@ -83,6 +112,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var url = PRIVATE_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
     var path = btn.getAttribute('data-path');
     if (path) url += '&path=' + encodeURIComponent(path);
+    url += '&return=' + encodeURIComponent(window.location.href);
     btn.href = url;
   });
 });
@@ -139,7 +169,11 @@ Building Website (e.g. cvelyndhursth.com)
 sheepsite.com/Scripts/display-private-dir.php
 │  ?building=cvelyndhursth&path=SubFolder
 │
-│  Browser challenged for username + password (HTTP Basic Auth)
+│  PHP session checked — if not logged in, HTML login form is shown
+│  Owner enters individual username + password
+│  Credentials validated against credentials/cvelyndhursth.json (bcrypt hashes)
+│  On success: session set, listing shown
+│
 │  Calls Apps Script (action=listPrivate) with folderId + subdir + token
 │
 ▼
@@ -159,7 +193,8 @@ For downloads:
 
 Security layers:
   - Private folder restricted in Google Drive → only SheepSite account can access
-  - HTTP Basic Auth on display page → user must log in with building password
+  - Session login → each owner has an individual username and password
+  - Passwords stored as bcrypt hashes in credentials/*.json (never plaintext)
   - Secret token → Apps Script rejects calls without it
   - Download proxy → files stream through PHP, token and Drive URLs never exposed
 ```
@@ -212,6 +247,7 @@ Central file browser for the Public Google Drive folder. No login required. Call
 |------------|----------|-------------|
 | `building` | Yes      | Building name — must match a key in `$buildings` array |
 | `subdir`   | No       | Subfolder path (e.g. `Forms` or `Forms/2024`) |
+| `return`   | No       | URL to link back to (set automatically by footer script) |
 
 **Example URLs:**
 ```
@@ -226,7 +262,7 @@ https://sheepsite.com/Scripts/display-public-dir.php?building=QGscratch&subdir=F
 
 **Location:** `sheepsite.com/Scripts/display-private-dir.php`
 
-Central file browser for the Private Google Drive folder. Requires building-specific login before displaying anything. Downloads are proxied through this page so Drive URLs and the secret token are never exposed.
+Central file browser for the Private Google Drive folder. Requires individual owner login before displaying anything. Downloads are proxied through this page so Drive URLs and the secret token are never exposed.
 
 **URL parameters:**
 
@@ -234,6 +270,7 @@ Central file browser for the Private Google Drive folder. Requires building-spec
 |------------|----------|-------------|
 | `building` | Yes      | Building name — must match a key in `$buildings` array |
 | `path`     | No       | Subfolder path within Private (e.g. `Financials`) |
+| `return`   | No       | URL to link back to (set automatically by footer script) |
 
 **Example URLs:**
 ```
@@ -243,9 +280,68 @@ https://sheepsite.com/Scripts/display-private-dir.php?building=cvelyndhursth&pat
 
 ---
 
+### `manage-users.php` — User Management
+
+**Location:** `sheepsite.com/Scripts/manage-users.php`
+
+Per-building admin page for managing owner accounts. Each building has its own URL, its own admin credentials, and can only manage its own users.
+
+**Access:**
+```
+https://sheepsite.com/Scripts/manage-users.php?building=NewBuildingName
+```
+
+**Two access levels:**
+- **Building admin** — logs in with the building's `adminUser` / `adminPass` defined in `manage-users.php`
+- **Master override** — logs in with `MASTER_USER` / `MASTER_PASS` (defined at the top of `manage-users.php`), can access any building
+
+**Actions available:** Add user, remove user, change password.
+
+---
+
+### `credentials/` — Per-Building User Credentials
+
+**Location:** `sheepsite.com/Scripts/credentials/`
+
+One JSON file per building storing owner usernames and bcrypt-hashed passwords:
+
+```json
+[
+  { "user": "john.smith", "pass": "$2y$10$..." },
+  { "user": "jane.doe",   "pass": "$2y$10$..." }
+]
+```
+
+- `credentials/.htaccess` blocks all direct web access to this folder
+- Files are read and written only by PHP — never exposed to the browser
+- Passwords are always stored as bcrypt hashes (`password_hash()`) — never plaintext
+
+---
+
 ### `footer-for-sites.js` — Reference Documentation
 
 Documents the footer script and button HTML for building sites. See this file for ready-to-paste code blocks.
+
+---
+
+### `get-doc-byname.php` — Google Doc Embed Helper
+
+**Location:** `sheepsite.com/Scripts/get-doc-byname.php`
+
+Looks up a file by name in a building's Public folder and redirects to its Google Doc preview URL. Used as an `iframe src` to embed live Google Docs on building pages.
+
+**URL parameters:**
+
+| Parameter  | Required | Description |
+|------------|----------|-------------|
+| `building` | Yes      | Building name |
+| `subdir`   | No       | Subfolder containing the document |
+| `filename` | Yes      | Exact file name to look up |
+
+**Example:**
+```
+https://sheepsite.com/Scripts/get-doc-byname.php?building=QGscratch&subdir=Page1Docs&filename=Announcement+Page1
+```
 
 ---
 
