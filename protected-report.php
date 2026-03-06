@@ -1,0 +1,194 @@
+<?php
+// -------------------------------------------------------
+// protected-report.php
+// Place this file on sheepsite.com/Scripts/
+//
+// Password-protects the Google Sheets Web App reports
+// (Parking List, Elevator List, Board of Directors).
+// Reuses the same session as display-private-dir.php —
+// if a user is already logged in for private files,
+// they won't need to log in again.
+//
+// Usage:
+//   ?building=BUILDING_NAME&page=parking
+//   ?building=BUILDING_NAME&page=elevator
+//   ?building=BUILDING_NAME&page=board
+// -------------------------------------------------------
+session_start();
+
+define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
+
+// Building name → Google Sheets Web App deployment URL
+$buildings = [
+  'QGscratch' => [
+    'webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_QGSCRATCH/exec',
+  ],
+  'cvelyndhursth' => [
+    'webAppURL' => 'https://script.google.com/macros/s/AKfycbwsLZ710fdJgJP_YgJ2yXa2XKwzwYzVUj-c1xEpyefHoYeG8bOwJ407ByWCGGOKzmns/exec',
+  ],
+  'cvelyndhursti' => [
+    'webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_LYNDHURSTI/exec',
+  ],
+  // add more buildings here...
+];
+
+$pages = [
+  'board'    => ['suffix' => '',               'title' => 'Board of Directors'],
+  'elevator' => ['suffix' => '?page=elevator', 'title' => 'Elevator List'],
+  'parking'  => ['suffix' => '?page=parking',  'title' => 'Parking List'],
+];
+
+// -------------------------------------------------------
+// Get and validate parameters
+// -------------------------------------------------------
+$building = $_GET['building'] ?? '';
+$page     = $_GET['page'] ?? 'parking';
+
+if (!$building || !array_key_exists($building, $buildings)) {
+  die('<p style="color:red;">Invalid or missing building name.</p>');
+}
+
+if (!array_key_exists($page, $pages)) {
+  die('<p style="color:red;">Invalid page.</p>');
+}
+
+$buildingConfig = $buildings[$building];
+$pageConfig     = $pages[$page];
+$buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+$returnURL      = $_GET['return'] ?? '';
+if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
+
+$sessionKey = 'private_auth_' . $building;
+$baseURL    = '?building=' . urlencode($building) . '&page=' . urlencode($page)
+            . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+
+// -------------------------------------------------------
+// Logout
+// -------------------------------------------------------
+if (isset($_GET['logout'])) {
+  unset($_SESSION[$sessionKey]);
+  header('Location: ' . $baseURL);
+  exit;
+}
+
+// -------------------------------------------------------
+// Login — handle POST
+// -------------------------------------------------------
+$loginError = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
+  $username = trim($_POST['username'] ?? '');
+  $password = $_POST['password'] ?? '';
+
+  $credFile = CREDENTIALS_DIR . $building . '.json';
+  $users    = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
+
+  $authenticated = false;
+  foreach ($users as $u) {
+    if ($u['user'] === $username && password_verify($password, $u['pass'])) {
+      $authenticated = true;
+      break;
+    }
+  }
+
+  if ($authenticated) {
+    $_SESSION[$sessionKey] = $username;
+    header('Location: ' . $baseURL);
+    exit;
+  } else {
+    $loginError = 'Invalid username or password.';
+  }
+}
+
+// -------------------------------------------------------
+// Login — show form if not authenticated
+// -------------------------------------------------------
+if (empty($_SESSION[$sessionKey])) {
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><?= htmlspecialchars($buildLabel) ?> – Login</title>
+  <style>
+    body       { font-family: sans-serif; max-width: 400px; margin: 4rem auto; padding: 0 1rem; }
+    h1         { margin-bottom: 0.25rem; font-size: 1.4rem; }
+    .subtitle  { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+    label      { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 0.25rem; }
+    input[type=text], input[type=password] {
+                 width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem;
+                 border: 1px solid #ccc; border-radius: 4px; font-size: 1rem;
+                 margin-bottom: 1rem; }
+    .login-btn { width: 100%; padding: 0.6rem; background: #0070f3; color: #fff;
+                 border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+    .login-btn:hover { background: #005bb5; }
+    .error     { color: red; font-size: 0.9rem; margin-bottom: 1rem; }
+    .back-btn  { display: inline-block; margin-bottom: 1.5rem; font-size: 0.9rem;
+                 color: #0070f3; text-decoration: none; }
+    .back-btn:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <?php if ($returnURL): ?>
+    <a href="<?= htmlspecialchars($returnURL) ?>" class="back-btn">← Back to site</a>
+  <?php endif; ?>
+  <h1><?= htmlspecialchars($buildLabel) ?></h1>
+  <div class="subtitle"><?= htmlspecialchars($pageConfig['title']) ?> — login required</div>
+
+  <?php if ($loginError): ?>
+    <p class="error"><?= htmlspecialchars($loginError) ?></p>
+  <?php endif; ?>
+
+  <form method="post" action="<?= htmlspecialchars($baseURL) ?>">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" autocomplete="username" autofocus>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password">
+
+    <button type="submit" class="login-btn">Log in</button>
+  </form>
+</body>
+</html>
+<?php
+  exit;
+}
+
+// -------------------------------------------------------
+// Authenticated — show the report in an iframe
+// -------------------------------------------------------
+$currentUser = $_SESSION[$sessionKey];
+$iframeSrc   = $buildingConfig['webAppURL'] . $pageConfig['suffix'];
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><?= htmlspecialchars($buildLabel) ?> – <?= htmlspecialchars($pageConfig['title']) ?></title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body     { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center;
+               padding: 0.5rem 1rem; background: #f5f5f5; border-bottom: 1px solid #ddd;
+               font-size: 0.85rem; flex-shrink: 0; }
+    .top-bar a { color: #0070f3; text-decoration: none; margin-left: 0.75rem; }
+    .top-bar a:hover { text-decoration: underline; }
+    iframe   { flex: 1; border: none; width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div>
+      <?php if ($returnURL): ?>
+        <a href="<?= htmlspecialchars($returnURL) ?>">← Back to site</a>
+      <?php endif; ?>
+    </div>
+    <div>
+      <span style="color:#666;"><?= htmlspecialchars($currentUser) ?></span>
+      <a href="change-password.php?building=<?= urlencode($building) ?><?= $returnURL ? '&return=' . urlencode($returnURL) : '' ?>">Change password</a>
+      <a href="<?= htmlspecialchars($baseURL) ?>&logout=1">Log out</a>
+    </div>
+  </div>
+  <iframe src="<?= htmlspecialchars($iframeSrc) ?>" title="<?= htmlspecialchars($pageConfig['title']) ?>"></iframe>
+</body>
+</html>

@@ -318,6 +318,26 @@ One JSON file per building storing owner usernames and bcrypt-hashed passwords:
 
 ---
 
+### `protected-report.php` — Password-Protected Sheets Reports
+
+**Location:** `sheepsite.com/Scripts/protected-report.php`
+
+Protects the Google Sheets Web App reports (Parking List, Elevator List, Board of Directors) behind owner login. Reuses the same session as `display-private-dir.php` — owners already logged in for private files won't need to log in again.
+
+After login, displays the report embedded in an iframe. The Apps Script URL is stored server-side only and never exposed to the browser.
+
+**URL parameters:**
+
+| Parameter  | Required | Description |
+|------------|----------|-------------|
+| `building` | Yes      | Building name — must match a key in `$buildings` array |
+| `page`     | Yes      | `parking`, `elevator`, or `board` |
+| `return`   | No       | URL to link back to — pass `window.location.href` from the button |
+
+**Adding a new building:** add an entry to the `$buildings` array in `protected-report.php` with the Google Sheets Web App deployment URL. Get this URL from the building's Apps Script project: **Deploy → Manage deployments**.
+
+---
+
 ### `footer-for-sites.js` — Reference Documentation
 
 Documents the footer script and button HTML for building sites. See this file for ready-to-paste code blocks.
@@ -328,20 +348,38 @@ Documents the footer script and button HTML for building sites. See this file fo
 
 **Location:** `sheepsite.com/Scripts/get-doc-byname.php`
 
-Looks up a file by name in a building's Public folder and redirects to its Google Doc preview URL. Used as an `iframe src` to embed live Google Docs on building pages.
+Looks up a file by name in a building's Public folder and redirects to its Google Doc preview URL. Can be used as an `iframe src` to embed a live Google Doc, or as a button `href` to open the doc in a new tab.
 
 **URL parameters:**
 
 | Parameter  | Required | Description |
 |------------|----------|-------------|
-| `building` | Yes      | Building name |
-| `subdir`   | No       | Subfolder containing the document |
-| `filename` | Yes      | Exact file name to look up |
+| `building` | Yes      | Building name — must match a key in `$buildings` array |
+| `subdir`   | No       | Subfolder path containing the document (e.g. `Page1Docs`) |
+| `filename` | Yes      | Exact file name to look up (use `+` for spaces) |
 
-**Example:**
+**As an iframe (embedded doc):**
+```html
+<iframe
+  src="https://sheepsite.com/Scripts/get-doc-byname.php?building=QGscratch&subdir=Page1Docs&filename=Announcement+Page1"
+  style="width:100%; height:80vh; border:none; display:block;"
+  title="Announcement">
+</iframe>
 ```
-https://sheepsite.com/Scripts/get-doc-byname.php?building=QGscratch&subdir=Page1Docs&filename=Announcement+Page1
+
+**As a button (opens doc in new tab):**
+
+Use a hardcoded `href` — do NOT use `class="gdrive-link"`, as the footer script will overwrite the href with the folder browser URL instead.
+
+```html
+<a href="https://sheepsite.com/Scripts/get-doc-byname.php?building=BUILDING_NAME&subdir=Page1Docs&filename=Mid_Year_report"
+   target="_blank"
+   style="display:block; text-align:left; padding-left:30px; width:350px; height:35px; line-height:35px; background:linear-gradient(to right, #3D0066, #BB0099); color:#fff; text-decoration:none; border-radius:5px; border:none; font-family:'Roboto',sans-serif; font-size:16px; font-weight:400;">
+  Mid Year Report
+</a>
 ```
+
+Replace `BUILDING_NAME` with the actual building key (e.g. `QGscratch`) and update `subdir`, `filename`, and button label as needed.
 
 ---
 
@@ -402,3 +440,17 @@ Button style: **350×35px**, Roboto 16px, dark purple-to-pink gradient, no borde
 - `class="gdrive-link"` / `class="local-link"` — required, tells the footer script which display page to use
 - `data-subdir` / `data-path` — optional, navigates directly into a subfolder
 - `href="#"` is replaced automatically by the footer script using `BUILDING_NAME`
+
+### Protected report button (parking, elevator, board)
+
+Used to open password-protected Google Sheets reports. Uses a hardcoded onclick — do NOT use `class="gdrive-link"`.
+
+In Namecheap Website Builder, add a button with this **onclick** event (change `BUILDING_NAME` and `page` as needed):
+
+```javascript
+window.location.href = 'https://sheepsite.com/Scripts/protected-report.php?building=BUILDING_NAME&page=parking&return=' + encodeURIComponent(window.location.href);
+```
+
+Pages: `page=parking`, `page=elevator`, `page=board`
+
+The `&return=` parameter passes the current page URL so the "← Back to site" link appears after login.
