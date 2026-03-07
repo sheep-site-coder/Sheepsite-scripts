@@ -14,10 +14,10 @@ $buildings = [
   'QGscratch' => [
     'folderId' => '1cnHRemgPPNWbY9QlyrsHXq6Mzdu09tSu',
   ],
-  'cvelyndhursth' => [
+  'LyndhurstH' => [
     'folderId' => '11WXnAU2P-ShZPtj9p5PG0bFR7ehDXUSS',
   ],
-  'cvelyndhursti' => [
+  'LyndhurstI' => [
     'folderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',
   ],
   // add more buildings here...

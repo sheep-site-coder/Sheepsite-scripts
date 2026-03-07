@@ -15,8 +15,8 @@
 
 $buildings = [
   'QGscratch'  => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',  // QGscratch/WebSite/Public
-  'CVELyndhurstH' => '1nJyAbZ8vCAMSKKheU-39DDZB2hXvC97g',  // CVELyndhurstH/WebSite/Public
-  'CVELyndhurstI' => '1zL9-FMMKn1uufMZWUw24lywflCVL44Rc',  // CVELyndhurstI/WebSite/Public
+  'LyndhurstH' => '1nJyAbZ8vCAMSKKheU-39DDZB2hXvC97g',  // LyndhurstH/WebSite/Public
+  'LyndhurstI' => '1zL9-FMMKn1uufMZWUw24lywflCVL44Rc',  // LyndhurstI/WebSite/Public
   // add more buildings here...
 ];
 

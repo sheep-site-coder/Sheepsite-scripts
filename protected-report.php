@@ -23,19 +23,20 @@ $buildings = [
   'QGscratch' => [
     'webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_QGSCRATCH/exec',
   ],
-  'cvelyndhursth' => [
+  'LyndhurstH' => [
     'webAppURL' => 'https://script.google.com/macros/s/AKfycbwsLZ710fdJgJP_YgJ2yXa2XKwzwYzVUj-c1xEpyefHoYeG8bOwJ407ByWCGGOKzmns/exec',
   ],
-  'cvelyndhursti' => [
+  'LyndhurstI' => [
     'webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_LYNDHURSTI/exec',
   ],
   // add more buildings here...
 ];
 
 $pages = [
-  'board'    => ['suffix' => '',               'title' => 'Board of Directors'],
-  'elevator' => ['suffix' => '?page=elevator', 'title' => 'Elevator List'],
-  'parking'  => ['suffix' => '?page=parking',  'title' => 'Parking List'],
+  'board'    => ['suffix' => '',                'title' => 'Board of Directors'],
+  'elevator' => ['suffix' => '?page=elevator',  'title' => 'Elevator List'],
+  'parking'  => ['suffix' => '?page=parking',   'title' => 'Parking List'],
+  'resident' => ['suffix' => '?page=resident',  'title' => 'Resident List'],
 ];
 
 // -------------------------------------------------------

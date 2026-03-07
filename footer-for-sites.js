@@ -42,7 +42,27 @@ document.addEventListener('DOMContentLoaded', function () {
     url += '&return=' + encodeURIComponent(window.location.href);
     btn.href = url;
   });
+
+  // Document iframes (get-doc-byname)
+  const DOC_URL = 'https://sheepsite.com/Scripts/get-doc-byname.php';
+  document.querySelectorAll('iframe[data-script="get-doc-byname"]').forEach(function (iframe) {
+    var url = DOC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var subdir = iframe.getAttribute('data-subdir');
+    var filename = iframe.getAttribute('data-filename');
+    if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+    if (filename) url += '&filename=' + encodeURIComponent(filename);
+    iframe.src = url;
+  });
 });
+
+// Report page buttons — call openReport('parking'), openReport('elevator'), openReport('board')
+// from the button's JS onclick (building name comes from BUILDING_NAME above)
+function openReport(page) {
+  window.location.href = 'https://sheepsite.com/Scripts/protected-report.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&page=' + encodeURIComponent(page)
+    + '&return=' + encodeURIComponent(window.location.href);
+}
 </script>
 
 */

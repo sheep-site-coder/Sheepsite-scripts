@@ -115,7 +115,26 @@ document.addEventListener('DOMContentLoaded', function () {
     url += '&return=' + encodeURIComponent(window.location.href);
     btn.href = url;
   });
+
+  // Document iframes (get-doc-byname)
+  const DOC_URL = 'https://sheepsite.com/Scripts/get-doc-byname.php';
+  document.querySelectorAll('iframe[data-script="get-doc-byname"]').forEach(function (iframe) {
+    var url = DOC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var subdir = iframe.getAttribute('data-subdir');
+    var filename = iframe.getAttribute('data-filename');
+    if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+    if (filename) url += '&filename=' + encodeURIComponent(filename);
+    iframe.src = url;
+  });
 });
+
+// Report page buttons — call from button onclick (building name comes from BUILDING_NAME above)
+function openReport(page) {
+  window.location.href = 'https://sheepsite.com/Scripts/protected-report.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&page=' + encodeURIComponent(page)
+    + '&return=' + encodeURIComponent(window.location.href);
+}
 </script>
 ```
 
@@ -128,18 +147,18 @@ That's it. All buttons on the site will automatically point to the correct build
 ### Public folder listing
 
 ```
-Building Website (e.g. cvelyndhursth.com)
+Building Website (e.g. LyndhurstH.com)
 │
-│  Footer script sets BUILDING_NAME = 'cvelyndhursth'
+│  Footer script sets BUILDING_NAME = 'LyndhurstH'
 │  Buttons use class="gdrive-link" with optional data-subdir
 │
 │  [User clicks button]
 │
 ▼
 sheepsite.com/Scripts/display-public-dir.php
-│  ?building=cvelyndhursth&subdir=Forms
+│  ?building=LyndhurstH&subdir=Forms
 │
-│  Looks up Google Drive Public folder ID for 'cvelyndhursth'
+│  Looks up Google Drive Public folder ID for 'LyndhurstH'
 │  Calls Apps Script (action=list) with folderId + subdir
 │
 ▼
@@ -158,20 +177,20 @@ No authentication required.
 ### Private folder listing
 
 ```
-Building Website (e.g. cvelyndhursth.com)
+Building Website (e.g. LyndhurstH.com)
 │
-│  Footer script sets BUILDING_NAME = 'cvelyndhursth'
+│  Footer script sets BUILDING_NAME = 'LyndhurstH'
 │  Buttons use class="local-link" with optional data-path
 │
 │  [User clicks button]
 │
 ▼
 sheepsite.com/Scripts/display-private-dir.php
-│  ?building=cvelyndhursth&path=SubFolder
+│  ?building=LyndhurstH&path=SubFolder
 │
 │  PHP session checked — if not logged in, HTML login form is shown
 │  Owner enters individual username + password
-│  Credentials validated against credentials/cvelyndhursth.json (bcrypt hashes)
+│  Credentials validated against credentials/LyndhurstH.json (bcrypt hashes)
 │  On success: session set, listing shown
 │
 │  Calls Apps Script (action=listPrivate) with folderId + subdir + token
@@ -274,8 +293,8 @@ Central file browser for the Private Google Drive folder. Requires individual ow
 
 **Example URLs:**
 ```
-https://sheepsite.com/Scripts/display-private-dir.php?building=cvelyndhursth
-https://sheepsite.com/Scripts/display-private-dir.php?building=cvelyndhursth&path=Financials
+https://sheepsite.com/Scripts/display-private-dir.php?building=LyndhurstH
+https://sheepsite.com/Scripts/display-private-dir.php?building=LyndhurstH&path=Financials
 ```
 
 ---
@@ -331,7 +350,7 @@ After login, displays the report embedded in an iframe. The Apps Script URL is s
 | Parameter  | Required | Description |
 |------------|----------|-------------|
 | `building` | Yes      | Building name — must match a key in `$buildings` array |
-| `page`     | Yes      | `parking`, `elevator`, or `board` |
+| `page`     | Yes      | `parking`, `elevator`, `board`, or `resident` |
 | `return`   | No       | URL to link back to — pass `window.location.href` from the button |
 
 **Adding a new building:** add an entry to the `$buildings` array in `protected-report.php` with the Google Sheets Web App deployment URL. Get this URL from the building's Apps Script project: **Deploy → Manage deployments**.
@@ -359,9 +378,14 @@ Looks up a file by name in a building's Public folder and redirects to its Googl
 | `filename` | Yes      | Exact file name to look up (use `+` for spaces) |
 
 **As an iframe (embedded doc):**
+
+Use `data-` attributes instead of a hardcoded `src` — the footer script fills in the building name automatically:
+
 ```html
 <iframe
-  src="https://sheepsite.com/Scripts/get-doc-byname.php?building=QGscratch&subdir=Page1Docs&filename=Announcement+Page1"
+  data-script="get-doc-byname"
+  data-subdir="Page1Docs"
+  data-filename="Announcement Page1"
   style="width:100%; height:80vh; border:none; display:block;"
   title="Announcement">
 </iframe>
@@ -451,6 +475,14 @@ In Namecheap Website Builder, add a button with this **onclick** event (change `
 window.location.href = 'https://sheepsite.com/Scripts/protected-report.php?building=BUILDING_NAME&page=parking&return=' + encodeURIComponent(window.location.href);
 ```
 
-Pages: `page=parking`, `page=elevator`, `page=board`
+Pages: `page=parking`, `page=elevator`, `page=board`, `page=resident`
 
 The `&return=` parameter passes the current page URL so the "← Back to site" link appears after login.
+
+However, instead of hardcoding the building name in the onclick, use the `openReport()` helper defined in the footer script:
+
+```javascript
+openReport('parking')
+```
+
+This pulls `BUILDING_NAME` from the footer automatically — no building name in the button.

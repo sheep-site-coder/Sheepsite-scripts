@@ -4,7 +4,7 @@
 // Place this file on sheepsite.com/Scripts/
 //
 // Each building has its own admin URL, username, and password:
-//   https://sheepsite.com/Scripts/manage-users.php?building=cvelyndhursth
+//   https://sheepsite.com/Scripts/manage-users.php?building=LyndhurstH
 //
 // The master credentials can access any building.
 // Change all passwords before deploying.
@@ -19,8 +19,8 @@ define('MASTER_PASS', 'LeMaster');
 
 $buildings = [
   'QGscratch'     => ['adminUser' => 'admin', 'adminPass' => 'AlainQG'],
-  'cvelyndhursth' => ['adminUser' => 'admin', 'adminPass' => 'u8ssLJAX'],
-  'cvelyndhursti' => ['adminUser' => 'admin', 'adminPass' => 'xttMQ4nX'],
+  'LyndhurstH' => ['adminUser' => 'admin', 'adminPass' => 'u8ssLJAX'],
+  'LyndhurstI' => ['adminUser' => 'admin', 'adminPass' => 'xttMQ4nX'],
   // add more buildings here...
 ];
 

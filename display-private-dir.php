@@ -14,11 +14,11 @@ $buildings = [
   'QGscratch' => [
     'folderId' => '1cnHRemgPPNWbY9QlyrsHXq6Mzdu09tSu',  // QGscratch/WebSite/Private
   ],
-  'cvelyndhursth' => [
-    'folderId' => '11WXnAU2P-ShZPtj9p5PG0bFR7ehDXUSS',  // cvelyndhursth/WebSite/Private
+  'LyndhurstH' => [
+    'folderId' => '11WXnAU2P-ShZPtj9p5PG0bFR7ehDXUSS',  // LyndhurstH/WebSite/Private
   ],
-  'cvelyndhursti' => [
-    'folderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',  // cvelyndhursti/WebSite/Private
+  'LyndhurstI' => [
+    'folderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',  // LyndhurstI/WebSite/Private
   ],
   // add more buildings here...
 ];

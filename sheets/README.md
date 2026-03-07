@@ -2,11 +2,12 @@
 
 ## Overview
 
-This suite of Google Apps Scripts generates three reports for condo building websites:
+This suite of Google Apps Scripts generates four reports for condo building websites:
 
 1. **Board of Directors** — contact list for board members, sorted by role
 2. **Elevator List** — alphabetical resident list in a two-column layout with today's date
 3. **Parking List** — car and parking spot assignments, sortable by Unit # or Parking Spot
+4. **Resident List** — owner contact list with phone number, sortable by Unit # or Last Name
 
 Each report can be:
 - Generated as a **tab inside the building's Google Sheet** for easy review
@@ -36,6 +37,7 @@ sheets/
 ├── board-list.gs        → Master library: Board of Directors logic
 ├── elevator-list.gs     → Master library: Elevator List logic
 ├── parking-list.gs      → Master library: Parking List logic
+├── resident-list.gs     → Master library: Resident List logic
 ├── building-script.gs   → Paste this into each building's Apps Script project
 └── README.md            → This file
 ```
@@ -55,6 +57,10 @@ sheets/
 ### parking-list.gs
 - **`generateParkingList()`** — reads the `CarDB` tab, writes a formatted `Parking List` tab
 - **`doGetParking()`** — serves the Parking List as a responsive HTML web page with sort buttons
+
+### resident-list.gs
+- **`generateResidentList()`** — reads the `Database` tab, writes a formatted `Resident List` tab
+- **`doGetResident()`** — serves the Resident List as a responsive HTML web page sortable by Unit # or Last Name
 
 ---
 
@@ -106,6 +112,7 @@ Each building has **one Web App deployment** that serves all three pages via a U
 | Board of Directors | `https://.../exec` |
 | Elevator List | `https://.../exec?page=elevator` |
 | Parking List | `https://.../exec?page=parking` |
+| Resident List | `https://.../exec?page=resident` |
 
 ### Embedding in a website (iframe)
 
@@ -130,6 +137,7 @@ When the building sheet opens, a **SheepSite** menu appears in the toolbar with:
 | Elevator List Update | Regenerates the `Elevator List` tab |
 | Board List Update | Regenerates the `BoardList` tab |
 | Parking List Update | Regenerates the `Parking List` tab |
+| Resident List Update | Regenerates the `Resident List` tab |
 
 Use these to verify data before checking the published web pages.
 
@@ -168,14 +176,17 @@ Use these to verify data before checking the published web pages.
 - [ ] Run **Elevator List Update** — check the `Elevator List` tab looks correct
 - [ ] Run **Board List Update** — check the `BoardList` tab looks correct
 - [ ] Run **Parking List Update** — check the `Parking List` tab looks correct
+- [ ] Run **Resident List Update** — check the `Resident List` tab looks correct
 - [ ] Open `[URL]/exec` in a browser — verify Board of Directors page
 - [ ] Open `[URL]/exec?page=elevator` — verify Elevator List page
 - [ ] Open `[URL]/exec?page=parking` — verify Parking List page and sort buttons
+- [ ] Open `[URL]/exec?page=resident` — verify Resident List page and sort buttons
 
 ### Step 5 — Embed in the building website
 - [ ] Board of Directors page: embed `[URL]/exec`
 - [ ] Elevator List page: embed `[URL]/exec?page=elevator`
 - [ ] Parking List page: embed `[URL]/exec?page=parking`
+- [ ] Resident List page: embed `[URL]/exec?page=resident`
 
 ---
 
