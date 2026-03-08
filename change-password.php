@@ -10,25 +10,13 @@ session_start();
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 
-$buildings = [
-  'QGscratch' => [
-    'folderId' => '1cnHRemgPPNWbY9QlyrsHXq6Mzdu09tSu',
-  ],
-  'LyndhurstH' => [
-    'folderId' => '11WXnAU2P-ShZPtj9p5PG0bFR7ehDXUSS',
-  ],
-  'LyndhurstI' => [
-    'folderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',
-  ],
-  // add more buildings here...
-];
-
 // -------------------------------------------------------
 // Validate building and session
 // -------------------------------------------------------
 $building = $_GET['building'] ?? '';
 
-if (!$building || !array_key_exists($building, $buildings)) {
+if (!$building || !preg_match('/^[a-zA-Z0-9_-]+$/', $building)
+    || !file_exists(CREDENTIALS_DIR . $building . '.json')) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 

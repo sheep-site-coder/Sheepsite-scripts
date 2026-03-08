@@ -379,17 +379,31 @@ Looks up a file by name in a building's Public folder and redirects to its Googl
 
 **As an iframe (embedded doc):**
 
-Use `data-` attributes instead of a hardcoded `src` — the footer script fills in the building name automatically:
+Use `data-` attributes instead of a hardcoded `src` — the footer script fills in the building name automatically.
+
+Wrap the iframe in a loading spinner so the page doesn't appear blank while the document loads:
 
 ```html
-<iframe
-  data-script="get-doc-byname"
-  data-subdir="Page1Docs"
-  data-filename="Announcement Page1"
-  style="width:100%; height:80vh; border:none; display:block;"
-  title="Announcement">
-</iframe>
+<div style="position:relative; width:100%; height:80vh;">
+  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f5f5f5;"
+       id="doc-loader">
+    <div style="width:48px; height:48px; border:5px solid #e0c0f0; border-top-color:#7A0099; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+    <p style="margin-top:14px; font-family:'Roboto',sans-serif; font-size:14px; color:#888;">Loading document...</p>
+  </div>
+  <style>#doc-loader { transition: opacity 0.3s; } @keyframes spin { to { transform: rotate(360deg); } }</style>
+  <iframe
+    data-script="get-doc-byname"
+    data-subdir="Page1Docs"
+    data-filename="Announcement Page1"
+    style="width:100%; height:100%; border:none; display:block;"
+    title="Document">
+  </iframe>
+</div>
 ```
+
+The spinner uses the site's purple colour and disappears once the document finishes loading. Update `data-subdir` and `data-filename` as needed; omit `data-subdir` if the file is in the root public folder.
+
+> **Note:** There is no `onload` on the iframe — the footer script attaches it automatically after setting the `src`, so the spinner stays visible during the full load.
 
 **As a button (opens doc in new tab):**
 
@@ -404,6 +418,20 @@ Use a hardcoded `href` — do NOT use `class="gdrive-link"`, as the footer scrip
 ```
 
 Replace `BUILDING_NAME` with the actual building key (e.g. `QGscratch`) and update `subdir`, `filename`, and button label as needed.
+
+**As an onclick call (preferred for website builder buttons):**
+
+The footer script includes an `openDoc()` helper. Use it in the button's JS onclick:
+
+```js
+openDoc('Page1Docs', 'Mid Year Report')
+```
+
+Pass `''` as the first argument if the file is in the root public folder (no subfolder):
+
+```js
+openDoc('', 'Welcome Letter')
+```
 
 ---
 
@@ -429,7 +457,16 @@ Buttons are added as **Custom HTML blocks** in Namecheap Website Builder.
 
 Button style: **350×35px**, Roboto 16px, dark purple-to-pink gradient, no border.
 
-### Public folder button (`class="gdrive-link"`)
+### Public folder button
+
+**Preferred — website builder button with onclick:**
+
+```javascript
+openFolder()              // root Public folder
+openFolder('RulesDocs')   // specific subfolder
+```
+
+**Legacy — custom HTML block (still works):**
 
 ```html
 <!-- Root Public folder -->
@@ -445,7 +482,16 @@ Button style: **350×35px**, Roboto 16px, dark purple-to-pink gradient, no borde
 </a>
 ```
 
-### Private folder button (`class="local-link"`)
+### Private folder button
+
+**Preferred — website builder button with onclick:**
+
+```javascript
+openPrivateFolder()               // root Private folder
+openPrivateFolder('Financials')   // specific subfolder
+```
+
+**Legacy — custom HTML block (still works):**
 
 ```html
 <!-- Root Private folder -->
@@ -461,28 +507,61 @@ Button style: **350×35px**, Roboto 16px, dark purple-to-pink gradient, no borde
 </a>
 ```
 
-- `class="gdrive-link"` / `class="local-link"` — required, tells the footer script which display page to use
-- `data-subdir` / `data-path` — optional, navigates directly into a subfolder
-- `href="#"` is replaced automatically by the footer script using `BUILDING_NAME`
+### Board of Directors report (public — no login required)
 
-### Protected report button (parking, elevator, board)
+The Board of Directors report is public. Embed it directly using the building's Apps Script web app URL — no auth needed. Hardcode the URL since the footer script doesn't know it:
 
-Used to open password-protected Google Sheets reports. Uses a hardcoded onclick — do NOT use `class="gdrive-link"`.
-
-In Namecheap Website Builder, add a button with this **onclick** event (change `BUILDING_NAME` and `page` as needed):
-
-```javascript
-window.location.href = 'https://sheepsite.com/Scripts/protected-report.php?building=BUILDING_NAME&page=parking&return=' + encodeURIComponent(window.location.href);
+```html
+<div style="position:relative; width:100%; height:80vh;">
+  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f5f5f5;" id="doc-loader">
+    <div style="width:48px; height:48px; border:5px solid #e0c0f0; border-top-color:#7A0099; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+    <p style="margin-top:14px; font-family:'Roboto',sans-serif; font-size:14px; color:#888;">Loading...</p>
+  </div>
+  <style>#doc-loader { transition: opacity 0.3s; } @keyframes spin { to { transform: rotate(360deg); } }</style>
+  <iframe
+    src="APPS_SCRIPT_WEB_APP_URL"
+    style="width:100%; height:100%; border:none; display:block;"
+    title="Board of Directors"
+    onload="document.getElementById('doc-loader').style.display='none'">
+  </iframe>
+</div>
 ```
 
-Pages: `page=parking`, `page=elevator`, `page=board`, `page=resident`
+Replace `APPS_SCRIPT_WEB_APP_URL` with the building's Apps Script deployment URL (`.../exec` with no `?page=` suffix).
 
-The `&return=` parameter passes the current page URL so the "← Back to site" link appears after login.
+---
 
-However, instead of hardcoding the building name in the onclick, use the `openReport()` helper defined in the footer script:
+### Protected report button (parking, elevator, resident)
+
+Used to open password-protected Google Sheets reports. Use the `openReport()` helper from the footer script in the button's onclick — no building name needed:
 
 ```javascript
 openReport('parking')
 ```
 
-This pulls `BUILDING_NAME` from the footer automatically — no building name in the button.
+Pages: `parking`, `elevator`, `resident`
+
+The `&return=` parameter is added automatically so the "← Back to site" link appears after login.
+
+**As an inline iframe (report embedded directly on the page):**
+
+Use `data-script="protected-report"` — the footer script sets the `src` automatically using `BUILDING_NAME`. Wrap with a spinner:
+
+```html
+<div style="position:relative; width:100%; height:80vh;">
+  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f5f5f5;" id="doc-loader">
+    <div style="width:48px; height:48px; border:5px solid #e0c0f0; border-top-color:#7A0099; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+    <p style="margin-top:14px; font-family:'Roboto',sans-serif; font-size:14px; color:#888;">Loading...</p>
+  </div>
+  <style>#doc-loader { transition: opacity 0.3s; } @keyframes spin { to { transform: rotate(360deg); } }</style>
+  <iframe
+    data-script="protected-report"
+    data-page="parking"
+    style="width:100%; height:100%; border:none; display:block;"
+    title="Parking List"
+    onload="document.getElementById('doc-loader').style.display='none'">
+  </iframe>
+</div>
+```
+
+Change `data-page` to `parking`, `elevator`, or `resident` as needed.
