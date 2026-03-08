@@ -156,6 +156,20 @@ if (empty($_SESSION[$sessionKey])) {
 }
 
 // -------------------------------------------------------
+// mustChange check
+// -------------------------------------------------------
+$credFile = CREDENTIALS_DIR . $building . '.json';
+$allUsers = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
+foreach ($allUsers as $u) {
+  if ($u['user'] === $_SESSION[$sessionKey] && !empty($u['mustChange'])) {
+    header('Location: change-password.php?building=' . urlencode($building)
+         . '&mustchange=1'
+         . ($returnURL ? '&return=' . urlencode($returnURL) : ''));
+    exit;
+  }
+}
+
+// -------------------------------------------------------
 // Authenticated — show the report in an iframe
 // -------------------------------------------------------
 $currentUser = $_SESSION[$sessionKey];
