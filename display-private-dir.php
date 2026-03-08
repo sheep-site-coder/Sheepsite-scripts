@@ -147,6 +147,22 @@ if (empty($_SESSION[$sessionKey])) {
 }
 
 // -------------------------------------------------------
+// mustChange check — runs on every page load (not AJAX)
+// -------------------------------------------------------
+if (!isset($_GET['json']) && !isset($_GET['fileId'])) {
+  $credFile = CREDENTIALS_DIR . $building . '.json';
+  $allUsers = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
+  foreach ($allUsers as $u) {
+    if ($u['user'] === $_SESSION[$sessionKey] && !empty($u['mustChange'])) {
+      header('Location: change-password.php?building=' . urlencode($building)
+           . '&mustchange=1'
+           . ($returnURL ? '&return=' . urlencode($returnURL) : ''));
+      exit;
+    }
+  }
+}
+
+// -------------------------------------------------------
 // JSON mode — called by browser fetch, returns listing
 // Auth check above already passed before reaching here
 // -------------------------------------------------------
