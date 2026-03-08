@@ -162,8 +162,12 @@ $credFile = CREDENTIALS_DIR . $building . '.json';
 $allUsers = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
 foreach ($allUsers as $u) {
   if ($u['user'] === $_SESSION[$sessionKey] && !empty($u['mustChange'])) {
+    $reportRedirect = 'protected-report.php?building=' . urlencode($building)
+                    . '&page=' . urlencode($page)
+                    . ($returnURL ? '&return=' . urlencode($returnURL) : '');
     header('Location: change-password.php?building=' . urlencode($building)
          . '&mustchange=1'
+         . '&redirect=' . urlencode($reportRedirect)
          . ($returnURL ? '&return=' . urlencode($returnURL) : ''));
     exit;
   }

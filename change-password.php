@@ -32,10 +32,13 @@ if (empty($_SESSION[$sessionKey])) {
   exit;
 }
 
-$currentUser = $_SESSION[$sessionKey];
-$mustChange  = isset($_GET['mustchange']);
-$dirURL      = 'display-private-dir.php?building=' . urlencode($building)
-             . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+$currentUser  = $_SESSION[$sessionKey];
+$mustChange   = isset($_GET['mustchange']);
+$redirectURL  = $_GET['redirect'] ?? '';
+// Only allow relative redirects to our own scripts
+if ($redirectURL && !preg_match('/^[a-zA-Z0-9_\-\.]+\.php[\?&]/', $redirectURL)) $redirectURL = '';
+$dirURL       = 'display-private-dir.php?building=' . urlencode($building)
+              . ($returnURL ? '&return=' . urlencode($returnURL) : '');
 
 // -------------------------------------------------------
 // Helpers
@@ -87,6 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $u['pass'] = password_hash($newPass, PASSWORD_DEFAULT);
           unset($u['mustChange']);
           if (saveUsers($building, $users)) {
+            if ($mustChange && $redirectURL) {
+              header('Location: ' . $redirectURL);
+              exit;
+            }
             $message = 'Password updated successfully.';
           } else {
             $message = 'Could not save — please contact your administrator.';
