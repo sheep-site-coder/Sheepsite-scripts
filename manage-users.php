@@ -11,12 +11,13 @@
 // -------------------------------------------------------
 session_start();
 
-define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
+define('CREDENTIALS_DIR',    __DIR__ . '/credentials/');
+define('OWNER_IMPORT_TOKEN', 'CHANGE_ME_REPLACE_WITH_TOKEN');  // must match building-script.gs
 
 $buildings = [
-  'QGscratch'  => [],
-  'LyndhurstH' => [],
-  'LyndhurstI' => [],
+  'QGscratch'  => ['webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_QGSCRATCH/exec'],
+  'LyndhurstH' => ['webAppURL' => 'https://script.google.com/macros/s/AKfycbwsLZ710fdJgJP_YgJ2yXa2XKwzwYzVUj-c1xEpyefHoYeG8bOwJ407ByWCGGOKzmns/exec'],
+  'LyndhurstI' => ['webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_LYNDHURSTI/exec'],
   // add more buildings here...
 ];
 
@@ -123,6 +124,20 @@ if (empty($_SESSION[$sessionKey])) {
 // -------------------------------------------------------
 // Helpers
 // -------------------------------------------------------
+function makeUsername(string $firstName, string $lastName): string {
+  $first = strtolower(preg_replace('/[^a-zA-Z]/', '', $firstName));
+  $last  = strtolower(preg_replace('/[^a-zA-Z]/', '', $lastName));
+  return substr($first, 0, 1) . $last;
+}
+
+function uniqueUsername(string $base, array $existingUsers): string {
+  $taken = array_column($existingUsers, 'user');
+  if (!in_array($base, $taken)) return $base;
+  $i = 2;
+  while (in_array($base . $i, $taken)) $i++;
+  return $base . $i;
+}
+
 function loadUsers(string $building): array {
   $file = CREDENTIALS_DIR . $building . '.json';
   if (!file_exists($file)) return [];
@@ -183,6 +198,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $users = array_filter($users, fn($u) => $u['user'] !== $user);
     saveUsers($building, $users);
     $message = "User \"$user\" removed.";
+  }
+
+  elseif (isset($_POST['import_owners'])) {
+    $tempPass = $_POST['temp_password'] ?? '';
+    if (strlen($tempPass) < 8) {
+      $message = 'Temporary password must be at least 8 characters.';
+      $messageType = 'error';
+    } else {
+      $webAppURL = $buildings[$building]['webAppURL'] ?? '';
+      if (!$webAppURL) {
+        $message = 'No webAppURL configured for this building.';
+        $messageType = 'error';
+      } else {
+        $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
+        $response = @file_get_contents($url);
+        if ($response === false) {
+          $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
+          $messageType = 'error';
+        } else {
+          $data = json_decode($response, true);
+          if (!empty($data['error'])) {
+            $message = 'Sheet error: ' . $data['error'];
+            $messageType = 'error';
+          } else {
+            $users       = loadUsers($building);
+            $tempHash    = password_hash($tempPass, PASSWORD_DEFAULT);
+            $added       = 0;
+            $skipped     = 0;
+            foreach ($data['owners'] as $owner) {
+              $base     = makeUsername($owner['firstName'], $owner['lastName']);
+              $existing = array_column($users, 'user');
+              // Skip if an account with this base name already exists
+              if (in_array($base, $existing)) {
+                $skipped++;
+                continue;
+              }
+              $username = uniqueUsername($base, $users);
+              $users[]  = ['user' => $username, 'pass' => $tempHash, 'mustChange' => true];
+              $added++;
+            }
+            if (saveUsers($building, $users)) {
+              $message = "$added account(s) created, $skipped skipped (already exist). "
+                       . "Distribute the temporary password to owners — they will be required to change it on first login.";
+            } else {
+              $message = 'Could not save credentials file.';
+              $messageType = 'error';
+            }
+          }
+        }
+      }
+    }
   }
 
   elseif (isset($_POST['change_pass'])) {
@@ -308,6 +374,19 @@ $users = loadUsers($building);
     </tbody>
   </table>
 <?php endif; ?>
+
+<h2>Import from Sheet</h2>
+<p style="font-size:0.85rem;color:#666;margin-bottom:0.75rem;">
+  Creates accounts for all owners in the Database tab who don't have one yet.
+  Username = first initial + last name. All new accounts will require a password change on first login.
+</p>
+<form class="add-form" method="post">
+  <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)" autocomplete="new-password" style="width:260px;">
+  <button type="submit" name="import_owners" class="add-btn"
+          onclick="return confirm('Import owners from the Google Sheet and create accounts with this temporary password?')">Import</button>
+</form>
+
+<hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
 
 <h2>Add user</h2>
 <form class="add-form" method="post">

@@ -33,6 +33,7 @@ if (empty($_SESSION[$sessionKey])) {
 }
 
 $currentUser = $_SESSION[$sessionKey];
+$mustChange  = isset($_GET['mustchange']);
 $dirURL      = 'display-private-dir.php?building=' . urlencode($building)
              . ($returnURL ? '&return=' . urlencode($returnURL) : '');
 
@@ -84,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $messageType = 'error';
         } else {
           $u['pass'] = password_hash($newPass, PASSWORD_DEFAULT);
+          unset($u['mustChange']);
           if (saveUsers($building, $users)) {
             $message = 'Password updated successfully.';
           } else {
@@ -123,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .message   { padding: 0.6rem 0.9rem; border-radius: 4px; margin-bottom: 1.5rem; font-size: 0.9rem; }
     .message.ok    { background: #e6f4ea; color: #1a7f37; }
     .message.error { background: #ffeef0; color: #c00; }
+    .message.warn  { background: #fff8e1; color: #7a5800; }
   </style>
 </head>
 <body>
@@ -133,6 +136,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 <div class="subtitle">Logged in as <strong><?= htmlspecialchars($currentUser) ?></strong></div>
 
+<?php if ($mustChange && !$message): ?>
+  <div class="message warn">Your account was set up with a temporary password. Please choose a new password to continue.</div>
+<?php endif; ?>
 <?php if ($message): ?>
   <div class="message <?= $messageType ?>"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>

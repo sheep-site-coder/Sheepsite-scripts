@@ -72,7 +72,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
 
   if ($authenticated) {
     $_SESSION[$sessionKey] = $username;
-    header('Location: ' . $baseURL . ($path ? '&path=' . urlencode($path) : ''));
+    $mustChange = false;
+    foreach ($users as $u) {
+      if ($u['user'] === $username && !empty($u['mustChange'])) {
+        $mustChange = true;
+        break;
+      }
+    }
+    if ($mustChange) {
+      header('Location: change-password.php?building=' . urlencode($building)
+           . '&mustchange=1'
+           . ($returnURL ? '&return=' . urlencode($returnURL) : ''));
+    } else {
+      header('Location: ' . $baseURL . ($path ? '&path=' . urlencode($path) : ''));
+    }
     exit;
   } else {
     $loginError = 'Invalid username or password.';
