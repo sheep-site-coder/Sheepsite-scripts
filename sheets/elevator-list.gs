@@ -252,6 +252,23 @@ function doGetElevator() {
     td.first { width: 22%; }
     td.unit  { color: #555; width: 8%; }
     td.gutter { width: 8%; }
+    .print-btn {
+      display: inline-block;
+      margin-bottom: 1rem;
+      padding: 0.4rem 1rem;
+      background: #0070f3;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .print-btn:hover { background: #005bb5; }
+    @media print {
+      .print-btn { display: none; }
+      @page { size: letter portrait; margin: 0; }
+      body { padding: 0.5in; }
+    }
     @media (max-width: 480px) {
       body { padding: 1rem 0.6rem; }
     }
@@ -260,6 +277,19 @@ function doGetElevator() {
 <body>
   <h1>${buildingName} Residents</h1>
   <div class="date">(${today})</div>
+  <button class="print-btn" onclick="printFit()">🖨 Print</button>
+  <script>
+    function printFit() {
+      // Letter page at 96dpi = 1056px; margin:0 so full height is available
+      var pageH = 1056;
+      var contentH = document.body.scrollHeight;
+      if (contentH > pageH) {
+        document.documentElement.style.zoom = pageH / contentH;
+      }
+      window.print();
+      document.documentElement.style.zoom = '';
+    }
+  </script>
   <table><tbody>
     ${rowsHtml}
   </tbody></table>

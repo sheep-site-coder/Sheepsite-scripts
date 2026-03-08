@@ -174,6 +174,8 @@ $iframeSrc   = $buildingConfig['webAppURL'] . $pageConfig['suffix'];
                font-size: 0.85rem; flex-shrink: 0; }
     .top-bar a { color: #0070f3; text-decoration: none; margin-left: 0.75rem; }
     .top-bar a:hover { text-decoration: underline; }
+    .nav-links a { font-weight: bold; }
+    .nav-links a.active { color: #333; pointer-events: none; text-decoration: none; }
     .iframe-wrap { position: relative; flex: 1; }
     #doc-loader  { position: absolute; inset: 0; display: flex; flex-direction: column;
                    align-items: center; justify-content: center; background: #f5f5f5;
@@ -192,6 +194,13 @@ $iframeSrc   = $buildingConfig['webAppURL'] . $pageConfig['suffix'];
       <?php if ($returnURL): ?>
         <a href="<?= htmlspecialchars($returnURL) ?>">← Back to site</a>
       <?php endif; ?>
+    </div>
+    <div class="nav-links">
+      <?php foreach (['elevator' => 'Elevator List', 'parking' => 'Parking List', 'resident' => 'Resident List'] as $p => $label):
+        $navURL = '?building=' . urlencode($building) . '&page=' . urlencode($p) . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+      ?>
+        <a href="<?= htmlspecialchars($navURL) ?>" class="<?= $p === $page ? 'active' : '' ?>"><?= $label ?></a>
+      <?php endforeach; ?>
     </div>
     <div>
       <span style="color:#666;"><?= htmlspecialchars($currentUser) ?></span>
