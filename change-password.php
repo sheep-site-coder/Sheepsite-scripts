@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="top-bar">
   <h1>Change Password</h1>
-  <a href="<?= htmlspecialchars($dirURL) ?>" class="back-btn">← Back to files</a>
+  <a href="<?= htmlspecialchars($redirectURL ?: $dirURL) ?>" class="back-btn">← Back</a>
 </div>
 <div class="subtitle">Logged in as <strong><?= htmlspecialchars($currentUser) ?></strong></div>
 

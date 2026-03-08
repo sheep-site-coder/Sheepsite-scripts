@@ -222,7 +222,12 @@ $iframeSrc   = $buildingConfig['webAppURL'] . $pageConfig['suffix'];
     </div>
     <div>
       <span style="color:#666;"><?= htmlspecialchars($currentUser) ?></span>
-      <a href="change-password.php?building=<?= urlencode($building) ?><?= $returnURL ? '&return=' . urlencode($returnURL) : '' ?>">Change password</a>
+      <?php
+        $reportRedirect = 'protected-report.php?building=' . urlencode($building)
+                        . '&page=' . urlencode($page)
+                        . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+      ?>
+      <a href="change-password.php?building=<?= urlencode($building) ?>&redirect=<?= urlencode($reportRedirect) ?><?= $returnURL ? '&return=' . urlencode($returnURL) : '' ?>">Change password</a>
       <a href="<?= htmlspecialchars($baseURL) ?>&logout=1">Log out</a>
     </div>
   </div>
