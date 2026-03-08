@@ -77,6 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   } elseif (strlen($newPass) < 8) {
     $message = 'New password must be at least 8 characters.';
     $messageType = 'error';
+  } elseif ($mustChange && $newPass === $currentPass) {
+    $message = 'Your new password must be different from the temporary password.';
+    $messageType = 'error';
   } else {
     $users = loadUsers($building);
     $found = false;
