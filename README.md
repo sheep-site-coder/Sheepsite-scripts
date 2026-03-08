@@ -58,10 +58,16 @@ Open `display-private-dir.php` on **sheepsite.com/Scripts/** and add an entry to
 
 ### Step 4 — Add the building to the user management page
 
-Open `manage-users.php` on **sheepsite.com/Scripts/** and add an entry to both the `$buildings` array:
+Open `manage-users.php` and `protected-report.php` on **sheepsite.com/Scripts/** and add an entry to each `$buildings` array:
 
+**manage-users.php:**
 ```php
-'NewBuildingName' => ['adminUser' => 'admin', 'adminPass' => 'CHOOSE_A_PASSWORD'],
+'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
+```
+
+**protected-report.php:**
+```php
+'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
 ```
 
 Then create an empty credentials file on the server at:
@@ -70,9 +76,11 @@ sheepsite.com/Scripts/credentials/NewBuildingName.json
 ```
 with the contents `[]`.
 
+Then set up the admin credentials using `setup-admin.php` (see the `setup-admin.php` section below).
+
 ---
 
-### Step 5 — Add owners as users
+### Step 5 — Import owners from the Google Sheet
 
 Go to the building's user management URL and log in with the building's admin credentials:
 
@@ -80,7 +88,9 @@ Go to the building's user management URL and log in with the building's admin cr
 https://sheepsite.com/Scripts/manage-users.php?building=NewBuildingName
 ```
 
-Add a username and password for each owner. They will use these to log in to the private files section.
+Scroll to **Import from Sheet**, enter a temporary password, and click **Import**. This reads the `Database` tab from the building's Google Sheet and creates an account for every owner (username = first initial + last name). All imported accounts have `mustChange: true` — owners will be forced to change the temporary password on first login.
+
+Distribute the temporary password to owners however you like (email, letter, etc.).
 
 ---
 
@@ -311,29 +321,66 @@ https://sheepsite.com/Scripts/manage-users.php?building=NewBuildingName
 ```
 
 **Two access levels:**
-- **Building admin** — logs in with the building's `adminUser` / `adminPass` defined in `manage-users.php`
-- **Master override** — logs in with `MASTER_USER` / `MASTER_PASS` (defined at the top of `manage-users.php`), can access any building
+- **Building admin** — credentials stored as bcrypt hash in `credentials/{building}_admin.json`
+- **Master override** — credentials stored as bcrypt hash in `credentials/_master.json`, can access any building
 
-**Actions available:** Add user, remove user, change password.
+Admin credentials are set up using `setup-admin.php` (one-time setup tool — delete after use).
+
+**Actions available:** Import from Sheet, add user, remove user, change password.
+
+**Import from Sheet:** reads the `Database` tab from the building's Google Sheet via Apps Script (`?page=owners&token=OWNER_IMPORT_TOKEN`), creates accounts for all owners not already registered, sets `mustChange: true` so they must change the temporary password on first login.
 
 ---
 
-### `credentials/` — Per-Building User Credentials
+### `credentials/` — Per-Building Credentials
 
 **Location:** `sheepsite.com/Scripts/credentials/`
 
-One JSON file per building storing owner usernames and bcrypt-hashed passwords:
+All credential files are excluded from git (`.gitignore`) and live only on the server.
 
+**Owner credentials** — one file per building:
 ```json
 [
-  { "user": "john.smith", "pass": "$2y$10$..." },
-  { "user": "jane.doe",   "pass": "$2y$10$..." }
+  { "user": "jsmith",  "pass": "$2y$10$...", "mustChange": true },
+  { "user": "jdoe",    "pass": "$2y$10$..." }
 ]
+```
+- `mustChange: true` is set on import — cleared after the owner changes their password
+- Usernames are generated as first initial + last name (e.g. `jsmith`)
+
+**Admin credentials** — one file per building:
+```
+credentials/{building}_admin.json   → { "user": "admin", "pass": "$2y$10$..." }
+credentials/_master.json            → { "user": "sheepsite", "pass": "$2y$10$..." }
 ```
 
 - `credentials/.htaccess` blocks all direct web access to this folder
-- Files are read and written only by PHP — never exposed to the browser
-- Passwords are always stored as bcrypt hashes (`password_hash()`) — never plaintext
+- All passwords stored as bcrypt hashes — never plaintext, never in source code
+- Use `setup-admin.php` to initialise admin credential files
+
+---
+
+### `setup-admin.php` — One-Time Admin Credential Setup
+
+**Location:** `sheepsite.com/Scripts/setup-admin.php` (upload, run once, then **delete**)
+
+Generates hashed admin credential files for `manage-users.php`. Edit the `$config` array at the top of the file, upload to the server, visit the URL once in a browser — it creates `credentials/{building}_admin.json` and `credentials/_master.json` — then delete the file immediately.
+
+It will refuse to run if any password is still set to `CHANGE_ME`.
+
+---
+
+### `change-password.php` — Owner Self-Service Password Change
+
+**Location:** `sheepsite.com/Scripts/change-password.php`
+
+Allows a logged-in owner to change their own password. Linked from the top bar of `display-private-dir.php` and `protected-report.php`.
+
+- Requires an active `private_auth_{building}` session
+- Verifies the current password before accepting a new one
+- When `mustChange: true` is set on the account (imported accounts), the owner is redirected here automatically and cannot access files or reports until the change is complete
+- After a forced change, redirects back to wherever the owner was trying to go
+- Prevents reusing the temporary password when `mustChange` is active
 
 ---
 
@@ -353,7 +400,9 @@ After login, displays the report embedded in an iframe. The Apps Script URL is s
 | `page`     | Yes      | `parking`, `elevator`, `board`, or `resident` |
 | `return`   | No       | URL to link back to — pass `window.location.href` from the button |
 
-**Adding a new building:** add an entry to the `$buildings` array in `protected-report.php` with the Google Sheets Web App deployment URL. Get this URL from the building's Apps Script project: **Deploy → Manage deployments**.
+**Adding a new building:** add an entry to the `$buildings` array in both `protected-report.php` and `manage-users.php` with the Google Sheets Web App deployment URL. Get this URL from the building's Apps Script project: **Deploy → Manage deployments**.
+
+**Top bar navigation:** authenticated report pages show nav links to Elevator List, Parking List, and Resident List. The current page is shown as a non-clickable label; others are clickable links — no re-login required.
 
 ---
 
@@ -565,3 +614,52 @@ Use `data-script="protected-report"` — the footer script sets the `src` automa
 ```
 
 Change `data-page` to `parking`, `elevator`, or `resident` as needed.
+
+---
+
+## Google Sheets Scripts (`sheets/` folder)
+
+Three report scripts run from a master library (`DatabaseSheetMaster`) and a per-building wrapper.
+
+### Master library files — paste into `DatabaseSheetMaster` Apps Script project
+
+| File | Function |
+|------|----------|
+| `sheets/board-list.gs` | Board of Directors — generates BoardList tab + `doGet()` web page |
+| `sheets/elevator-list.gs` | Elevator List — generates Elevator List tab + `doGetElevator()` web page. Includes a Print button that scales content to fit one letter page (no browser headers/footers). |
+| `sheets/parking-list.gs` | Parking List — generates Parking List tab + `doGetParking()` web page |
+| `sheets/resident-list.gs` | Resident List — generates Resident List tab + `doGetResident()` web page; sortable by Unit # or Last Name |
+| `sheets/owner-import.gs` | Owner import — `doGetOwners(token, expectedToken)` returns Database tab owner list as JSON for use by `manage-users.php` |
+
+After any change to master library files: **Deploy → Manage deployments → New version**. Building scripts pick up changes automatically if set to "latest version".
+
+### Building script — paste into each building's Apps Script project
+
+`sheets/building-script.gs` — SheepSite menu, library wrappers, and single `doGet()` router:
+
+| URL | Page |
+|-----|------|
+| `.../exec` | Board of Directors (public) |
+| `.../exec?page=elevator` | Elevator List |
+| `.../exec?page=parking` | Parking List |
+| `.../exec?page=resident` | Resident List |
+| `.../exec?page=owners&token=...` | Owner list JSON for import (token-protected) |
+
+The `OWNER_IMPORT_TOKEN` constant in `building-script.gs` must match `OWNER_IMPORT_TOKEN` in `manage-users.php`.
+
+### Conventions
+
+- Building Google Sheet file named: `"<Building Name> Owner DB"`
+- Database tab always named: `Database`
+- Car data tab always named: `CarDB`
+- Building name extracted from filename: `fileName.split('Owner DB')[0].trim()`
+- Library identifier: `DatabaseSheetMaster`
+
+### Deployment steps for a new building
+
+1. Create Google Sheet named `"<Building Name> Owner DB"`
+2. Open Apps Script editor (Extensions → Apps Script)
+3. Paste `sheets/building-script.gs` as the script content
+4. Add `DatabaseSheetMaster` as a library (set to latest version)
+5. Deploy as Web App — **Execute as: Me**, **Access: Anyone, even anonymous**
+6. Copy the deployment URL into `manage-users.php` and `protected-report.php`
