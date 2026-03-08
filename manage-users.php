@@ -13,14 +13,10 @@ session_start();
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 
-// Master override — can access any building
-define('MASTER_USER', 'sheepsite');
-define('MASTER_PASS', 'LeMaster');
-
 $buildings = [
-  'QGscratch'     => ['adminUser' => 'admin', 'adminPass' => 'AlainQG'],
-  'LyndhurstH' => ['adminUser' => 'admin', 'adminPass' => 'u8ssLJAX'],
-  'LyndhurstI' => ['adminUser' => 'admin', 'adminPass' => 'xttMQ4nX'],
+  'QGscratch'  => [],
+  'LyndhurstH' => [],
+  'LyndhurstI' => [],
   // add more buildings here...
 ];
 
@@ -35,8 +31,17 @@ if (!$building || !array_key_exists($building, $buildings)) {
 
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 $sessionKey = 'manage_auth_' . $building;
-$adminUser  = $buildings[$building]['adminUser'];
-$adminPass  = $buildings[$building]['adminPass'];
+
+// Load per-building admin credentials
+$adminCredFile = CREDENTIALS_DIR . $building . '_admin.json';
+if (!file_exists($adminCredFile)) {
+  die('<p style="color:red;">Admin credentials not configured. Run setup-admin.php first.</p>');
+}
+$adminCred = json_decode(file_get_contents($adminCredFile), true);
+
+// Load master credentials (optional — if file missing, master login is disabled)
+$masterCredFile = CREDENTIALS_DIR . '_master.json';
+$masterCred = file_exists($masterCredFile) ? json_decode(file_get_contents($masterCredFile), true) : null;
 
 // -------------------------------------------------------
 // Logout
@@ -56,8 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_pass'])) {
   $submittedUser = trim($_POST['admin_user'] ?? '');
   $submittedPass = $_POST['admin_pass'] ?? '';
 
-  $isMaster   = ($submittedUser === MASTER_USER && $submittedPass === MASTER_PASS);
-  $isBuilding = ($submittedUser === $adminUser   && $submittedPass === $adminPass);
+  $isMaster   = $masterCred
+                && $submittedUser === $masterCred['user']
+                && password_verify($submittedPass, $masterCred['pass']);
+  $isBuilding = $submittedUser === $adminCred['user']
+                && password_verify($submittedPass, $adminCred['pass']);
 
   if ($isMaster || $isBuilding) {
     $_SESSION[$sessionKey] = true;
