@@ -42,7 +42,7 @@ function generateResidentList() {
 // ---------------------------------------------------------------------------
 
 // Must match OWNER_IMPORT_TOKEN in manage-users.php
-const OWNER_IMPORT_TOKEN = 'CHANGE_ME_REPLACE_WITH_TOKEN';
+const OWNER_IMPORT_TOKEN = 'QRF*!v2r2KgJEesq&P';
 
 function doGet(e) {
   const page  = e && e.parameter && e.parameter.page  ? e.parameter.page  : 'board';
