@@ -15,11 +15,12 @@
 // ---------------------------------------------------------------------------
 
 function doResetPassword(params, expectedToken) {
-  const token    = params.token    || '';
-  const username = (params.username || '').toLowerCase().trim();
-  const tmpPw    = params.tmppw    || '';
-  const building = params.building || '';
-  const loginUrl = params.loginurl || '';
+  const token     = params.token     || '';
+  const username  = (params.username || '').toLowerCase().trim();
+  const tmpPw     = params.tmppw     || '';
+  const building  = params.building  || '';
+  const loginUrl  = params.loginurl  || '';
+  const secretNum = (params.secretnum || '').toString().trim();
 
   if (!token || token !== expectedToken) {
     return _rpJson({ error: 'Unauthorized' });
@@ -41,6 +42,8 @@ function doResetPassword(params, expectedToken) {
   const iLast  = headers.indexOf('Last Name');
   const iEmail = headers.indexOf('eMail');
 
+  const iUnit  = headers.indexOf('Unit #');
+
   if (iFirst === -1 || iLast === -1 || iEmail === -1) {
     return _rpJson({ error: 'Missing required columns (First Name, Last Name, eMail) in Database' });
   }
@@ -49,12 +52,15 @@ function doResetPassword(params, expectedToken) {
   let foundEmail = null;  // null = not found; '' = found but no email
 
   if (username === 'admin') {
-    // For the admin account, use the email of the board President
+    // For the admin account, use the email of the board President.
+    // secretNum must match the President's unit number as an anti-prank check.
     const iBoard = headers.indexOf('Board');
     if (iBoard === -1) return _rpJson({ error: 'No "Board" column found in Database' });
     for (const row of rows) {
       const role = String(row[iBoard] || '').trim();
       if (role === 'President') {
+        const unit = String(iUnit !== -1 ? (row[iUnit] || '') : '').trim();
+        if (!secretNum || secretNum !== unit) return _rpJson({ status: 'not_found' });
         foundEmail = String(row[iEmail] || '').trim();
         break;
       }

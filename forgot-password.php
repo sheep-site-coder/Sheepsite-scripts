@@ -72,19 +72,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $message     = 'Please enter a valid username.';
     $messageType = 'error';
   } else {
-    $webAppURL    = $buildingConfig['webAppURL'];
-    $tmpPw        = generateTempPassword();
+    $webAppURL      = $buildingConfig['webAppURL'];
+    $tmpPw          = generateTempPassword();
     $targetLoginURL = ($username === 'admin')
                     ? $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir . '/admin.php?building=' . urlencode($building)
                     : $loginURL;
+    $secretNum      = trim($_POST['secret_num'] ?? '');
 
     $url      = $webAppURL
               . '?page=resetpw'
-              . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
-              . '&username=' . urlencode($username)
-              . '&building=' . urlencode($building)
-              . '&tmppw='    . urlencode($tmpPw)
-              . '&loginurl=' . urlencode($targetLoginURL);
+              . '&token='     . urlencode(OWNER_IMPORT_TOKEN)
+              . '&username='  . urlencode($username)
+              . '&building='  . urlencode($building)
+              . '&tmppw='     . urlencode($tmpPw)
+              . '&loginurl='  . urlencode($targetLoginURL)
+              . '&secretnum=' . urlencode($secretNum);
     $response = @file_get_contents($url);
 
     if ($response === false) {
@@ -174,8 +176,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($isAdminReset): ?>
       <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
         A new temporary password will be sent to the President of the association on file.
+        Enter the secret # to confirm.
       </p>
       <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin">
+        <label for="secret_num">Secret #</label>
+        <input type="text" id="secret_num" name="secret_num" autocomplete="off" autofocus
+               inputmode="numeric" style="margin-bottom:1rem;">
         <button type="submit" class="reset-btn">Send temporary password</button>
       </form>
     <?php else: ?>
