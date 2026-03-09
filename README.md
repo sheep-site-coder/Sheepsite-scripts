@@ -376,10 +376,11 @@ Central landing page for building administrators. Requires the same admin login 
 https://sheepsite.com/Scripts/admin.php?building=LyndhurstH
 ```
 
-Or from the building site using the `openAdmin()` footer helper:
-```javascript
-openAdmin()
+Or from the building site, set the menu link URL to:
 ```
+https://sheepsite.com/Scripts/admin.php
+```
+The footer script automatically injects the building name into any link pointing to `admin.php`, so no `?building=` param is needed in the menu.
 
 **Links available after login:**
 - **Manage Users** → `manage-users.php` — import owners, add/remove accounts, reset passwords

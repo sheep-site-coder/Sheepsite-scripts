@@ -43,6 +43,11 @@ document.addEventListener('DOMContentLoaded', function () {
     btn.href = url;
   });
 
+  // Admin page links — any link to admin.php gets the building name injected
+  document.querySelectorAll('a[href*="admin.php"]').forEach(function (link) {
+    link.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);
+  });
+
   // Protected report iframes (protected-report.php)
   const REPORT_URL = 'https://sheepsite.com/Scripts/protected-report.php';
   document.querySelectorAll('iframe[data-script="protected-report"]').forEach(function (iframe) {
