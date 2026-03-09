@@ -117,7 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           if (file_exists($adminFile)) {
             $adminCred = json_decode(file_get_contents($adminFile), true);
             if (($adminCred['user'] ?? '') === $username) {
-              $adminCred['pass'] = $newHash;
+              $adminCred['pass']      = $newHash;
+              $adminCred['mustChange'] = true;
               file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
             }
           }

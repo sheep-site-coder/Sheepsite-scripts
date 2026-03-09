@@ -121,6 +121,12 @@ if (empty($_SESSION[$sessionKey])) {
 }
 
 // -------------------------------------------------------
+// mustChange check — re-read credential file after any POST
+// -------------------------------------------------------
+$adminCred  = json_decode(file_get_contents($adminCredFile), true);
+$mustChange = !empty($adminCred['mustChange']);
+
+// -------------------------------------------------------
 // Handle admin password change
 // -------------------------------------------------------
 $pwMessage     = '';
@@ -145,8 +151,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     $pwMessageType = 'error';
   } else {
     $adminCred['pass'] = password_hash($newPass, PASSWORD_DEFAULT);
+    unset($adminCred['mustChange']);
     if (file_put_contents($adminCredFile, json_encode($adminCred, JSON_PRETTY_PRINT)) !== false) {
-      $pwMessage = 'Admin password updated successfully.';
+      $mustChange = false;
+      $pwMessage  = 'Password updated. You now have full access.';
     } else {
       $pwMessage     = 'Could not save — check that the credentials/ folder is writable.';
       $pwMessageType = 'error';
@@ -192,31 +200,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   <h1><?= htmlspecialchars($buildLabel) ?> – Admin</h1>
   <a href="admin.php?building=<?= urlencode($building) ?>&logout=1" class="logout">Log out</a>
 </div>
-<div class="subtitle">Building administration tools</div>
 
-<a href="manage-users.php?building=<?= urlencode($building) ?>" class="card">
-  <div class="card-icon">👥</div>
-  <div>
-    <div class="card-title">Manage Users</div>
-    <div class="card-desc">
-      Import owners from the building's Google Sheet, add or remove individual accounts,
-      and reset owner passwords.
-    </div>
+<?php if ($mustChange): ?>
+  <div class="message error" style="margin-bottom:2rem;">
+    You are logged in with a temporary password. Please set a new password to continue.
   </div>
-</a>
+<?php else: ?>
+  <div class="subtitle">Building administration tools</div>
 
-<a href="<?= htmlspecialchars(USER_MANUAL_URL) ?>" target="_blank" class="card">
-  <div class="card-icon">📖</div>
-  <div>
-    <div class="card-title">User Manual</div>
-    <div class="card-desc">
-      Step-by-step guide covering all admin tasks — initial setup, importing owners,
-      managing passwords, and troubleshooting. Opens in a new tab.
+  <a href="manage-users.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">👥</div>
+    <div>
+      <div class="card-title">Manage Users</div>
+      <div class="card-desc">
+        Import owners from the building's Google Sheet, add or remove individual accounts,
+        and reset owner passwords.
+      </div>
     </div>
-  </div>
-</a>
+  </a>
 
-<hr>
+  <a href="<?= htmlspecialchars(USER_MANUAL_URL) ?>" target="_blank" class="card">
+    <div class="card-icon">📖</div>
+    <div>
+      <div class="card-title">User Manual</div>
+      <div class="card-desc">
+        Step-by-step guide covering all admin tasks — initial setup, importing owners,
+        managing passwords, and troubleshooting. Opens in a new tab.
+      </div>
+    </div>
+  </a>
+
+  <hr>
+<?php endif; ?>
 
 <h2>Change Admin Password</h2>
 
