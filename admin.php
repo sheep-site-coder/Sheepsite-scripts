@@ -116,6 +116,40 @@ if (empty($_SESSION[$sessionKey])) {
 <?php
   exit;
 }
+
+// -------------------------------------------------------
+// Handle admin password change
+// -------------------------------------------------------
+$pwMessage     = '';
+$pwMessageType = 'ok';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass'])) {
+  $currentPass = $_POST['current_pass'] ?? '';
+  $newPass     = $_POST['new_pass']     ?? '';
+  $confirmPass = $_POST['confirm_pass'] ?? '';
+
+  if (!$currentPass || !$newPass || !$confirmPass) {
+    $pwMessage     = 'All fields are required.';
+    $pwMessageType = 'error';
+  } elseif ($newPass !== $confirmPass) {
+    $pwMessage     = 'New passwords do not match.';
+    $pwMessageType = 'error';
+  } elseif (strlen($newPass) < 8) {
+    $pwMessage     = 'New password must be at least 8 characters.';
+    $pwMessageType = 'error';
+  } elseif (!password_verify($currentPass, $adminCred['pass'])) {
+    $pwMessage     = 'Current password is incorrect.';
+    $pwMessageType = 'error';
+  } else {
+    $adminCred['pass'] = password_hash($newPass, PASSWORD_DEFAULT);
+    if (file_put_contents($adminCredFile, json_encode($adminCred, JSON_PRETTY_PRINT)) !== false) {
+      $pwMessage = 'Admin password updated successfully.';
+    } else {
+      $pwMessage     = 'Could not save — check that the credentials/ folder is writable.';
+      $pwMessageType = 'error';
+    }
+  }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -136,6 +170,17 @@ if (empty($_SESSION[$sessionKey])) {
     .card-icon  { font-size: 1.8rem; line-height: 1; flex-shrink: 0; }
     .card-title { font-size: 1rem; font-weight: bold; margin-bottom: 0.3rem; color: #0070f3; }
     .card-desc  { font-size: 0.875rem; color: #555; line-height: 1.45; }
+    hr          { margin: 2rem 0; border: none; border-top: 1px solid #eee; }
+    h2          { font-size: 1rem; margin: 0 0 0.75rem; }
+    label       { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 0.25rem; }
+    input[type=password] { width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem;
+                border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; }
+    .save-btn   { padding: 0.5rem 1.2rem; background: #0070f3; color: #fff; border: none;
+                border-radius: 4px; font-size: 0.95rem; cursor: pointer; }
+    .save-btn:hover { background: #005bb5; }
+    .message    { padding: 0.6rem 0.9rem; border-radius: 4px; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .message.ok    { background: #e6f4ea; color: #1a7f37; }
+    .message.error { background: #ffeef0; color: #c00; }
   </style>
 </head>
 <body>
@@ -167,6 +212,27 @@ if (empty($_SESSION[$sessionKey])) {
     </div>
   </div>
 </a>
+
+<hr>
+
+<h2>Change Admin Password</h2>
+
+<?php if ($pwMessage): ?>
+  <div class="message <?= $pwMessageType ?>"><?= htmlspecialchars($pwMessage) ?></div>
+<?php endif; ?>
+
+<form method="post" action="admin.php?building=<?= urlencode($building) ?>" style="max-width:320px;">
+  <label for="current_pass">Current password</label>
+  <input type="password" id="current_pass" name="current_pass" autocomplete="current-password">
+
+  <label for="new_pass">New password</label>
+  <input type="password" id="new_pass" name="new_pass" autocomplete="new-password">
+
+  <label for="confirm_pass">Confirm new password</label>
+  <input type="password" id="confirm_pass" name="confirm_pass" autocomplete="new-password">
+
+  <button type="submit" name="change_admin_pass" class="save-btn">Update password</button>
+</form>
 
 </body>
 </html>
