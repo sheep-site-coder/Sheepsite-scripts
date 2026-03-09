@@ -25,7 +25,8 @@ if (!$building || !preg_match('/^[a-zA-Z0-9_-]+$/', $building)) {
 
 $adminCredFile = CREDENTIALS_DIR . $building . '_admin.json';
 if (!file_exists($adminCredFile)) {
-  die('<p style="color:red;">Admin credentials not configured for this building.</p>');
+  header('Location: forgot-password.php?building=' . urlencode($building) . '&role=admin&setup=1');
+  exit;
 }
 
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));

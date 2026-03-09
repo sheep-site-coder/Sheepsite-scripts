@@ -27,6 +27,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildingConfig = $buildings[$building];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
 $isAdminReset   = ($_GET['role'] ?? '') === 'admin';
+$isAdminSetup   = $isAdminReset && isset($_GET['setup']);
 
 // Login URL included in reset email so owner knows where to go
 $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -114,16 +115,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($savedToOwner) {
           saveUsers($building, $users);
         } else {
-          // Check admin credential file
+          // Check admin credential file — create it if this is first-time setup
           $adminFile = CREDENTIALS_DIR . $building . '_admin.json';
-          if (file_exists($adminFile)) {
+          if (!file_exists($adminFile)) {
+            $adminCred = ['user' => 'admin', 'pass' => $newHash, 'mustChange' => true];
+          } else {
             $adminCred = json_decode(file_get_contents($adminFile), true);
             if (($adminCred['user'] ?? '') === $username) {
-              $adminCred['pass']      = $newHash;
+              $adminCred['pass']       = $newHash;
               $adminCred['mustChange'] = true;
-              file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
             }
           }
+          file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
         }
         $message = 'A new temporary password has been sent to the email address on file.';
       } elseif ($status === 'no_email' || $status === 'not_found') {
@@ -175,10 +178,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <?php if ($messageType !== 'ok' || !$message): ?>
     <?php if ($isAdminReset): ?>
       <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
-        A new temporary password will be sent to the President of the association on file.
-        Enter the secret # to confirm.
+        <?php if ($isAdminSetup): ?>
+          The admin account has not been set up yet. Enter the secret # and a temporary
+          password will be sent to the President of the association to get started.
+        <?php else: ?>
+          A new temporary password will be sent to the President of the association on file.
+          Enter the secret # to confirm.
+        <?php endif; ?>
       </p>
-      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin">
+      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin<?= $isAdminSetup ? '&setup=1' : '' ?>">
         <label for="secret_num">Secret #</label>
         <input type="text" id="secret_num" name="secret_num" autocomplete="off" autofocus
                inputmode="numeric" style="margin-bottom:1rem;">
