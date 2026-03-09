@@ -365,6 +365,30 @@ credentials/_master.json            → { "user": "sheepsite", "pass": "$2y$10$.
 
 ---
 
+### `admin.php` — Admin Landing Page
+
+**Location:** `sheepsite.com/Scripts/admin.php`
+
+Central landing page for building administrators. Requires the same admin login as `manage-users.php` — the session is shared, so logging into either page grants access to both.
+
+**Access URL:**
+```
+https://sheepsite.com/Scripts/admin.php?building=LyndhurstH
+```
+
+Or from the building site using the `openAdmin()` footer helper:
+```javascript
+openAdmin()
+```
+
+**Links available after login:**
+- **Manage Users** → `manage-users.php` — import owners, add/remove accounts, reset passwords
+- **User Manual** → published Google Doc with step-by-step admin instructions (opens in new tab)
+
+No `$buildings` array needed — validates the building by checking that admin credentials exist on the server.
+
+---
+
 ### `setup-admin.php` — One-Time Admin Credential Setup
 
 **Location:** `sheepsite.com/Scripts/setup-admin.php` (upload, run once, then **delete**)

@@ -100,6 +100,12 @@ function openReport(page) {
     + '&return=' + encodeURIComponent(window.location.href);
 }
 
+// Admin page — call openAdmin() from the menu link or button onclick
+function openAdmin() {
+  window.location.href = 'https://sheepsite.com/Scripts/admin.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME);
+}
+
 // Document buttons — call openDoc('SubfolderName', 'File Name') from button onclick
 // subdir is optional — pass '' if file is in the root public folder
 function openDoc(subdir, filename) {
