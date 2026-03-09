@@ -86,7 +86,7 @@ if (empty($_SESSION[$sessionKey])) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title><?= htmlspecialchars($buildLabel) ?> – Manage Users</title>
+  <title><?= htmlspecialchars($buildLabel) ?> – Resident Admin</title>
   <style>
     body      { font-family: sans-serif; max-width: 360px; margin: 4rem auto; padding: 0 1rem; }
     h1        { font-size: 1.3rem; margin-bottom: 0.25rem; }
@@ -286,7 +286,7 @@ $users = loadUsers($building);
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title><?= htmlspecialchars($buildLabel) ?> – Manage Users</title>
+  <title><?= htmlspecialchars($buildLabel) ?> – Resident Admin</title>
   <style>
     body           { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
     .top-bar       { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
@@ -330,13 +330,35 @@ $users = loadUsers($building);
 <body>
 
 <div class="top-bar">
-  <h1><?= htmlspecialchars($buildLabel) ?> – Users</h1>
+  <h1><?= htmlspecialchars($buildLabel) ?> – Resident Admin</h1>
   <a href="?building=<?= urlencode($building) ?>&logout=1" class="logout-btn">Log out</a>
 </div>
 
 <?php if ($message): ?>
   <div class="message <?= $messageType ?>"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>
+
+<h2>Add Resident</h2>
+<form class="add-form" method="post">
+  <input type="text"     name="username" placeholder="Username"    autocomplete="off">
+  <input type="password" name="password" placeholder="Password"    autocomplete="new-password">
+  <button type="submit" name="add_user" class="add-btn">Add</button>
+</form>
+
+<hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
+
+<h2>Import from Association Database Sheet</h2>
+<p style="font-size:0.85rem;color:#666;margin-bottom:0.75rem;">
+  Creates accounts for all owners in the Database tab who don't have one yet.
+  Username = first initial + last name. All new accounts will require a password change on first login.
+</p>
+<form class="add-form" method="post">
+  <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)" autocomplete="new-password" style="width:260px;">
+  <button type="submit" name="import_owners" class="add-btn"
+          onclick="return confirm('Import owners from the Google Sheet and create accounts with this temporary password?')">Import</button>
+</form>
+
+<hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
 
 <?php if (empty($users)): ?>
   <p class="empty">No users yet.</p>
@@ -374,26 +396,6 @@ $users = loadUsers($building);
     </tbody>
   </table>
 <?php endif; ?>
-
-<h2>Import from Sheet</h2>
-<p style="font-size:0.85rem;color:#666;margin-bottom:0.75rem;">
-  Creates accounts for all owners in the Database tab who don't have one yet.
-  Username = first initial + last name. All new accounts will require a password change on first login.
-</p>
-<form class="add-form" method="post">
-  <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)" autocomplete="new-password" style="width:260px;">
-  <button type="submit" name="import_owners" class="add-btn"
-          onclick="return confirm('Import owners from the Google Sheet and create accounts with this temporary password?')">Import</button>
-</form>
-
-<hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
-
-<h2>Add user</h2>
-<form class="add-form" method="post">
-  <input type="text"     name="username" placeholder="Username"    autocomplete="off">
-  <input type="password" name="password" placeholder="Password"    autocomplete="new-password">
-  <button type="submit" name="add_user" class="add-btn">Add</button>
-</form>
 
 <script>
 function togglePass(uid) {
