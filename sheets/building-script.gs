@@ -25,7 +25,9 @@
 //   .../exec?page=owners&token=... → Owner list JSON (for manage-users.php import)
 // ---------------------------------------------------------------------------
 
-// Must match OWNER_IMPORT_TOKEN in manage-users.php and forgot-password.php
+// Shared secret — same value used in all buildings and in manage-users.php / forgot-password.php.
+// Prevents unauthorized calls to the owners import and password reset endpoints.
+// This is NOT building-specific; one universal token covers all buildings.
 const OWNER_IMPORT_TOKEN = 'QRF*!v2r2KgJEesq&P';
 
 function doGet(e) {
