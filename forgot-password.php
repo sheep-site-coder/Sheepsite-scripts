@@ -71,8 +71,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $message     = 'Please enter a valid username.';
     $messageType = 'error';
   } else {
-    $webAppURL = $buildingConfig['webAppURL'];
-    $tmpPw     = generateTempPassword();
+    $webAppURL    = $buildingConfig['webAppURL'];
+    $tmpPw        = generateTempPassword();
+    $targetLoginURL = ($username === 'admin')
+                    ? $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir . '/admin.php?building=' . urlencode($building)
+                    : $loginURL;
 
     $url      = $webAppURL
               . '?page=resetpw'
@@ -80,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               . '&username=' . urlencode($username)
               . '&building=' . urlencode($building)
               . '&tmppw='    . urlencode($tmpPw)
-              . '&loginurl=' . urlencode($loginURL);
+              . '&loginurl=' . urlencode($targetLoginURL);
     $response = @file_get_contents($url);
 
     if ($response === false) {

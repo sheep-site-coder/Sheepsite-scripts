@@ -46,22 +46,36 @@ function doResetPassword(params, expectedToken) {
   }
 
   const rows   = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-  const counts = {};
   let foundEmail = null;  // null = not found; '' = found but no email
 
-  for (const row of rows) {
-    const firstName = String(row[iFirst] || '').trim();
-    const lastName  = String(row[iLast]  || '').trim();
-    if (!lastName) continue;
+  if (username === 'admin') {
+    // For the admin account, use the email of the board President
+    const iBoard = headers.indexOf('Board');
+    if (iBoard === -1) return _rpJson({ error: 'No "Board" column found in Database' });
+    for (const row of rows) {
+      const role = String(row[iBoard] || '').trim();
+      if (role === 'President') {
+        foundEmail = String(row[iEmail] || '').trim();
+        break;
+      }
+    }
+  } else {
+    // Normal owners: reverse-engineer username from first initial + last name
+    const counts = {};
+    for (const row of rows) {
+      const firstName = String(row[iFirst] || '').trim();
+      const lastName  = String(row[iLast]  || '').trim();
+      if (!lastName) continue;
 
-    // Same username generation as manage-users.php
-    const base  = (firstName.charAt(0) + lastName).toLowerCase().replace(/[^a-z]/g, '');
-    counts[base] = (counts[base] || 0) + 1;
-    const uname = counts[base] === 1 ? base : base + counts[base];
+      // Same username generation as manage-users.php
+      const base  = (firstName.charAt(0) + lastName).toLowerCase().replace(/[^a-z]/g, '');
+      counts[base] = (counts[base] || 0) + 1;
+      const uname = counts[base] === 1 ? base : base + counts[base];
 
-    if (uname === username) {
-      foundEmail = String(row[iEmail] || '').trim();
-      break;
+      if (uname === username) {
+        foundEmail = String(row[iEmail] || '').trim();
+        break;
+      }
     }
   }
 
