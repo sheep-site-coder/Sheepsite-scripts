@@ -91,17 +91,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $status = $data['status'] ?? '';
 
       if ($status === 'ok') {
-        // Email sent — now update credentials
+        // Email sent — update whichever credential file contains this username.
+        // Check owner file first, then admin file.
+        $newHash   = password_hash($tmpPw, PASSWORD_DEFAULT);
+        $savedToOwner = false;
         $users = loadUsers($building);
         foreach ($users as &$u) {
           if ($u['user'] === $username) {
-            $u['pass']      = password_hash($tmpPw, PASSWORD_DEFAULT);
+            $u['pass']       = $newHash;
             $u['mustChange'] = true;
+            $savedToOwner    = true;
             break;
           }
         }
         unset($u);
-        saveUsers($building, $users);
+        if ($savedToOwner) {
+          saveUsers($building, $users);
+        } else {
+          // Check admin credential file
+          $adminFile = CREDENTIALS_DIR . $building . '_admin.json';
+          if (file_exists($adminFile)) {
+            $adminCred = json_decode(file_get_contents($adminFile), true);
+            if (($adminCred['user'] ?? '') === $username) {
+              $adminCred['pass'] = $newHash;
+              file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
+            }
+          }
+        }
         $message = 'A new temporary password has been sent to the email address on file.';
       } elseif ($status === 'no_email' || $status === 'not_found') {
         $message     = 'No email address is on file for this account. Please contact your building administrator.';
