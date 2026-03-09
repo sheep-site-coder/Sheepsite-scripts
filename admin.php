@@ -12,7 +12,7 @@
 session_start();
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
-define('USER_MANUAL_URL', 'https://docs.google.com/document/d/e/2PACX-1vTO2Ytf_g3mbn1v7irbOsgu2akpOvR-bcqYZ8TiWSUX67_1R5h3PR_ZPzToiALXa4GZoiLuycZUpWrR/pub');
+define('USER_MANUAL_URL', 'https://docs.google.com/document/d/1bomDarmk1_RbPJ0x_NphQ1-m-t9OKZwzNZrm1ztEhQM/edit?tab=t.td3lj68pttu5#heading=h.vwhtrlhtc5t2');
 
 // -------------------------------------------------------
 // Validate building

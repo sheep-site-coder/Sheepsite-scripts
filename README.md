@@ -394,7 +394,7 @@ The footer script automatically injects the building name into any link pointing
 
 **Links available after login:**
 - **Manage Users** → `manage-users.php` — import owners, add/remove accounts, reset passwords
-- **User Manual** → published Google Doc with step-by-step admin instructions (opens in new tab)
+- **User Manual** → Google Doc with step-by-step admin instructions (opens in new tab)
 
 No `$buildings` array needed — validates the building by checking that admin credentials exist on the server.
 
