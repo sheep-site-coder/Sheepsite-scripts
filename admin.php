@@ -112,7 +112,7 @@ if (empty($_SESSION[$sessionKey])) {
     <button type="submit" class="login-btn">Log in</button>
   </form>
   <p style="text-align:center;margin-top:1rem;font-size:0.85rem;">
-    <a href="forgot-password.php?building=<?= urlencode($building) ?>" style="color:#0070f3;text-decoration:none;">Forgot password?</a>
+    <a href="forgot-password.php?building=<?= urlencode($building) ?>&role=admin" style="color:#0070f3;text-decoration:none;">Forgot password?</a>
   </p>
 </body>
 </html>

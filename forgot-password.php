@@ -26,6 +26,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
 
 $buildingConfig = $buildings[$building];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+$isAdminReset   = ($_GET['role'] ?? '') === 'admin';
 
 // Login URL included in reset email so owner knows where to go
 $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -65,9 +66,9 @@ $message     = '';
 $messageType = 'ok';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $username = strtolower(trim($_POST['username'] ?? ''));
+  $username = $isAdminReset ? 'admin' : strtolower(trim($_POST['username'] ?? ''));
 
-  if (!$username || !preg_match('/^[a-z][a-z0-9]*$/', $username)) {
+  if (!$isAdminReset && (!$username || !preg_match('/^[a-z][a-z0-9]*$/', $username))) {
     $message     = 'Please enter a valid username.';
     $messageType = 'error';
   } else {
@@ -159,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body>
-  <a href="display-private-dir.php?building=<?= urlencode($building) ?>" class="back-btn">← Back to login</a>
+  <a href="<?= $isAdminReset ? 'admin.php' : 'display-private-dir.php' ?>?building=<?= urlencode($building) ?>" class="back-btn">← Back to login</a>
 
   <h1><?= htmlspecialchars($buildLabel) ?></h1>
   <div class="subtitle">Reset your password</div>
@@ -169,17 +170,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <?php endif; ?>
 
   <?php if ($messageType !== 'ok' || !$message): ?>
-    <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
-      Enter your username (first letter of your first name + last name, e.g. <strong>jsmith</strong>).
-      If we have an email address on file for your account, we'll send you a temporary password.
-    </p>
-    <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>">
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username"
-             autocomplete="username" autocapitalize="none" autofocus
-             value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
-      <button type="submit" class="reset-btn">Send temporary password</button>
-    </form>
+    <?php if ($isAdminReset): ?>
+      <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
+        A new temporary password will be sent to the President of the association on file.
+      </p>
+      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin">
+        <button type="submit" class="reset-btn">Send temporary password</button>
+      </form>
+    <?php else: ?>
+      <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
+        Enter your username (first letter of your first name + last name, e.g. <strong>jsmith</strong>).
+        If we have an email address on file for your account, we'll send you a temporary password.
+      </p>
+      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username"
+               autocomplete="username" autocapitalize="none" autofocus
+               value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
+        <button type="submit" class="reset-btn">Send temporary password</button>
+      </form>
+    <?php endif; ?>
   <?php endif; ?>
 </body>
 </html>
