@@ -41,7 +41,7 @@ function generateResidentList() {
 //   .../exec?page=owners&token=... → Owner list JSON (for manage-users.php import)
 // ---------------------------------------------------------------------------
 
-// Must match OWNER_IMPORT_TOKEN in manage-users.php
+// Must match OWNER_IMPORT_TOKEN in manage-users.php and forgot-password.php
 const OWNER_IMPORT_TOKEN = 'QRF*!v2r2KgJEesq&P';
 
 function doGet(e) {
@@ -52,6 +52,7 @@ function doGet(e) {
     case 'elevator': return DatabaseSheetMaster.doGetElevator();
     case 'resident': return DatabaseSheetMaster.doGetResident();
     case 'owners':   return DatabaseSheetMaster.doGetOwners(token, OWNER_IMPORT_TOKEN);
+    case 'resetpw':  return DatabaseSheetMaster.doResetPassword(e.parameter, OWNER_IMPORT_TOKEN);
     default:         return DatabaseSheetMaster.doGet();
   }
 }

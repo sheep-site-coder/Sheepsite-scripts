@@ -58,7 +58,7 @@ Open `display-private-dir.php` on **sheepsite.com/Scripts/** and add an entry to
 
 ### Step 4 — Add the building to the user management page
 
-Open `manage-users.php` and `protected-report.php` on **sheepsite.com/Scripts/** and add an entry to each `$buildings` array:
+Open `manage-users.php`, `protected-report.php`, and `forgot-password.php` on **sheepsite.com/Scripts/** and add an entry to each `$buildings` array:
 
 **manage-users.php:**
 ```php
@@ -66,6 +66,11 @@ Open `manage-users.php` and `protected-report.php` on **sheepsite.com/Scripts/**
 ```
 
 **protected-report.php:**
+```php
+'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
+```
+
+**forgot-password.php:**
 ```php
 'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
 ```
@@ -378,9 +383,33 @@ Allows a logged-in owner to change their own password. Linked from the top bar o
 
 - Requires an active `private_auth_{building}` session
 - Verifies the current password before accepting a new one
-- When `mustChange: true` is set on the account (imported accounts), the owner is redirected here automatically and cannot access files or reports until the change is complete
+- When `mustChange: true` is set on the account (imported accounts or after a password reset), the owner is redirected here automatically and cannot access files or reports until the change is complete
 - After a forced change, redirects back to wherever the owner was trying to go
 - Prevents reusing the temporary password when `mustChange` is active
+
+---
+
+### `forgot-password.php` — Owner Self-Service Password Reset
+
+**Location:** `sheepsite.com/Scripts/forgot-password.php`
+
+Allows an owner who has forgotten their password to get a new temporary password sent to the email address on file. Linked from the login form in `display-private-dir.php`.
+
+**URL parameters:**
+
+| Parameter  | Required | Description |
+|------------|----------|-------------|
+| `building` | Yes      | Building name — must match a key in `$buildings` array |
+
+**Flow:**
+1. Owner enters their username (e.g. `jsmith`)
+2. PHP calls the building's Apps Script (`?page=resetpw`) which reverse-engineers the username back to an owner row in the `Database` tab and sends an email via `MailApp`
+3. If email sent successfully: PHP updates the credentials file with a new bcrypt-hashed temporary password and sets `mustChange: true`
+4. Owner logs in with the temporary password and is immediately prompted to choose a new one
+
+**If no email is on file:** shows a message to contact the building administrator — credentials are not changed.
+
+**Adding a new building:** add an entry to the `$buildings` array in `forgot-password.php` with the same `webAppURL` used in `manage-users.php` and `protected-report.php`.
 
 ---
 
@@ -630,6 +659,7 @@ Three report scripts run from a master library (`DatabaseSheetMaster`) and a per
 | `sheets/parking-list.gs` | Parking List — generates Parking List tab + `doGetParking()` web page |
 | `sheets/resident-list.gs` | Resident List — generates Resident List tab + `doGetResident()` web page; sortable by Unit # or Last Name |
 | `sheets/owner-import.gs` | Owner import — `doGetOwners(token, expectedToken)` returns Database tab owner list as JSON for use by `manage-users.php` |
+| `sheets/reset-password.gs` | Password reset — `doResetPassword(params, expectedToken)` looks up a username in the Database tab, sends a temporary password by email via `MailApp`, and returns a status JSON for use by `forgot-password.php` |
 
 After any change to master library files: **Deploy → Manage deployments → New version**. Building scripts pick up changes automatically if set to "latest version".
 
@@ -644,8 +674,9 @@ After any change to master library files: **Deploy → Manage deployments → Ne
 | `.../exec?page=parking` | Parking List |
 | `.../exec?page=resident` | Resident List |
 | `.../exec?page=owners&token=...` | Owner list JSON for import (token-protected) |
+| `.../exec?page=resetpw&token=...&username=...&tmppw=...&loginurl=...` | Password reset — looks up username, sends temp password by email (token-protected) |
 
-The `OWNER_IMPORT_TOKEN` constant in `building-script.gs` must match `OWNER_IMPORT_TOKEN` in `manage-users.php`.
+The `OWNER_IMPORT_TOKEN` constant in `building-script.gs` must match `OWNER_IMPORT_TOKEN` in `manage-users.php` and `forgot-password.php`.
 
 ### Conventions
 
