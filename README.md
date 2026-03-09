@@ -81,25 +81,33 @@ sheepsite.com/Scripts/credentials/NewBuildingName.json
 ```
 with the contents `[]`.
 
-Then set up the admin credentials using `setup-admin.php` (see the `setup-admin.php` section below).
+> **No manual admin setup needed.** The admin account is bootstrapped automatically the first time you visit `admin.php` — see Step 5.
 
 ---
 
-### Step 5 — Import owners from the Google Sheet
+### Step 5 — Set up the admin account
 
-Go to the building's user management URL and log in with the building's admin credentials:
+Visit the admin page for the new building:
 
 ```
-https://sheepsite.com/Scripts/manage-users.php?building=NewBuildingName
+https://sheepsite.com/Scripts/admin.php?building=NewBuildingName
 ```
 
-Scroll to **Import from Sheet**, enter a temporary password, and click **Import**. This reads the `Database` tab from the building's Google Sheet and creates an account for every owner (username = first initial + last name). All imported accounts have `mustChange: true` — owners will be forced to change the temporary password on first login.
+Since no admin credentials exist yet, you will be automatically redirected to the password reset page. Enter the **President's unit number** as the secret # and click **Send temporary password**. The temporary password will be emailed to the President (whoever has `President` in the `Board` column of the Database tab).
+
+Log in with the temporary password — you will be prompted to set a permanent one immediately.
+
+---
+
+### Step 6 — Import owners from the Google Sheet
+
+Once logged into the admin page, click **Manage Users** and use **Import from Association Database Sheet**. Enter a temporary password and click **Import**. This reads the `Database` tab from the building's Google Sheet and creates an account for every owner (username = first initial + last name). All imported accounts have `mustChange: true` — owners will be forced to change the temporary password on first login.
 
 Distribute the temporary password to owners however you like (email, letter, etc.).
 
 ---
 
-### Step 6 — Set the building name on the new site
+### Step 7 — Set the building name on the new site
 
 In Namecheap Website Builder, go to **Settings** (top right menu) → **Pages**. At the top, select **Default**, then paste the script below into the **After `<body>`** section on the right side of the panel.
 
@@ -329,7 +337,7 @@ https://sheepsite.com/Scripts/manage-users.php?building=NewBuildingName
 - **Building admin** — credentials stored as bcrypt hash in `credentials/{building}_admin.json`
 - **Master override** — credentials stored as bcrypt hash in `credentials/_master.json`, can access any building
 
-Admin credentials are set up using `setup-admin.php` (one-time setup tool — delete after use).
+Building admin credentials are created automatically on first use via `forgot-password.php`. Master credentials are set up using `setup-admin.php` (see below).
 
 **Actions available:** Import from Sheet, add user, remove user, change password.
 
@@ -355,13 +363,15 @@ All credential files are excluded from git (`.gitignore`) and live only on the s
 
 **Admin credentials** — one file per building:
 ```
-credentials/{building}_admin.json   → { "user": "admin", "pass": "$2y$10$..." }
+credentials/{building}_admin.json   → { "user": "admin", "pass": "$2y$10$...", "mustChange": true }
 credentials/_master.json            → { "user": "sheepsite", "pass": "$2y$10$..." }
 ```
 
+- `{building}_admin.json` is created automatically the first time the admin password reset is used — no manual setup required
+- `_master.json` must be created manually using `setup-admin.php` (see below)
+- `mustChange: true` is set on the admin account after a password reset — cleared once a new password is chosen
 - `credentials/.htaccess` blocks all direct web access to this folder
 - All passwords stored as bcrypt hashes — never plaintext, never in source code
-- Use `setup-admin.php` to initialise admin credential files
 
 ---
 
@@ -388,13 +398,19 @@ The footer script automatically injects the building name into any link pointing
 
 No `$buildings` array needed — validates the building by checking that admin credentials exist on the server.
 
+**First-time setup:** if `credentials/{building}_admin.json` does not exist yet, `admin.php` automatically redirects to `forgot-password.php` to bootstrap the admin account. No manual file creation or `setup-admin.php` needed for per-building admin accounts.
+
 ---
 
-### `setup-admin.php` — One-Time Admin Credential Setup
+### `setup-admin.php` — Master Credential Setup
 
 **Location:** `sheepsite.com/Scripts/setup-admin.php` (upload, run once, then **delete**)
 
-Generates hashed admin credential files for `manage-users.php`. Edit the `$config` array at the top of the file, upload to the server, visit the URL once in a browser — it creates `credentials/{building}_admin.json` and `credentials/_master.json` — then delete the file immediately.
+> **Per-building admin accounts no longer need this.** They are bootstrapped automatically via `forgot-password.php` on first use.
+
+Use `setup-admin.php` only to create or reset the **master override credentials** (`credentials/_master.json`) — the sheepsite-level account that can access any building's admin pages.
+
+Edit the `$config` array at the top of the file, upload to the server, visit the URL once in a browser — it writes `credentials/_master.json` — then **delete the file immediately**.
 
 It will refuse to run if any password is still set to `CHANGE_ME`.
 
@@ -414,25 +430,28 @@ Allows a logged-in owner to change their own password. Linked from the top bar o
 
 ---
 
-### `forgot-password.php` — Owner Self-Service Password Reset
+### `forgot-password.php` — Self-Service Password Reset (Owners and Admin)
 
 **Location:** `sheepsite.com/Scripts/forgot-password.php`
 
-Allows an owner who has forgotten their password to get a new temporary password sent to the email address on file. Linked from the login form in `display-private-dir.php`.
+Handles password resets for both owners and the building admin. Linked from the login forms in `display-private-dir.php` and `admin.php`.
 
-**URL parameters:**
-
-| Parameter  | Required | Description |
-|------------|----------|-------------|
-| `building` | Yes      | Building name — must match a key in `$buildings` array |
-
-**Flow:**
+**Owner reset flow:**
 1. Owner enters their username (e.g. `jsmith`)
-2. PHP calls the building's Apps Script (`?page=resetpw`) which reverse-engineers the username back to an owner row in the `Database` tab and sends an email via `MailApp`
-3. If email sent successfully: PHP updates the credentials file with a new bcrypt-hashed temporary password and sets `mustChange: true`
-4. Owner logs in with the temporary password and is immediately prompted to choose a new one
+2. PHP calls Apps Script (`?page=resetpw`) which reverse-engineers the username to a row in the `Database` tab and emails a temporary password via `MailApp`
+3. If email sent: PHP updates `credentials/{building}.json` with a new bcrypt hash and sets `mustChange: true`
+4. Owner logs in → immediately prompted to set a new password
 
-**If no email is on file:** shows a message to contact the building administrator — credentials are not changed.
+**Admin reset flow** (`?role=admin`):
+1. Page shows a message that the President of the association will receive the temporary password
+2. Admin enters the **President's unit number** as a secret # (anti-prank check)
+3. Apps Script looks up the `President` row in the `Board` column, verifies the unit number matches, and emails the temporary password
+4. If verified: PHP updates `credentials/{building}_admin.json` with a new bcrypt hash and sets `mustChange: true`
+5. Admin logs in → admin tools are hidden until a new password is set via the Change Admin Password form
+
+**First-time admin setup** (`?role=admin&setup=1`): same as admin reset, but if `credentials/{building}_admin.json` does not exist yet it is created. This is triggered automatically by `admin.php` on a new building.
+
+**If no email is on file or unit number is wrong:** shows "no email on file, contact administrator" — credentials are not changed.
 
 **Adding a new building:** add an entry to the `$buildings` array in `forgot-password.php` with the same `webAppURL` used in `manage-users.php` and `protected-report.php`.
 
@@ -684,7 +703,7 @@ Three report scripts run from a master library (`DatabaseSheetMaster`) and a per
 | `sheets/parking-list.gs` | Parking List — generates Parking List tab + `doGetParking()` web page |
 | `sheets/resident-list.gs` | Resident List — generates Resident List tab + `doGetResident()` web page; sortable by Unit # or Last Name |
 | `sheets/owner-import.gs` | Owner import — `doGetOwners(token, expectedToken)` returns Database tab owner list as JSON for use by `manage-users.php` |
-| `sheets/reset-password.gs` | Password reset — `doResetPassword(params, expectedToken)` looks up a username in the Database tab, sends a temporary password by email via `MailApp`, and returns a status JSON for use by `forgot-password.php` |
+| `sheets/reset-password.gs` | Password reset — `doResetPassword(params, expectedToken)` looks up a username in the Database tab and emails a temporary password via `MailApp`. For username `admin`, looks up the `President` row in the `Board` column and validates the submitted unit number before sending. Returns status JSON for `forgot-password.php`. |
 
 After any change to master library files: **Deploy → Manage deployments → New version**. Building scripts pick up changes automatically if set to "latest version".
 
