@@ -14,12 +14,7 @@ session_start();
 define('CREDENTIALS_DIR',    __DIR__ . '/credentials/');
 define('OWNER_IMPORT_TOKEN', 'QRF*!v2r2KgJEesq&P');  // must match building-script.gs
 
-$buildings = [
-  'QGscratch'  => ['webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_QGSCRATCH/exec'],
-  'LyndhurstH' => ['webAppURL' => 'https://script.google.com/macros/s/AKfycbwsLZ710fdJgJP_YgJ2yXa2XKwzwYzVUj-c1xEpyefHoYeG8bOwJ407ByWCGGOKzmns/exec'],
-  'LyndhurstI' => ['webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_LYNDHURSTI/exec'],
-  // add more buildings here...
-];
+$buildings = require __DIR__ . '/buildings.php';
 
 // -------------------------------------------------------
 // Validate building parameter

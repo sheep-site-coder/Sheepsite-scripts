@@ -18,19 +18,7 @@ session_start();
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 
-// Building name → Google Sheets Web App deployment URL
-$buildings = [
-  'QGscratch' => [
-    'webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_QGSCRATCH/exec',
-  ],
-  'LyndhurstH' => [
-    'webAppURL' => 'https://script.google.com/macros/s/AKfycbwsLZ710fdJgJP_YgJ2yXa2XKwzwYzVUj-c1xEpyefHoYeG8bOwJ407ByWCGGOKzmns/exec',
-  ],
-  'LyndhurstI' => [
-    'webAppURL' => 'https://script.google.com/macros/s/DEPLOYMENT_ID_LYNDHURSTI/exec',
-  ],
-  // add more buildings here...
-];
+$buildings = require __DIR__ . '/buildings.php';
 
 $pages = [
   'board'    => ['suffix' => '',                'title' => 'Board of Directors'],

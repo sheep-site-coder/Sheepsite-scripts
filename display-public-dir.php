@@ -1,14 +1,5 @@
 <?php
-// -------------------------------------------------------
-// Building name → Google Drive "Public" folder ID
-// Each entry points to:  buildingName/WebSite/Public
-// -------------------------------------------------------
-$buildings = [
-  'QGscratch'  => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',  // QGscratch/WebSite/Public
-  'LyndhurstH' => '1nJyAbZ8vCAMSKKheU-39DDZB2hXvC97g',  // LyndhurstH/WebSite/Public
-  'LyndhurstI' => '1zL9-FMMKn1uufMZWUw24lywflCVL44Rc',  // LyndhurstI/WebSite/Public
-  // add more buildings here...
-];
+$buildings = require __DIR__ . '/buildings.php';
 
 $appsScriptURL = 'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec';
 
@@ -22,7 +13,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 
-$folderId   = $buildings[$building];
+$folderId   = $buildings[$building]['publicFolderId'];
 $buildLabel = ucwords(str_replace('_', ' ', $building));
 $returnURL  = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';

@@ -9,9 +9,9 @@ This suite of Google Apps Scripts generates four reports for condo building webs
 3. **Parking List** — car and parking spot assignments, sortable by Unit # or Parking Spot
 4. **Resident List** — owner contact list with phone number, sortable by Unit # or Last Name
 
-Each report can be:
-- Generated as a **tab inside the building's Google Sheet** for easy review
+Each report is:
 - Published as a **responsive web page** embeddable in the building's website via iframe
+- Also maintained as a **tab inside the building's Google Sheet**, auto-updated within ~1 minute of any edit to the source data
 
 ---
 
@@ -24,9 +24,8 @@ A single Google Apps Script project that contains all the logic. Each building s
 ### Building Sheet Script
 
 A thin wrapper script pasted into each building's own Google Apps Script project. It contains:
-- A **SheepSite menu** in the Google Sheets toolbar
-- **Wrapper functions** that call the master library
 - A **single `doGet()` web app entry point** that routes to the correct page via URL parameter
+- **Trigger functions** that auto-update list tabs when source data is edited
 
 ---
 
@@ -105,7 +104,7 @@ Board field values must be one of: `President`, `Vice President`, `Treasurer`, `
 
 ## Web App URL Routing
 
-Each building has **one Web App deployment** that serves all three pages via a URL parameter:
+Each building has **one Web App deployment** that serves all pages via a URL parameter:
 
 | Page | URL |
 |---|---|
@@ -124,22 +123,26 @@ Each building has **one Web App deployment** that serves all three pages via a U
 </iframe>
 ```
 
-The `setXFrameOptionsMode(ALLOWALL)` setting is already included in all three web pages so iframe embedding works without errors.
+The `setXFrameOptionsMode(ALLOWALL)` setting is already included in all web pages so iframe embedding works without errors.
 
 ---
 
-## SheepSite Menu (in each building sheet)
+## Auto-Update Triggers
 
-When the building sheet opens, a **SheepSite** menu appears in the toolbar with:
+Two installable triggers keep the list tabs in sync automatically:
 
-| Menu item | What it does |
-|---|---|
-| Elevator List Update | Regenerates the `Elevator List` tab |
-| Board List Update | Regenerates the `BoardList` tab |
-| Parking List Update | Regenerates the `Parking List` tab |
-| Resident List Update | Regenerates the `Resident List` tab |
+| Trigger | Function | Type |
+|---|---|---|
+| On edit | `onEditHandler` | From spreadsheet → On edit |
+| Every minute | `runScheduledUpdate` | Time-driven → Minutes timer → Every minute |
 
-Use these to verify data before checking the published web pages.
+**How it works:**
+- Any edit to `Database` or `CarDB` stamps a timestamp via `onEditHandler`
+- `runScheduledUpdate` checks every minute; once 30 seconds have passed since the last edit, all four list tabs are regenerated
+- If edits are still coming in, the update waits — this debounce prevents thrashing during bulk data entry
+- Each generator runs independently, so a failure in one doesn't block the others
+
+**Result:** list tabs update automatically within ~1 minute of the last edit, with no manual action required.
 
 ---
 
@@ -159,6 +162,7 @@ Use these to verify data before checking the published web pages.
 - [ ] Paste the entire contents of `building-script.gs`
 - [ ] Click **+** next to Libraries in the left sidebar
 - [ ] Enter the Script ID for `DatabaseSheetMaster` and click Look up
+  *(find this in the `DatabaseSheetMaster` Apps Script project: Project Settings → Script ID)*
 - [ ] Set the identifier to `DatabaseSheetMaster`
 - [ ] Select **latest version** (not a pinned version number)
 - [ ] Click Add
@@ -171,18 +175,23 @@ Use these to verify data before checking the published web pages.
 - [ ] Who has access: **Anyone**
 - [ ] Click **Deploy** and copy the deployment URL
 
-### Step 4 — Test before publishing
-- [ ] Return to the sheet and reload — verify **SheepSite** menu appears
-- [ ] Run **Elevator List Update** — check the `Elevator List` tab looks correct
-- [ ] Run **Board List Update** — check the `BoardList` tab looks correct
-- [ ] Run **Parking List Update** — check the `Parking List` tab looks correct
-- [ ] Run **Resident List Update** — check the `Resident List` tab looks correct
+### Step 4 — Install auto-update triggers
+- [ ] In Apps Script: **Triggers** (clock icon in left sidebar)
+- [ ] Click **+ Add Trigger**
+  - Function: `onEditHandler` | Event source: From spreadsheet | Event type: On edit
+  - Click Save
+- [ ] Click **+ Add Trigger** again
+  - Function: `runScheduledUpdate` | Event source: Time-driven | Type: Minutes timer | Interval: Every minute
+  - Click Save
+
+### Step 5 — Test before publishing
+- [ ] Edit a cell in the `Database` tab, wait ~1 minute — verify list tabs update automatically
 - [ ] Open `[URL]/exec` in a browser — verify Board of Directors page
 - [ ] Open `[URL]/exec?page=elevator` — verify Elevator List page
 - [ ] Open `[URL]/exec?page=parking` — verify Parking List page and sort buttons
 - [ ] Open `[URL]/exec?page=resident` — verify Resident List page and sort buttons
 
-### Step 5 — Embed in the building website
+### Step 6 — Embed in the building website
 - [ ] Board of Directors page: embed `[URL]/exec`
 - [ ] Elevator List page: embed `[URL]/exec?page=elevator`
 - [ ] Parking List page: embed `[URL]/exec?page=parking`
@@ -192,7 +201,7 @@ Use these to verify data before checking the published web pages.
 
 ## Deployment TODO — Updating the Master Library
 
-Do this whenever any of the three master `.gs` files are changed:
+Do this whenever any of the master `.gs` files are changed:
 
 - [ ] Open the `DatabaseSheetMaster` Apps Script project
 - [ ] Update the relevant file(s) with the new code

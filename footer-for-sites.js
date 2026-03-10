@@ -48,13 +48,28 @@ document.addEventListener('DOMContentLoaded', function () {
     link.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);
   });
 
-  // Protected report iframes (protected-report.php)
+  // Protected report iframes (protected-report.php) — login required
   const REPORT_URL = 'https://sheepsite.com/Scripts/protected-report.php';
   document.querySelectorAll('iframe[data-script="protected-report"]').forEach(function (iframe) {
     var url = REPORT_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
     var page = iframe.getAttribute('data-page');
     if (page) url += '&page=' + encodeURIComponent(page);
     url += '&return=' + encodeURIComponent(window.location.href);
+    iframe.onload = function () {
+      var loader = document.getElementById('doc-loader');
+      if (loader) loader.style.display = 'none';
+    };
+    iframe.src = url;
+  });
+
+  // Public report iframes (public-report.php) — no login required
+  // nav=0 suppresses the "Back to site" bar (not needed when embedded as an iframe)
+  const PUBLIC_REPORT_URL = 'https://sheepsite.com/Scripts/public-report.php';
+  document.querySelectorAll('iframe[data-script="public-report"]').forEach(function (iframe) {
+    var url = PUBLIC_REPORT_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var page = iframe.getAttribute('data-page');
+    if (page) url += '&page=' + encodeURIComponent(page);
+    url += '&nav=0';
     iframe.onload = function () {
       var loader = document.getElementById('doc-loader');
       if (loader) loader.style.display = 'none';
@@ -70,7 +85,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var filename = iframe.getAttribute('data-filename');
     if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
     if (filename) url += '&filename=' + encodeURIComponent(filename);
+    iframe.style.display = 'none';
     iframe.onload = function () {
+      iframe.style.display = 'block';
       var loader = document.getElementById('doc-loader');
       if (loader) loader.style.display = 'none';
     };
@@ -96,10 +113,18 @@ function openPrivateFolder(subdir) {
   window.location.href = url;
 }
 
-// Report page buttons — call openReport('parking'), openReport('elevator'), openReport('board')
-// from the button's JS onclick (building name comes from BUILDING_NAME above)
+// Protected report buttons — call openReport('parking'), openReport('elevator'), openReport('resident')
+// from the button's JS onclick (login required)
 function openReport(page) {
   window.location.href = 'https://sheepsite.com/Scripts/protected-report.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&page=' + encodeURIComponent(page)
+    + '&return=' + encodeURIComponent(window.location.href);
+}
+
+// Public report buttons — call openPublicReport('board') from the button's JS onclick (no login required)
+function openPublicReport(page) {
+  window.location.href = 'https://sheepsite.com/Scripts/public-report.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&page=' + encodeURIComponent(page)
     + '&return=' + encodeURIComponent(window.location.href);
@@ -169,7 +194,28 @@ function openDoc(subdir, filename) {
 */
 
 
-// --- Protected report iframe — embeds a report page with spinner ---
+// --- Public report iframe — embeds a public report with spinner (no login required) ---
+// Currently supported data-page values: board
+// Building name comes from BUILDING_NAME automatically.
+// NOTE: no onload on the iframe — the footer script handles it after setting src.
+/*
+<div style="position:relative; width:100%; height:80vh;">
+  <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f5f5f5;" id="doc-loader">
+    <div style="width:48px; height:48px; border:5px solid #e0c0f0; border-top-color:#7A0099; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+    <p style="margin-top:14px; font-family:'Roboto',sans-serif; font-size:14px; color:#888;">Loading...</p>
+  </div>
+  <style>#doc-loader { transition: opacity 0.3s; } @keyframes spin { to { transform: rotate(360deg); } }</style>
+  <iframe
+    data-script="public-report"
+    data-page="board"
+    style="width:100%; height:100%; border:none; display:block;"
+    title="Board of Directors">
+  </iframe>
+</div>
+*/
+
+
+// --- Protected report iframe — embeds a report page with spinner (login required) ---
 // Use data-page values: parking, elevator, resident
 // Building name comes from BUILDING_NAME automatically.
 // NOTE: no onload on the iframe — the footer script handles it after setting src.
@@ -218,7 +264,7 @@ function openDoc(subdir, filename) {
     data-script="get-doc-byname"
     data-subdir="Page1Docs"
     data-filename="Announcement Page1"
-    style="width:100%; height:100%; border:none; display:block;"
+    style="width:100%; height:100%; border:none; display:none;"
     title="Document">
   </iframe>
 </div>

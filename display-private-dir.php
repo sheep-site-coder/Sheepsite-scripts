@@ -9,19 +9,7 @@ define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 
-// Building name → Google Drive Private folder ID
-$buildings = [
-  'QGscratch' => [
-    'folderId' => '1cnHRemgPPNWbY9QlyrsHXq6Mzdu09tSu',  // QGscratch/WebSite/Private
-  ],
-  'LyndhurstH' => [
-    'folderId' => '11WXnAU2P-ShZPtj9p5PG0bFR7ehDXUSS',  // LyndhurstH/WebSite/Private
-  ],
-  'LyndhurstI' => [
-    'folderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',  // LyndhurstI/WebSite/Private
-  ],
-  // add more buildings here...
-];
+$buildings = require __DIR__ . '/buildings.php';
 
 // -------------------------------------------------------
 // Get and validate parameters
@@ -179,7 +167,7 @@ if (isset($_GET['json'])) {
   $scriptURL = APPS_SCRIPT_URL
              . '?action=listPrivate'
              . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-             . '&folderId=' . urlencode($buildingConfig['folderId'])
+             . '&folderId=' . urlencode($buildingConfig['privateFolderId'])
              . ($path ? '&subdir=' . urlencode($path) : '');
   $response = @file_get_contents($scriptURL);
   header('Content-Type: application/json');

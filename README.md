@@ -26,54 +26,35 @@ Copy the folder ID from the URL for each:
 
 ---
 
-### Step 2 — Add the building to the public lookup table
+### Step 2 — Set up the Google Sheet
 
-Open `display-public-dir.php` on **sheepsite.com/Scripts/** and add one line to the `$buildings` array:
-
-```php
-$buildings = [
-  'QGscratch'       => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',
-  'NewBuildingName' => 'GOOGLE_DRIVE_PUBLIC_FOLDER_ID',  // ← add this
-];
-```
-
-- **Key** (`NewBuildingName`): must match exactly what is set as `BUILDING_NAME` on the building's site
-- **Value**: the folder ID for `NewBuildingName/WebSite/Public`
-
-Also add the same building to `get-doc-byname.php` if the building will use embedded Google Doc pages.
+1. Create a new Google Sheet named `"<Building Name> Owner DB"` (e.g. `Lyndhurst I Owner DB`)
+2. Rename the first tab to `Database`; add a second tab named `CarDB`
+3. Ensure row 1 of each tab has the required column headers (see `sheets/README.md`)
+4. Open **Extensions → Apps Script**
+5. Delete any default code and paste the contents of `sheets/building-script.gs`
+6. Click **+** next to Libraries, enter the `DatabaseSheetMaster` Script ID, set identifier to `DatabaseSheetMaster`, select **latest version**, click Add
+   *(get the Script ID from the `DatabaseSheetMaster` Apps Script project: Project Settings → Script ID)*
+7. **Deploy → New deployment** — type: Web App, Execute as: Me, Who has access: Anyone — click Deploy and **copy the URL**
+8. Install auto-update triggers (**Triggers → Add Trigger**):
+   - `onEditHandler` — From spreadsheet → On edit
+   - `runScheduledUpdate` — Time-driven → Minutes timer → Every minute
 
 ---
 
-### Step 3 — Add the building to the private lookup table
+### Step 3 — Add the building to the central config
 
-Open `display-private-dir.php` on **sheepsite.com/Scripts/** and add an entry to the `$buildings` array:
+Open **`buildings.php`** on **sheepsite.com/Scripts/** — this is the **only file you need to edit**. Add one entry:
 
 ```php
 'NewBuildingName' => [
-  'folderId' => 'GOOGLE_DRIVE_PRIVATE_FOLDER_ID',  // NewBuildingName/WebSite/Private
+  'publicFolderId'  => 'GOOGLE_DRIVE_PUBLIC_FOLDER_ID',
+  'privateFolderId' => 'GOOGLE_DRIVE_PRIVATE_FOLDER_ID',
+  'webAppURL'       => 'APPS_SCRIPT_WEB_APP_URL',  // from Step 2
 ],
 ```
 
----
-
-### Step 4 — Add the building to the user management page
-
-Open `manage-users.php`, `protected-report.php`, and `forgot-password.php` on **sheepsite.com/Scripts/** and add an entry to each `$buildings` array:
-
-**manage-users.php:**
-```php
-'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
-```
-
-**protected-report.php:**
-```php
-'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
-```
-
-**forgot-password.php:**
-```php
-'NewBuildingName' => ['webAppURL' => 'APPS_SCRIPT_WEB_APP_URL'],
-```
+All other PHP scripts (`display-public-dir.php`, `display-private-dir.php`, `manage-users.php`, `protected-report.php`, `public-report.php`, `forgot-password.php`, `get-doc-byname.php`) load this file automatically — no changes needed to them.
 
 Then create an empty credentials file on the server at:
 ```
@@ -81,11 +62,11 @@ sheepsite.com/Scripts/credentials/NewBuildingName.json
 ```
 with the contents `[]`.
 
-> **No manual admin setup needed.** The admin account is bootstrapped automatically the first time you visit `admin.php` — see Step 5.
+> **No manual admin setup needed.** The admin account is bootstrapped automatically the first time you visit `admin.php` — see Step 4.
 
 ---
 
-### Step 5 — Set up the admin account
+### Step 4 — Set up the admin account
 
 Visit the admin page for the new building:
 
@@ -99,7 +80,7 @@ Log in with the temporary password — you will be prompted to set a permanent o
 
 ---
 
-### Step 6 — Import owners from the Google Sheet
+### Step 5 — Import owners
 
 Once logged into the admin page, click **Manage Users** and use **Import from Association Database Sheet**. Enter a temporary password and click **Import**. This reads the `Database` tab from the building's Google Sheet and creates an account for every owner (username = first initial + last name). All imported accounts have `mustChange: true` — owners will be forced to change the temporary password on first login.
 
@@ -107,11 +88,11 @@ Distribute the temporary password to owners however you like (email, letter, etc
 
 ---
 
-### Step 7 — Set the building name on the new site
+### Step 6 — Set the building name on the new site
 
 In Namecheap Website Builder, go to **Settings** (top right menu) → **Pages**. At the top, select **Default**, then paste the script below into the **After `<body>`** section on the right side of the panel.
 
-Change only the `BUILDING_NAME` value to match the new building:
+Change only the `BUILDING_NAME` value on the first line — that is the only thing that differs from site to site:
 
 ```html
 <script>
@@ -139,7 +120,40 @@ document.addEventListener('DOMContentLoaded', function () {
     btn.href = url;
   });
 
-  // Document iframes (get-doc-byname)
+  // Admin page links — any link to admin.php gets the building name injected
+  document.querySelectorAll('a[href*="admin.php"]').forEach(function (link) {
+    link.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);
+  });
+
+  // Protected report iframes (protected-report.php) — login required
+  const REPORT_URL = 'https://sheepsite.com/Scripts/protected-report.php';
+  document.querySelectorAll('iframe[data-script="protected-report"]').forEach(function (iframe) {
+    var url = REPORT_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var page = iframe.getAttribute('data-page');
+    if (page) url += '&page=' + encodeURIComponent(page);
+    url += '&return=' + encodeURIComponent(window.location.href);
+    iframe.onload = function () {
+      var loader = document.getElementById('doc-loader');
+      if (loader) loader.style.display = 'none';
+    };
+    iframe.src = url;
+  });
+
+  // Public report iframes (public-report.php) — no login required
+  const PUBLIC_REPORT_URL = 'https://sheepsite.com/Scripts/public-report.php';
+  document.querySelectorAll('iframe[data-script="public-report"]').forEach(function (iframe) {
+    var url = PUBLIC_REPORT_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
+    var page = iframe.getAttribute('data-page');
+    if (page) url += '&page=' + encodeURIComponent(page);
+    url += '&nav=0';
+    iframe.onload = function () {
+      var loader = document.getElementById('doc-loader');
+      if (loader) loader.style.display = 'none';
+    };
+    iframe.src = url;
+  });
+
+  // Document iframes (get-doc-byname) — iframe starts hidden, shown after load
   const DOC_URL = 'https://sheepsite.com/Scripts/get-doc-byname.php';
   document.querySelectorAll('iframe[data-script="get-doc-byname"]').forEach(function (iframe) {
     var url = DOC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);
@@ -147,21 +161,69 @@ document.addEventListener('DOMContentLoaded', function () {
     var filename = iframe.getAttribute('data-filename');
     if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
     if (filename) url += '&filename=' + encodeURIComponent(filename);
+    iframe.style.display = 'none';
+    iframe.onload = function () {
+      iframe.style.display = 'block';
+      var loader = document.getElementById('doc-loader');
+      if (loader) loader.style.display = 'none';
+    };
     iframe.src = url;
   });
 });
 
-// Report page buttons — call from button onclick (building name comes from BUILDING_NAME above)
+// Public folder buttons — call openFolder() or openFolder('SubfolderName') from button onclick
+function openFolder(subdir) {
+  var url = 'https://sheepsite.com/Scripts/display-public-dir.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&return=' + encodeURIComponent(window.location.href);
+  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+  window.location.href = url;
+}
+
+// Private folder buttons — call openPrivateFolder() or openPrivateFolder('SubfolderName') from button onclick
+function openPrivateFolder(subdir) {
+  var url = 'https://sheepsite.com/Scripts/display-private-dir.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&return=' + encodeURIComponent(window.location.href);
+  if (subdir) url += '&path=' + encodeURIComponent(subdir);
+  window.location.href = url;
+}
+
+// Protected report buttons — call openReport('parking'), openReport('elevator'), openReport('resident')
 function openReport(page) {
   window.location.href = 'https://sheepsite.com/Scripts/protected-report.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&page=' + encodeURIComponent(page)
     + '&return=' + encodeURIComponent(window.location.href);
 }
+
+// Public report buttons — call openPublicReport('board') (no login required)
+function openPublicReport(page) {
+  window.location.href = 'https://sheepsite.com/Scripts/public-report.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&page=' + encodeURIComponent(page)
+    + '&return=' + encodeURIComponent(window.location.href);
+}
+
+// Admin page — call openAdmin() from menu link or button onclick
+function openAdmin() {
+  window.location.href = 'https://sheepsite.com/Scripts/admin.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME);
+}
+
+// Document buttons — call openDoc('SubfolderName', 'File Name') from button onclick
+// Pass '' as first argument if file is in the root public folder
+function openDoc(subdir, filename) {
+  var url = 'https://sheepsite.com/Scripts/get-doc-byname.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&filename=' + encodeURIComponent(filename);
+  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+  window.open(url, '_blank');
+}
 </script>
 ```
 
-That's it. All buttons on the site will automatically point to the correct building.
+That's it. All buttons and iframes on the site will automatically point to the correct building.
 
 ---
 
@@ -517,7 +579,7 @@ Wrap the iframe in a loading spinner so the page doesn't appear blank while the 
     data-script="get-doc-byname"
     data-subdir="Page1Docs"
     data-filename="Announcement Page1"
-    style="width:100%; height:100%; border:none; display:block;"
+    style="width:100%; height:100%; border:none; display:none;"
     title="Document">
   </iframe>
 </div>
@@ -631,7 +693,9 @@ openPrivateFolder('Financials')   // specific subfolder
 
 ### Board of Directors report (public — no login required)
 
-The Board of Directors report is public. Embed it directly using the building's Apps Script web app URL — no auth needed. Hardcode the URL since the footer script doesn't know it:
+The Board of Directors report is public. Use `public-report.php` — the footer script injects the building name automatically, no hardcoded URLs needed.
+
+**As an iframe (embedded on the page):**
 
 ```html
 <div style="position:relative; width:100%; height:80vh;">
@@ -641,15 +705,19 @@ The Board of Directors report is public. Embed it directly using the building's 
   </div>
   <style>#doc-loader { transition: opacity 0.3s; } @keyframes spin { to { transform: rotate(360deg); } }</style>
   <iframe
-    src="APPS_SCRIPT_WEB_APP_URL"
+    data-script="public-report"
+    data-page="board"
     style="width:100%; height:100%; border:none; display:block;"
-    title="Board of Directors"
-    onload="document.getElementById('doc-loader').style.display='none'">
+    title="Board of Directors">
   </iframe>
 </div>
 ```
 
-Replace `APPS_SCRIPT_WEB_APP_URL` with the building's Apps Script deployment URL (`.../exec` with no `?page=` suffix).
+**As a button (opens in full page):**
+
+```javascript
+openPublicReport('board')
+```
 
 ---
 
@@ -709,7 +777,7 @@ After any change to master library files: **Deploy → Manage deployments → Ne
 
 ### Building script — paste into each building's Apps Script project
 
-`sheets/building-script.gs` — SheepSite menu, library wrappers, and single `doGet()` router:
+`sheets/building-script.gs` — single `doGet()` router and auto-update trigger functions:
 
 | URL | Page |
 |-----|------|
@@ -735,6 +803,11 @@ The `OWNER_IMPORT_TOKEN` constant in `building-script.gs` must match `OWNER_IMPO
 1. Create Google Sheet named `"<Building Name> Owner DB"`
 2. Open Apps Script editor (Extensions → Apps Script)
 3. Paste `sheets/building-script.gs` as the script content
-4. Add `DatabaseSheetMaster` as a library (set to latest version)
+4. Add `DatabaseSheetMaster` as a library (set to latest version) — Script ID is in the `DatabaseSheetMaster` project under Project Settings → Script ID
 5. Deploy as Web App — **Execute as: Me**, **Access: Anyone, even anonymous**
-6. Copy the deployment URL into `manage-users.php` and `protected-report.php`
+6. Copy the deployment URL into `manage-users.php`, `protected-report.php`, and `forgot-password.php`
+7. Install auto-update triggers (Triggers → Add Trigger):
+   - `onEditHandler` — From spreadsheet → On edit
+   - `runScheduledUpdate` — Time-driven → Minutes timer → Every minute
+
+   These keep the list tabs (Elevator List, Parking List, Resident List, BoardList) in sync automatically. Any edit to `Database` or `CarDB` triggers a regeneration within ~1 minute. See `sheets/README.md` for details.

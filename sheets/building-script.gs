@@ -11,8 +11,10 @@
 //   • Parking List        — login required
 //   • Resident List       — login required; sortable by Unit # or Last Name
 //
-// All reports read live from the Database and CarDB tabs — any edit to
-// those tabs is reflected immediately the next time the report is opened.
+// All reports read live from the Database and CarDB tabs. Any edit to
+// those tabs is reflected immediately the next time a report is opened on
+// the site, and also automatically updates the list tabs in this spreadsheet
+// within about 1 minute (30-second debounce + up to 1-minute check interval).
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -29,6 +31,47 @@
 // Prevents unauthorized calls to the owners import and password reset endpoints.
 // This is NOT building-specific; one universal token covers all buildings.
 const OWNER_IMPORT_TOKEN = 'QRF*!v2r2KgJEesq&P';
+
+// ---------------------------------------------------------------------------
+// Auto-update list tabs
+//
+// Install TWO triggers in Apps Script → Triggers:
+//   1. onEditHandler      — From spreadsheet → On edit
+//   2. runScheduledUpdate — Time-driven → Minutes timer → Every minute
+//
+// When Database or CarDB is edited, a 30-second debounce window starts.
+// runScheduledUpdate checks every minute; once 30+ seconds have passed
+// since the last edit, all four list tabs are regenerated automatically.
+//
+// Also delete the old trigger pointing to generateElevatorList (if any).
+// ---------------------------------------------------------------------------
+
+const DEBOUNCE_MS = 30 * 1000; // 30 seconds of inactivity before updating
+
+function onEditHandler(e) {
+  const sheet = e && e.range && e.range.getSheet();
+  if (!sheet) return;
+  const name = sheet.getName();
+  if (name !== 'Database' && name !== 'CarDB') return;
+  PropertiesService.getScriptProperties()
+    .setProperty('pendingUpdateMs', Date.now().toString());
+}
+
+function runScheduledUpdate() {
+  const props = PropertiesService.getScriptProperties();
+  const pending = props.getProperty('pendingUpdateMs');
+  if (!pending) return;
+  if (Date.now() - parseInt(pending) < DEBOUNCE_MS) return; // still within debounce window
+
+  props.deleteProperty('pendingUpdateMs');
+
+  try { DatabaseSheetMaster.generateElevatorList(null); } catch(err) { console.error('Elevator list:', err); }
+  try { DatabaseSheetMaster.generateParkingList();      } catch(err) { console.error('Parking list:', err); }
+  try { DatabaseSheetMaster.generateResidentList();     } catch(err) { console.error('Resident list:', err); }
+  try { DatabaseSheetMaster.generateBoardList();        } catch(err) { console.error('Board list:', err); }
+}
+
+// ---------------------------------------------------------------------------
 
 function doGet(e) {
   const page  = e && e.parameter && e.parameter.page  ? e.parameter.page  : 'board';

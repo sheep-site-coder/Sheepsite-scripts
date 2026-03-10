@@ -13,12 +13,7 @@
 //     &filename=Announcement+Page1
 // -------------------------------------------------------
 
-$buildings = [
-  'QGscratch'  => '1Vgnk3XTKta33deoOWUfOp9Z666jHpM1c',  // QGscratch/WebSite/Public
-  'LyndhurstH' => '1nJyAbZ8vCAMSKKheU-39DDZB2hXvC97g',  // LyndhurstH/WebSite/Public
-  'LyndhurstI' => '1zL9-FMMKn1uufMZWUw24lywflCVL44Rc',  // LyndhurstI/WebSite/Public
-  // add more buildings here...
-];
+$buildings = require __DIR__ . '/buildings.php';
 
 $appsScriptURL = 'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec';
 
@@ -39,7 +34,7 @@ if (!$building || !array_key_exists($building, $buildings) || !$filename) {
 // -------------------------------------------------------
 $url = $appsScriptURL
      . '?action=list'
-     . '&folderId=' . urlencode($buildings[$building])
+     . '&folderId=' . urlencode($buildings[$building]['publicFolderId'])
      . ($subdir ? '&subdir=' . urlencode($subdir) : '');
 
 $response = @file_get_contents($url);
