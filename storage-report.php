@@ -8,7 +8,8 @@
 // -------------------------------------------------------
 session_start();
 
-define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
+define('CREDENTIALS_DIR',  __DIR__ . '/credentials/');
+define('APPS_SCRIPT_URL',  'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
 
 // -------------------------------------------------------
@@ -47,7 +48,7 @@ $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 if (isset($_GET['json'])) {
   $type     = $_GET['json'];
   $folderId = $type === 'private' ? $config['privateFolderId'] : $config['publicFolderId'];
-  $url      = $config['webAppURL']
+  $url      = APPS_SCRIPT_URL
             . '?action=storageReport'
             . '&folderId=' . urlencode($folderId)
             . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
