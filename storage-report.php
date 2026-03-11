@@ -92,6 +92,8 @@ if (isset($_GET['json'])) {
   <a href="admin.php?building=<?= urlencode($building) ?>" class="back">← Admin</a>
 </div>
 
+<div id="grand-total" style="font-size:1.1rem;font-weight:bold;margin-bottom:2rem;color:#333;"></div>
+
 <h2>Public Folder</h2>
 <div id="public-area"><div class="loading"><span class="spinner"></span>Calculating...</div></div>
 
@@ -134,16 +136,43 @@ function renderReport(data, containerId) {
 
 var building = <?= json_encode($building) ?>;
 var base     = 'storage-report.php?building=' + encodeURIComponent(building);
+var totals   = {};
+
+function updateGrandTotal() {
+  if (totals.public === undefined || totals.private === undefined) return;
+  var grand = document.getElementById('grand-total');
+  if (totals.public === null || totals.private === null) {
+    grand.textContent = '';
+    return;
+  }
+  grand.textContent = 'Total storage: ' + fmtSize(totals.public + totals.private);
+}
 
 fetch(base + '&json=public')
   .then(function(r) { return r.json(); })
-  .then(function(d) { renderReport(d, 'public-area'); })
-  .catch(function()  { document.getElementById('public-area').innerHTML  = '<div class="error">Failed to load</div>'; });
+  .then(function(d) {
+    renderReport(d, 'public-area');
+    totals.public = d.error ? null : d.total;
+    updateGrandTotal();
+  })
+  .catch(function() {
+    document.getElementById('public-area').innerHTML = '<div class="error">Failed to load</div>';
+    totals.public = null;
+    updateGrandTotal();
+  });
 
 fetch(base + '&json=private')
   .then(function(r) { return r.json(); })
-  .then(function(d) { renderReport(d, 'private-area'); })
-  .catch(function()  { document.getElementById('private-area').innerHTML = '<div class="error">Failed to load</div>'; });
+  .then(function(d) {
+    renderReport(d, 'private-area');
+    totals.private = d.error ? null : d.total;
+    updateGrandTotal();
+  })
+  .catch(function() {
+    document.getElementById('private-area').innerHTML = '<div class="error">Failed to load</div>';
+    totals.private = null;
+    updateGrandTotal();
+  });
 </script>
 
 </body>
