@@ -9,9 +9,10 @@ function keepWarm() {
 function doGet(e) {
   const action = e.parameter.action || 'list';
 
-  if (action === 'list')         return handleList(e);
-  if (action === 'listPrivate')  return handleListPrivate(e);
-  if (action === 'download')     return handleDownload(e);
+  if (action === 'list')          return handleList(e);
+  if (action === 'listPrivate')   return handleListPrivate(e);
+  if (action === 'download')      return handleDownload(e);
+  if (action === 'storageReport') return handleStorageReport(e);
 
   return jsonError('Unknown action');
 }
@@ -73,6 +74,56 @@ function handleDownload(e) {
       data:     Utilities.base64Encode(blob.getBytes())
     }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Storage report — token required
+// Returns total size + per-subfolder breakdown for a folder
+// -------------------------------------------------------
+function handleStorageReport(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const folderId = e.parameter.folderId;
+  if (!folderId) return jsonError('No folderId provided');
+
+  const folder = DriveApp.getFolderById(folderId);
+
+  // Sum any files sitting directly in the root (counts toward total, not listed separately)
+  let total = 0;
+  const rootFiles = folder.getFiles();
+  while (rootFiles.hasNext()) {
+    total += rootFiles.next().getSize();
+  }
+
+  // First-level subfolders — size each one recursively
+  const subfolders = [];
+  const folders = folder.getFolders();
+  while (folders.hasNext()) {
+    const sub  = folders.next();
+    const size = getFolderSize(sub);
+    total += size;
+    subfolders.push({ name: sub.getName(), size: size });
+  }
+
+  subfolders.sort(function(a, b) { return b.size - a.size; });
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ total: total, subfolders: subfolders }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Recursively sum all file sizes within a folder tree
+function getFolderSize(folder) {
+  let size = 0;
+  const files = folder.getFiles();
+  while (files.hasNext()) {
+    size += files.next().getSize();
+  }
+  const subfolders = folder.getFolders();
+  while (subfolders.hasNext()) {
+    size += getFolderSize(subfolders.next());
+  }
+  return size;
 }
 
 // -------------------------------------------------------

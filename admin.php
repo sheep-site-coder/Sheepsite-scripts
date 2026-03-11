@@ -220,6 +220,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     </div>
   </a>
 
+  <a href="storage-report.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">📊</div>
+    <div>
+      <div class="card-title">Storage Report</div>
+      <div class="card-desc">
+        View storage usage for the building's Public and Private folders,
+        broken down by subfolder.
+      </div>
+    </div>
+  </a>
+
   <a href="<?= htmlspecialchars(USER_MANUAL_URL) ?>" target="_blank" class="card">
     <div class="card-icon">📖</div>
     <div>
