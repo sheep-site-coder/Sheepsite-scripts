@@ -6,7 +6,7 @@ Utilities for displaying Google Drive folder contents on building websites. Publ
 
 ## ⚡ New Building Setup (Start Here)
 
-See the **[New Site Creation Guide](https://docs.google.com/document/d/1v5PQPlx-iawnevgney3oU-VsP-QjWRNuwCpS2oONxaE/edit)** for the complete step-by-step guide to creating a new building site.
+See **[NEW-SITE-GUIDE.md](NEW-SITE-GUIDE.md)** for the complete step-by-step guide to creating a new building site.
 
 ---
 
