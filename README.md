@@ -101,6 +101,7 @@ Handles all Drive access on behalf of the SheepSite account. Three actions:
 |----------------|---------------|-------------|
 | `list`         | No            | Lists a Public folder — returns folders + files with download URLs |
 | `listPrivate`  | Yes           | Lists a Private folder — returns folders + file IDs (no URLs) |
+| `storageReport` | Yes          | Returns total size + per-subfolder breakdown for a folder (used by storage-report.php) |
 | `download`     | Yes           | Fetches a file by ID — returns base64-encoded bytes for PHP to stream |
 
 **Parameters:**
@@ -239,11 +240,31 @@ The footer script automatically injects the building name into any link pointing
 
 **Links available after login:**
 - **Manage Users** → `manage-users.php` — import owners, add/remove accounts, reset passwords
+- **Storage Report** → `storage-report.php` — Drive storage usage breakdown by folder
 - **User Manual** → Google Doc with step-by-step admin instructions (opens in new tab)
 
 No `$buildings` array needed — validates the building by checking that admin credentials exist on the server.
 
 **First-time setup:** if `credentials/{building}_admin.json` does not exist yet, `admin.php` automatically redirects to `forgot-password.php` to bootstrap the admin account. No manual file creation or `setup-admin.php` needed for per-building admin accounts.
+
+---
+
+### `storage-report.php` — Drive Storage Report
+
+**Location:** `sheepsite.com/Scripts/storage-report.php`
+
+Admin-authenticated page showing storage usage for a building's Public and Private Google Drive folders. Reuses the `manage_auth_{building}` session — no separate login needed if already logged into the admin page.
+
+Loads both folders in parallel via AJAX (spinners shown while calculating). Displays:
+- **Grand total** (Public + Private combined) at the top
+- Per-folder breakdown table sorted largest-first, with a Total row
+
+Calls `dir-display-bridge.gs` with `action=storageReport` — NOT the building's Apps Script URL.
+
+**Access:**
+```
+https://sheepsite.com/Scripts/storage-report.php?building=LyndhurstH
+```
 
 ---
 
