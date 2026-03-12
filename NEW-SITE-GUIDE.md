@@ -29,7 +29,7 @@ Copy the folder ID from the URL for each:
 5. Delete any default code and paste the contents of `sheets/building-script.gs`
 6. Click **+** next to Libraries, enter the `DatabaseSheetMaster` Script ID, set identifier to `DatabaseSheetMaster`, select **latest version**, click Add
    *(get the Script ID from the `DatabaseSheetMaster` Apps Script project: Project Settings → Script ID)*
-7. **Deploy → New deployment** — type: Web App, Execute as: Me, Who has access: Anyone — click Deploy and **copy the URL**
+7. **Deploy → New deployment** — type: Web App, Execute as: Me, Who has access: Anyone — click Deploy and **copy the URL** (you will paste this into `buildings.php` in Step 3 as the `webAppURL`)
 8. Install auto-update triggers (**Triggers → Add Trigger**):
    - `onEditHandler` — From spreadsheet → On edit
    - `runScheduledUpdate` — Time-driven → Minutes timer → Every minute
