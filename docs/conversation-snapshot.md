@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 12, 2026
+**Date:** March 12, 2026 (updated)
 
 ---
 
@@ -61,11 +61,13 @@ PHP renders file browser in iframe on building website
 | `public-report.php` | Public iframe for Board of Directors report |
 | `get-doc-byname.php` | Looks up a file by name in a building's Public folder |
 | `setup-admin.php` | One-time admin setup (delete after use) |
+| `search.php` | Owner-facing file search — login required, searches filenames + tag index |
+| `tag-admin.php` | Admin UI to assign free-form tags to files; tags stored in `tags/{building}.json` |
 
 ### Apps Scripts
 | File | Deployment | Purpose |
 |------|-----------|---------|
-| `dir-display-bridge.gs` | Single shared URL (all buildings) | list, listPrivate, download, storageReport |
+| `dir-display-bridge.gs` | Single shared URL (all buildings) | list, listPrivate, download, storageReport, search |
 | `sheets/building-script.gs` | Per building Google Sheet | Routes report/owner requests |
 | `sheets/board-list.gs` | Master library | Board of Directors list |
 | `sheets/elevator-list.gs` | Master library | Elevator list |
@@ -112,14 +114,27 @@ PHP renders file browser in iframe on building website
       flash to prevent browser re-submission on refresh
 - [x] manage-users.php: language standardized to "resident" throughout (was "user/owner")
 - [x] manage-users.php: JS alert popup for Add/Reset action results
+- [x] File search feature (branch: `feature/search-and-tagging`):
+      - search.php: owner login → search by filename AND/OR tags; AND word logic;
+        results show Public/Private badge, tags, download link
+      - tag-admin.php: admin folder browser to assign free-form tags to files;
+        tags stored as {tags, name, tree} in tags/{building}.json; autocomplete
+        from existing tags; accessible from admin.php File Tags card
+      - dir-display-bridge.gs: new `search` action using Folder.searchFiles()
+        for recursive filename matching across both Public and Private trees
+      - footer-for-sites.js: openSearch() helper added
 
 ---
 
 ## Next Steps
 
+- **Deploy search feature**: merge `feature/search-and-tagging` → main when tested
+- **Redeploy dir-display-bridge.gs** (new version needed for `search` action to go live)
+- **Wire up Search button** on building sites using `openSearch()`
+- **Create tags/ folder** on server (writable by PHP); .htaccess auto-created by tag-admin.php
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 
 ---
 
-*Snapshot updated: March 12, 2026*
+*Snapshot updated: March 12, 2026 (session 2)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
