@@ -30,7 +30,7 @@ return [
   'LyndhurstI' => [
     'publicFolderId'  => '1zL9-FMMKn1uufMZWUw24lywflCVL44Rc',  // LyndhurstI/WebSite/Public
     'privateFolderId' => '1xNEXK2qcGoISKaNoChbTDn2FOWnUmSFP',  // LyndhurstI/WebSite/Private
-    'webAppURL'       => 'https://script.google.com/macros/s/DEPLOYMENT_ID_LYNDHURSTI/exec',
+    'webAppURL'       => 'https://script.google.com/macros/s/AKfycbxgKbwsbX8PkPcf5mJRZ5ZplKg8qRDHXyBCwSOHWIcCXTCZCwS87VtyWtxnCv0_vCHL/exec',
   ],
   // add more buildings here...
 ];

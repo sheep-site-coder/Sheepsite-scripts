@@ -40,6 +40,15 @@ $masterCredFile = CREDENTIALS_DIR . '_master.json';
 $masterCred = file_exists($masterCredFile) ? json_decode(file_get_contents($masterCredFile), true) : null;
 
 // -------------------------------------------------------
+// Dismiss sync orphan panel (GET action)
+// -------------------------------------------------------
+if (isset($_GET['dismiss_sync'])) {
+  unset($_SESSION['sync_orphans_' . $building]);
+  header('Location: manage-users.php?building=' . urlencode($building));
+  exit;
+}
+
+// -------------------------------------------------------
 // Logout
 // -------------------------------------------------------
 if (isset($_GET['logout'])) {
@@ -97,7 +106,7 @@ if (empty($_SESSION[$sessionKey])) {
 </head>
 <body>
   <h1><?= htmlspecialchars($buildLabel) ?></h1>
-  <div class="subtitle">User management — admin login required</div>
+  <div class="subtitle">Resident management — admin login required</div>
 
   <?php if ($loginError): ?>
     <p class="error"><?= htmlspecialchars($loginError) ?></p>
@@ -110,6 +119,9 @@ if (empty($_SESSION[$sessionKey])) {
     <input type="password" id="admin_pass" name="admin_pass" autocomplete="current-password">
     <button type="submit">Log in</button>
   </form>
+  <p style="text-align:center;margin-top:1rem;font-size:0.85rem;">
+    <a href="forgot-password.php?building=<?= urlencode($building) ?>&role=admin" style="color:#0070f3;text-decoration:none;">Forgot password?</a>
+  </p>
 </body>
 </html>
 <?php
@@ -131,6 +143,16 @@ function uniqueUsername(string $base, array $existingUsers): string {
   $i = 2;
   while (in_array($base . $i, $taken)) $i++;
   return $base . $i;
+}
+
+function isLinkedToDatabase(string $webUsername, array $owners): bool {
+  foreach ($owners as $owner) {
+    $base = makeUsername($owner['firstName'], $owner['lastName']);
+    if ($webUsername === $base || preg_match('/^' . preg_quote($base, '/') . '\d+$/', $webUsername)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function loadUsers(string $building): array {
@@ -156,6 +178,7 @@ function saveUsers(string $building, array $users): bool {
 // -------------------------------------------------------
 $message     = '';
 $messageType = 'ok';
+$alertMessage = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -167,22 +190,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $message = 'Username and password are required.';
       $messageType = 'error';
     } else {
-      $users = loadUsers($building);
-      foreach ($users as $u) {
-        if ($u['user'] === $user) {
-          $message = "User \"$user\" already exists.";
-          $messageType = 'error';
-          break;
+      $users       = loadUsers($building);
+      $existingIdx = null;
+      foreach ($users as $i => $u) {
+        if ($u['user'] === $user) { $existingIdx = $i; break; }
+      }
+
+      // Update existing or create new account
+      $newHash = password_hash($pass, PASSWORD_DEFAULT);
+      if ($existingIdx !== null) {
+        $users[$existingIdx]['pass'] = $newHash;
+      } else {
+        $users[] = ['user' => $user, 'pass' => $newHash];
+        $existingIdx = array_key_last($users);
+      }
+
+      // Try to email the temp password via Apps Script (works for both new and existing residents)
+      $webAppURL = $buildings[$building]['webAppURL'] ?? '';
+      $scheme    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+      $dir       = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+      $loginURL  = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                 . '/display-private-dir.php?building=' . urlencode($building);
+
+      $emailSent = false;
+      if ($webAppURL) {
+        $resetURL  = $webAppURL
+                   . '?page=resetpw'
+                   . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
+                   . '&username=' . urlencode($user)
+                   . '&building=' . urlencode($building)
+                   . '&tmppw='    . urlencode($pass)
+                   . '&loginurl=' . urlencode($loginURL);
+        $response  = @file_get_contents($resetURL);
+        if ($response !== false) {
+          $data      = json_decode($response, true);
+          $emailSent = ($data['status'] ?? '') === 'ok';
         }
       }
-      if ($messageType !== 'error') {
-        $users[] = ['user' => $user, 'pass' => password_hash($pass, PASSWORD_DEFAULT)];
-        if (saveUsers($building, $users)) {
-          $message = "User \"$user\" added.";
-        } else {
-          $message = 'Could not save — check that the credentials/ folder exists on the server and is writable.';
-          $messageType = 'error';
-        }
+
+      if ($emailSent) {
+        $users[$existingIdx]['mustChange'] = true;
+        $message      = "Account set for \"$user\" — temporary password emailed to resident.";
+        $alertMessage = "Account set for \"$user\".\n\nA temporary password was emailed to the resident. They will be required to change it on next login.";
+      } else {
+        unset($users[$existingIdx]['mustChange']);
+        $message      = "Account set for \"$user\". No email sent (not found in association database).";
+        $alertMessage = "Account set for \"$user\".\n\nNo email was sent — this person was not found in the association database.";
+      }
+      if (!saveUsers($building, $users)) {
+        $message      = 'Could not save — check that the credentials/ folder exists on the server and is writable.';
+        $messageType  = 'error';
+        $alertMessage = '';
       }
     }
   }
@@ -192,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $users = loadUsers($building);
     $users = array_filter($users, fn($u) => $u['user'] !== $user);
     saveUsers($building, $users);
-    $message = "User \"$user\" removed.";
+    $message = "Resident \"$user\" removed.";
   }
 
   elseif (isset($_POST['import_owners'])) {
@@ -233,9 +291,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               $users[]  = ['user' => $username, 'pass' => $tempHash, 'mustChange' => true];
               $added++;
             }
+            // Find web users not linked to any database record
+            $orphans = [];
+            foreach ($users as $u) {
+              if (!isLinkedToDatabase($u['user'], $data['owners'])) {
+                $orphans[] = $u['user'];
+              }
+            }
+            $_SESSION['sync_orphans_' . $building] = $orphans;
+
             if (saveUsers($building, $users)) {
               $message = "$added account(s) created, $skipped skipped (already exist). "
-                       . "Distribute the temporary password to owners — they will be required to change it on first login.";
+                       . "Distribute the temporary password to residents — they will be required to change it on first login.";
             } else {
               $message = 'Could not save credentials file.';
               $messageType = 'error';
@@ -244,6 +311,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     }
+  }
+
+  elseif (isset($_POST['remove_orphans'])) {
+    $toRemove = array_filter($_POST['remove_list'] ?? [], fn($u) => $u !== '');
+    if ($toRemove) {
+      $users = loadUsers($building);
+      $users = array_filter($users, fn($u) => !in_array($u['user'], $toRemove));
+      saveUsers($building, $users);
+      $count   = count($toRemove);
+      $message = "$count account(s) removed during sync.";
+    }
+    unset($_SESSION['sync_orphans_' . $building]);
   }
 
   elseif (isset($_POST['change_pass'])) {
@@ -268,11 +347,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saveUsers($building, $users);
         $message = "Password updated for \"$user\".";
       } else {
-        $message = "User \"$user\" not found.";
+        $message = "Resident \"$user\" not found.";
         $messageType = 'error';
       }
     }
   }
+
+  // PRG: store result in session and redirect so a browser refresh doesn't re-submit
+  $_SESSION['flash_message'] = $message;
+  $_SESSION['flash_type']    = $messageType;
+  $_SESSION['flash_alert']   = $alertMessage;
+  header('Location: manage-users.php?building=' . urlencode($building));
+  exit;
+}
+
+// Read flash message left by a POST redirect
+$message      = '';
+$messageType  = 'ok';
+$alertMessage = '';
+if (isset($_SESSION['flash_message'])) {
+  $message      = $_SESSION['flash_message'];
+  $messageType  = $_SESSION['flash_type']  ?? 'ok';
+  $alertMessage = $_SESSION['flash_alert'] ?? '';
+  unset($_SESSION['flash_message'], $_SESSION['flash_type'], $_SESSION['flash_alert']);
 }
 
 $users = loadUsers($building);
@@ -320,6 +417,20 @@ $users = loadUsers($building);
     .add-btn       { padding: 0.4rem 0.9rem; background: #0070f3; color: #fff; border: none;
                      border-radius: 4px; font-size: 0.9rem; cursor: pointer; }
     .add-btn:hover { background: #005bb5; }
+    .sync-panel    { background: #fff8e1; border: 1px solid #f0c000; border-radius: 6px;
+                     padding: 1rem 1.2rem; margin-bottom: 1.5rem; }
+    .sync-panel h2 { color: #7a5800; margin-bottom: 0.4rem; }
+    .sync-panel p  { font-size: 0.85rem; color: #7a5800; margin: 0 0 0.75rem; }
+    .sync-list     { list-style: none; padding: 0; margin: 0 0 0.75rem; }
+    .sync-list li  { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;
+                     font-size: 0.9rem; border-bottom: 1px solid #f0e080; }
+    .sync-list li:last-child { border-bottom: none; }
+    .sync-actions  { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+    .remove-checked-btn { padding: 0.4rem 0.9rem; background: #c00; color: #fff; border: none;
+                     border-radius: 4px; font-size: 0.9rem; cursor: pointer; }
+    .remove-checked-btn:hover { background: #900; }
+    .keep-all-link { font-size: 0.85rem; color: #0070f3; text-decoration: none; }
+    .keep-all-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -333,27 +444,59 @@ $users = loadUsers($building);
   <div class="message <?= $messageType ?>"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>
 
-<h2>Add Resident</h2>
+<h2>Add / Reset Resident</h2>
+<p style="font-size:0.85rem;color:#666;margin-bottom:0.75rem;">
+  If the username already exists, the password is updated and a temporary password email is sent to the resident (they must change it on next login).
+  If the username is new, the account is created as-is.
+</p>
 <form class="add-form" method="post">
   <input type="text"     name="username" placeholder="Username"    autocomplete="off">
   <input type="password" name="password" placeholder="Password"    autocomplete="new-password">
-  <button type="submit" name="add_user" class="add-btn">Add</button>
+  <button type="submit" name="add_user" class="add-btn">Add / Reset</button>
 </form>
 
 <hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
 
-<h2>Import from Association Database Sheet</h2>
+<h2>Import / Sync from Association Database Sheet</h2>
 <p style="font-size:0.85rem;color:#666;margin-bottom:0.75rem;">
-  Creates accounts for all owners in the Database tab who don't have one yet.
+  Creates accounts for all residents in the Database tab who don't have one yet.
   Username = first initial + last name. All new accounts will require a password change on first login.
+  Also checks for web accounts that no longer exist in the database and prompts you to remove them.
 </p>
 <form class="add-form" method="post">
   <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)" autocomplete="new-password" style="width:260px;">
   <button type="submit" name="import_owners" class="add-btn"
-          onclick="return confirm('Import owners from the Google Sheet and create accounts with this temporary password?')">Import</button>
+          onclick="return confirm('Import residents from the Google Sheet and sync accounts with this temporary password?')">Import / Sync</button>
 </form>
 
 <hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
+
+<?php
+$syncOrphans = $_SESSION['sync_orphans_' . $building] ?? null;
+if ($syncOrphans !== null && count($syncOrphans) > 0):
+?>
+<div class="sync-panel">
+  <h2>Sync Check — <?= count($syncOrphans) ?> account(s) not in database</h2>
+  <p>The following web accounts have no matching resident in the association database.
+     Check the ones you want to remove, then click Remove. Uncheck anyone you want to keep.</p>
+  <form method="post">
+    <ul class="sync-list">
+      <?php foreach ($syncOrphans as $orphan): ?>
+      <li>
+        <input type="checkbox" name="remove_list[]" value="<?= htmlspecialchars($orphan) ?>" id="orphan-<?= htmlspecialchars($orphan) ?>" checked>
+        <label for="orphan-<?= htmlspecialchars($orphan) ?>"><?= htmlspecialchars($orphan) ?></label>
+      </li>
+      <?php endforeach; ?>
+    </ul>
+    <div class="sync-actions">
+      <button type="submit" name="remove_orphans" class="remove-checked-btn">Remove checked</button>
+      <a href="?building=<?= urlencode($building) ?>&dismiss_sync=1" class="keep-all-link">Keep all / dismiss</a>
+    </div>
+  </form>
+</div>
+<?php elseif ($syncOrphans !== null && count($syncOrphans) === 0): ?>
+<div class="message ok" style="margin-bottom:1.5rem;">All web accounts are in sync with the database.</div>
+<?php endif; ?>
 
 <?php if (empty($users)): ?>
   <p class="empty">No users yet.</p>
@@ -397,6 +540,11 @@ function togglePass(uid) {
   var row = document.getElementById('pass-' + uid);
   row.classList.toggle('open');
 }
+<?php if ($alertMessage): ?>
+window.addEventListener('DOMContentLoaded', function() {
+  alert(<?= json_encode($alertMessage) ?>);
+});
+<?php endif; ?>
 </script>
 </body>
 </html>
