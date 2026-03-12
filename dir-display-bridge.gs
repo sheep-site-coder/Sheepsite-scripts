@@ -13,6 +13,7 @@ function doGet(e) {
   if (action === 'listPrivate')   return handleListPrivate(e);
   if (action === 'download')      return handleDownload(e);
   if (action === 'storageReport') return handleStorageReport(e);
+  if (action === 'search')        return handleSearch(e);
 
   return jsonError('Unknown action');
 }
@@ -124,6 +125,64 @@ function getFolderSize(folder) {
     size += getFolderSize(subfolders.next());
   }
   return size;
+}
+
+// -------------------------------------------------------
+// File search — token required
+// Searches filename across both Public and Private folder trees.
+// Query words are AND-ed: all words must appear in the filename.
+// Returns flat list of matches with tree ('public'|'private') label.
+// -------------------------------------------------------
+function handleSearch(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const publicFolderId  = e.parameter.publicFolderId;
+  const privateFolderId = e.parameter.privateFolderId;
+  const query           = (e.parameter.query || '').trim();
+
+  if (!publicFolderId || !privateFolderId) return jsonError('Missing folder IDs');
+  if (!query) return jsonError('No query provided');
+
+  // Build Drive search expression — AND all words
+  const words = query.split(/\s+/).filter(Boolean);
+  const expr  = words
+    .map(w => "name contains '" + w.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'")
+    .join(' and ');
+
+  const results = [];
+
+  // Search public tree
+  const publicFolder = DriveApp.getFolderById(publicFolderId);
+  const publicFiles  = publicFolder.searchFiles(expr);
+  while (publicFiles.hasNext()) {
+    const file = publicFiles.next();
+    results.push({
+      id:   file.getId(),
+      name: file.getName(),
+      size: Math.round(file.getSize() / 1024) + ' KB',
+      tree: 'public',
+      url:  file.getDownloadUrl()
+    });
+  }
+
+  // Search private tree
+  const privateFolder = DriveApp.getFolderById(privateFolderId);
+  const privateFiles  = privateFolder.searchFiles(expr);
+  while (privateFiles.hasNext()) {
+    const file = privateFiles.next();
+    results.push({
+      id:   file.getId(),
+      name: file.getName(),
+      size: Math.round(file.getSize() / 1024) + ' KB',
+      tree: 'private'
+    });
+  }
+
+  results.sort((a, b) => a.name.localeCompare(b.name));
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ results: results }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // -------------------------------------------------------

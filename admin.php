@@ -231,6 +231,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     </div>
   </a>
 
+  <a href="tag-admin.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">🏷️</div>
+    <div>
+      <div class="card-title">File Tags</div>
+      <div class="card-desc">
+        Browse Public and Private folders and assign searchable tags to files.
+        Tags power the file search feature for owners.
+      </div>
+    </div>
+  </a>
+
   <a href="<?= htmlspecialchars(USER_MANUAL_URL) ?>" target="_blank" class="card">
     <div class="card-icon">📖</div>
     <div>

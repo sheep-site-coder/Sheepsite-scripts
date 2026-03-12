@@ -136,6 +136,13 @@ function openAdmin() {
     + '?building=' + encodeURIComponent(BUILDING_NAME);
 }
 
+// File search — call openSearch() from a search button or link onclick
+function openSearch() {
+  window.location.href = 'https://sheepsite.com/Scripts/search.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&return='   + encodeURIComponent(window.location.href);
+}
+
 // Document buttons — call openDoc('SubfolderName', 'File Name') from button onclick
 // subdir is optional — pass '' if file is in the root public folder
 function openDoc(subdir, filename) {
