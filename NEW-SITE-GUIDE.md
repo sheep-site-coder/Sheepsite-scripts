@@ -204,3 +204,23 @@ function openDoc(subdir, filename) {
 ```
 
 That's it. All buttons and iframes on the site will automatically point to the correct building.
+
+---
+
+## Reference — Master Password
+
+> **This is not required for new site setup.** The per-building admin account is created automatically (Step 4). This section is here for reference so you don't have to dig for it.
+
+The master password is a sheepsite-level override credential stored in `credentials/_master.json` on the server. It can log into the admin pages of **any** building without needing that building's own admin password.
+
+**When you need it:**
+- Accessing any building's admin or user management page when the building's admin password is lost and the President is unavailable to receive a reset email
+- Useful safety net if something goes wrong during a new site setup
+
+**How to create or reset it:**
+1. Edit `setup-admin.php` — set the username and password in the `$config` array at the top
+2. Upload it to `sheepsite.com/Scripts/`
+3. Visit the URL once in a browser — it writes `credentials/_master.json`
+4. **Delete `setup-admin.php` from the server immediately**
+
+The file will refuse to run if the password is still set to `CHANGE_ME`.
