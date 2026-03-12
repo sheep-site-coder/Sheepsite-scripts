@@ -52,8 +52,8 @@ PHP renders file browser in iframe on building website
 | `buildings.php` | Central config — maps building names to Drive folder IDs and Sheet URLs |
 | `display-public-dir.php` | Public folder browser (no auth) |
 | `display-private-dir.php` | Private folder browser (owner login required) |
-| `manage-users.php` | Add/remove/reset owner passwords per building |
-| `change-password.php` | Self-service password change for owners |
+| `manage-users.php` | Add/remove/reset resident passwords per building; import/sync from Sheet |
+| `change-password.php` | Self-service password change for residents |
 | `forgot-password.php` | Password reset via email (uses Apps Script) |
 | `admin.php` | Admin landing page |
 | `storage-report.php` | Drive storage breakdown by building |
@@ -75,7 +75,7 @@ PHP renders file browser in iframe on building website
 | `sheets/reset-password.gs` | Master library | Email temporary password |
 
 ### Credentials (not committed to git)
-- `credentials/{building}.json` — owner accounts (bcrypt hashed passwords)
+- `credentials/{building}.json` — resident accounts (bcrypt hashed passwords)
 - `credentials/{building}_admin.json` — per-building admin
 - `credentials/_master.json` — master override admin (all buildings)
 
@@ -96,7 +96,7 @@ PHP renders file browser in iframe on building website
 
 **Completed:**
 - [x] All PHP scripts for public/private browsing
-- [x] Owner login, password change, forgot password flow
+- [x] Resident login, password change, forgot password flow
 - [x] Admin user management per building
 - [x] Apps Script dir-display-bridge (shared across all buildings)
 - [x] Per-building Google Sheets scripts (reports + owner management)
@@ -104,6 +104,14 @@ PHP renders file browser in iframe on building website
 - [x] README.md and NEW-SITE-GUIDE.md
 - [x] QGscratch, SampleSite, LyndhurstH, LyndhurstI configured
 - [x] /start-sheeping and /done-sheeping commands set up
+- [x] manage-users.php: Add/Reset Resident — creates or resets account, emails temp
+      password via Apps Script if resident found in database, sets mustChange accordingly
+- [x] manage-users.php: Import/Sync — after import, detects web accounts with no
+      matching database record; shows sync panel for admin to remove or keep each one
+- [x] manage-users.php: PRG pattern — all POST actions redirect to GET via session
+      flash to prevent browser re-submission on refresh
+- [x] manage-users.php: language standardized to "resident" throughout (was "user/owner")
+- [x] manage-users.php: JS alert popup for Add/Reset action results
 
 ---
 
@@ -113,5 +121,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot created: March 12, 2026*
+*Snapshot updated: March 12, 2026*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
