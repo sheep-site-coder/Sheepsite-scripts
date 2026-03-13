@@ -146,43 +146,42 @@ function handleSearch(e) {
   // Build Drive search expression — AND all words
   const words = query.split(/\s+/).filter(Boolean);
   const expr  = words
-    .map(w => "name contains '" + w.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'")
+    .map(w => "title contains '" + w.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'")
     .join(' and ');
 
   const results = [];
 
-  // Search public tree
-  const publicFolder = DriveApp.getFolderById(publicFolderId);
-  const publicFiles  = publicFolder.searchFiles(expr);
-  while (publicFiles.hasNext()) {
-    const file = publicFiles.next();
-    results.push({
-      id:   file.getId(),
-      name: file.getName(),
-      size: Math.round(file.getSize() / 1024) + ' KB',
-      tree: 'public',
-      url:  file.getDownloadUrl()
-    });
-  }
+  // Search public tree recursively
+  searchFolderRecursive(DriveApp.getFolderById(publicFolderId), expr, 'public', results);
 
-  // Search private tree
-  const privateFolder = DriveApp.getFolderById(privateFolderId);
-  const privateFiles  = privateFolder.searchFiles(expr);
-  while (privateFiles.hasNext()) {
-    const file = privateFiles.next();
-    results.push({
-      id:   file.getId(),
-      name: file.getName(),
-      size: Math.round(file.getSize() / 1024) + ' KB',
-      tree: 'private'
-    });
-  }
+  // Search private tree recursively
+  searchFolderRecursive(DriveApp.getFolderById(privateFolderId), expr, 'private', results);
 
   results.sort((a, b) => a.name.localeCompare(b.name));
 
   return ContentService
     .createTextOutput(JSON.stringify({ results: results }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Recursively search a folder tree for files matching expr
+function searchFolderRecursive(folder, expr, tree, results) {
+  const files = folder.searchFiles(expr);
+  while (files.hasNext()) {
+    const file = files.next();
+    const entry = {
+      id:   file.getId(),
+      name: file.getName(),
+      size: Math.round(file.getSize() / 1024) + ' KB',
+      tree: tree
+    };
+    if (tree === 'public') entry.url = file.getDownloadUrl();
+    results.push(entry);
+  }
+  const subfolders = folder.getFolders();
+  while (subfolders.hasNext()) {
+    searchFolderRecursive(subfolders.next(), expr, tree, results);
+  }
 }
 
 // -------------------------------------------------------

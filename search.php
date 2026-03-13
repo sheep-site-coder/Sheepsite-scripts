@@ -251,7 +251,8 @@ if (isset($_GET['json']) && $_GET['json'] === 'search') {
   unset($r);
 
   // Merge: filename results first (already sorted by Apps Script), then tag-only results
-  $tagResults = array_values(usort($tagResults, fn($a,$b) => strcmp($a['name'],$b['name'])) ?: $tagResults);
+  usort($tagResults, fn($a,$b) => strcmp($a['name'],$b['name']));
+  $tagResults = array_values($tagResults);
   $merged = array_merge($nameResults, $tagResults);
 
   echo json_encode(['results' => $merged]);
@@ -397,7 +398,7 @@ $currentUser = $_SESSION[$sessionKey];
           fileURL     = privateBase + '&fileId=' + encodeURIComponent(f.id) + '&inline=1';
           downloadURL = privateBase + '&fileId=' + encodeURIComponent(f.id);
         } else {
-          fileURL     = f.url || ('https://drive.google.com/uc?export=view&id='    + encodeURIComponent(f.id));
+          fileURL     = 'https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view';
           downloadURL = f.url || ('https://drive.google.com/uc?export=download&id=' + encodeURIComponent(f.id));
         }
 

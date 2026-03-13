@@ -264,11 +264,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
   // -------------------------------------------------------
   // Navigation
   // -------------------------------------------------------
-  function navigate(path) {
+  window.navigate = function (path) {
     currentPath = path;
     closeEditor();
     loadListing();
-  }
+  };
 
   // -------------------------------------------------------
   // Fetch + render listing
@@ -475,6 +475,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
         } else {
           delete tags[fileId];
         }
+        saveBtn.disabled    = false;
+        saveBtn.textContent = 'Save';
         closeEditor();
         updatePreviewRow(fileId);
         rebuildDatalist();
