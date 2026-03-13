@@ -220,13 +220,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     </div>
   </a>
 
-  <a href="storage-report.php?building=<?= urlencode($building) ?>" class="card">
-    <div class="card-icon">📊</div>
+  <a href="file-manager.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">📁</div>
     <div>
-      <div class="card-title">Storage Report</div>
+      <div class="card-title">Manage Files</div>
       <div class="card-desc">
-        View storage usage for the building's Public and Private folders,
-        broken down by subfolder.
+        Upload, delete, rename, and organize files in Public and Private folders.
+        Drag and drop one or more files to upload, or browse to select.
       </div>
     </div>
   </a>
@@ -234,10 +234,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   <a href="tag-admin.php?building=<?= urlencode($building) ?>" class="card">
     <div class="card-icon">🏷️</div>
     <div>
-      <div class="card-title">File Tags</div>
+      <div class="card-title">Manage Tags</div>
       <div class="card-desc">
         Browse Public and Private folders and assign searchable tags to files.
         Tags power the file search feature for owners.
+      </div>
+    </div>
+  </a>
+
+  <a href="storage-report.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">📊</div>
+    <div>
+      <div class="card-title">Storage Report</div>
+      <div class="card-desc">
+        View storage usage for the building's Public and Private folders,
+        broken down by subfolder.
       </div>
     </div>
   </a>

@@ -11,11 +11,30 @@ function doGet(e) {
 
   if (action === 'list')          return handleList(e);
   if (action === 'listPrivate')   return handleListPrivate(e);
+  if (action === 'listAdmin')     return handleListAdmin(e);
   if (action === 'download')      return handleDownload(e);
   if (action === 'storageReport') return handleStorageReport(e);
   if (action === 'search')        return handleSearch(e);
+  if (action === 'deleteFile')    return handleDeleteFile(e);
+  if (action === 'renameFile')    return handleRenameFile(e);
+  if (action === 'createFolder')  return handleCreateFolder(e);
 
   return jsonError('Unknown action');
+}
+
+// -------------------------------------------------------
+// File upload via POST — token required
+// Body: { action, token, folderId, fileName, mimeType, data (base64) }
+// -------------------------------------------------------
+function doPost(e) {
+  try {
+    const data   = JSON.parse(e.postData.contents);
+    const action = data.action || '';
+    if (action === 'uploadFile') return handleUploadFile(data);
+    return jsonError('Unknown action');
+  } catch (err) {
+    return jsonError('Invalid request: ' + err.message);
+  }
 }
 
 // -------------------------------------------------------
@@ -207,6 +226,131 @@ function navigateToSubdir(folder, subdir) {
     folder = matches.next();
   }
   return folder;
+}
+
+// -------------------------------------------------------
+// Admin folder listing — token required
+// Returns folders with IDs, files with IDs + size, and
+// the current folder's own ID (needed for createFolder/upload).
+// -------------------------------------------------------
+function handleListAdmin(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const folderId = e.parameter.folderId;
+  const subdir   = e.parameter.subdir || '';
+
+  if (!folderId) return jsonError('No folderId provided');
+
+  const root   = DriveApp.getFolderById(folderId);
+  const folder = navigateToSubdir(root, subdir);
+  if (folder.error) return jsonError(folder.error);
+
+  const folderList = [];
+  const folderIter = folder.getFolders();
+  while (folderIter.hasNext()) {
+    const f = folderIter.next();
+    folderList.push({ name: f.getName(), id: f.getId() });
+  }
+
+  const fileList = [];
+  const fileIter = folder.getFiles();
+  while (fileIter.hasNext()) {
+    const file = fileIter.next();
+    const bytes = file.getSize();
+    const size  = bytes >= 1024 * 1024
+      ? (bytes / 1024 / 1024).toFixed(1) + ' MB'
+      : Math.round(bytes / 1024) + ' KB';
+    fileList.push({
+      id:   file.getId(),
+      name: file.getName(),
+      size: size
+    });
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      folders:         folderList,
+      files:           fileList,
+      currentFolderId: folder.getId()
+    }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Delete file — token required
+// param: fileId
+// -------------------------------------------------------
+function handleDeleteFile(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const fileId = e.parameter.fileId;
+  if (!fileId) return jsonError('No fileId provided');
+
+  DriveApp.getFileById(fileId).setTrashed(true);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Rename file — token required
+// params: fileId, newName
+// -------------------------------------------------------
+function handleRenameFile(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const fileId  = e.parameter.fileId;
+  const newName = e.parameter.newName;
+  if (!fileId || !newName) return jsonError('Missing fileId or newName');
+
+  DriveApp.getFileById(fileId).setName(newName);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Create subfolder — token required
+// params: parentFolderId, name
+// -------------------------------------------------------
+function handleCreateFolder(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const parentFolderId = e.parameter.parentFolderId;
+  const name           = e.parameter.name;
+  if (!parentFolderId || !name) return jsonError('Missing parentFolderId or name');
+
+  const newFolder = DriveApp.getFolderById(parentFolderId).createFolder(name);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, id: newFolder.getId(), name: newFolder.getName() }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Upload file — token in body required
+// body: { token, folderId, fileName, mimeType, data (base64) }
+// -------------------------------------------------------
+function handleUploadFile(data) {
+  if (data.token !== SECRET_TOKEN) return jsonError('Unauthorized');
+
+  const folderId = data.folderId;
+  const fileName = data.fileName;
+  const mimeType = data.mimeType || 'application/octet-stream';
+  const b64data  = data.data;
+
+  if (!folderId || !fileName || !b64data) return jsonError('Missing required fields');
+
+  const folder = DriveApp.getFolderById(folderId);
+  const bytes  = Utilities.base64Decode(b64data);
+  const blob   = Utilities.newBlob(bytes, mimeType, fileName);
+  const file   = folder.createFile(blob);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, id: file.getId(), name: file.getName() }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // List subfolders and files from a folder

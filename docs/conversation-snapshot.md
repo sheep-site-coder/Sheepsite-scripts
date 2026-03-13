@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 12, 2026 (updated)
+**Date:** March 13, 2026 (updated)
 
 ---
 
@@ -63,11 +63,12 @@ PHP renders file browser in iframe on building website
 | `setup-admin.php` | One-time admin setup (delete after use) |
 | `search.php` | Owner-facing file search — login required, searches filenames + tag index |
 | `tag-admin.php` | Admin UI to assign free-form tags to files; tags stored in `tags/{building}.json` |
+| `file-manager.php` | Admin UI to upload, delete, rename files and create subfolders in Public/Private folders |
 
 ### Apps Scripts
 | File | Deployment | Purpose |
 |------|-----------|---------|
-| `dir-display-bridge.gs` | Single shared URL (all buildings) | list, listPrivate, download, storageReport, search |
+| `dir-display-bridge.gs` | Single shared URL (all buildings) | list, listPrivate, listAdmin, download, storageReport, search, deleteFile, renameFile, createFolder, uploadFile (doPost) |
 | `sheets/building-script.gs` | Per building Google Sheet | Routes report/owner requests |
 | `sheets/board-list.gs` | Master library | Board of Directors list |
 | `sheets/elevator-list.gs` | Master library | Elevator list |
@@ -119,22 +120,33 @@ PHP renders file browser in iframe on building website
         results show Public/Private badge, tags, download link
       - tag-admin.php: admin folder browser to assign free-form tags to files;
         tags stored as {tags, name, tree} in tags/{building}.json; autocomplete
-        from existing tags; accessible from admin.php File Tags card
+        from existing tags; accessible from admin.php as "Manage Tags"
       - dir-display-bridge.gs: new `search` action using Folder.searchFiles()
         for recursive filename matching across both Public and Private trees
       - footer-for-sites.js: openSearch() helper added
+- [x] File manager feature (branch: `feature/search-and-tagging`):
+      - file-manager.php: admin UI to upload (drag & drop, multi-file), delete, rename
+        files and create subfolders in Public and Private Drive folders
+      - Duplicate detection: prompts to replace; on multi-file drop, skips duplicates
+        and uploads the rest if admin declines replacement
+      - Upload progress shown inline ("2 of 5 — Uploading filename… 34%")
+      - dir-display-bridge.gs: added listAdmin (returns folder IDs + currentFolderId),
+        deleteFile, renameFile, createFolder (doGet) and uploadFile (doPost)
+      - admin.php: reordered cards (Manage Users, Manage Files, Manage Tags, Storage
+        Report, User Manual) and renamed File Manager → "Manage Files", File Tags → "Manage Tags"
+      - File size display: ≥ 1 MB shown as MB, smaller shown as KB
 
 ---
 
 ## Next Steps
 
-- **Deploy search feature**: merge `feature/search-and-tagging` → main when tested
-- **Redeploy dir-display-bridge.gs** (new version needed for `search` action to go live)
+- **Merge `feature/search-and-tagging` → main** — search, tagging, and file manager all tested and working
+- **Redeploy dir-display-bridge.gs** (new version needed for all new actions to go live — already done on server)
 - **Wire up Search button** on building sites using `openSearch()`
 - **Create tags/ folder** on server (writable by PHP); .htaccess auto-created by tag-admin.php
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 
 ---
 
-*Snapshot updated: March 12, 2026 (session 2)*
+*Snapshot updated: March 13, 2026 (session 3)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
