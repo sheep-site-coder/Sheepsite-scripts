@@ -95,24 +95,43 @@ Security layers:
 **Location:** Google Apps Script project called "Dir Display Bridge"
 **Deployed at:** `https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec`
 
-Handles all Drive access on behalf of the SheepSite account. Three actions:
+Handles all Drive access on behalf of the SheepSite account.
 
-| Action         | Token required | Description |
-|----------------|---------------|-------------|
-| `list`         | No            | Lists a Public folder — returns folders + files with download URLs |
-| `listPrivate`  | Yes           | Lists a Private folder — returns folders + file IDs (no URLs) |
-| `storageReport` | Yes          | Returns total size + per-subfolder breakdown for a folder (used by storage-report.php) |
-| `download`     | Yes           | Fetches a file by ID — returns base64-encoded bytes for PHP to stream |
+**doGet actions:**
+
+| Action          | Token required | Description |
+|-----------------|---------------|-------------|
+| `list`          | No            | Lists a Public folder — returns folders + files with download URLs |
+| `listPrivate`   | Yes           | Lists a Private folder — returns folders + file IDs (no URLs) |
+| `listAdmin`     | Yes           | Lists a folder returning folder IDs, file IDs + sizes, and `currentFolderId` — used by file-manager.php |
+| `download`      | Yes           | Fetches a file by ID — returns base64-encoded bytes for PHP to stream |
+| `storageReport` | Yes           | Returns total size + per-subfolder breakdown for a folder (used by storage-report.php) |
+| `search`        | Yes           | Searches filenames across both Public and Private trees (AND logic across words) |
+| `deleteFile`    | Yes           | Moves a file to trash |
+| `renameFile`    | Yes           | Renames a file |
+| `createFolder`  | Yes           | Creates a subfolder inside a given parent folder |
+
+**doPost actions:**
+
+| Action        | Token required | Description |
+|---------------|---------------|-------------|
+| `uploadFile`  | Yes (in body) | Creates a file from base64-encoded bytes in a given folder |
 
 **Parameters:**
 
-| Parameter  | Action(s)               | Description |
-|------------|-------------------------|-------------|
-| `action`   | all                     | `list`, `listPrivate`, or `download` |
-| `folderId` | `list`, `listPrivate`   | Google Drive folder ID |
-| `subdir`   | `list`, `listPrivate`   | Subfolder path (e.g. `Forms` or `Forms/2024`) |
-| `fileId`   | `download`              | Google Drive file ID |
-| `token`    | `listPrivate`, `download` | Must match `SECRET_TOKEN` in the script |
+| Parameter        | Action(s)                              | Description |
+|------------------|----------------------------------------|-------------|
+| `action`         | all (doGet)                            | Action name |
+| `folderId`       | `list`, `listPrivate`, `listAdmin`, `storageReport` | Google Drive folder ID |
+| `subdir`         | `list`, `listPrivate`, `listAdmin`     | Subfolder path (e.g. `Forms` or `Forms/2024`) |
+| `fileId`         | `download`, `deleteFile`, `renameFile` | Google Drive file ID |
+| `newName`        | `renameFile`                           | New filename |
+| `parentFolderId` | `createFolder`                         | ID of the folder to create the subfolder in |
+| `name`           | `createFolder`                         | Name of the new subfolder |
+| `publicFolderId` | `search`                               | Root public folder ID |
+| `privateFolderId`| `search`                               | Root private folder ID |
+| `query`          | `search`                               | Search string (space-separated words, AND logic) |
+| `token`          | all privileged actions                 | Must match `SECRET_TOKEN` in the script |
 
 **How to redeploy after code changes:**
 1. Open the Apps Script project
@@ -238,8 +257,10 @@ https://sheepsite.com/Scripts/admin.php
 ```
 The footer script automatically injects the building name into any link pointing to `admin.php`, so no `?building=` param is needed in the menu.
 
-**Links available after login:**
+**Links available after login (in order):**
 - **Manage Users** → `manage-users.php` — import owners, add/remove accounts, reset passwords
+- **Manage Files** → `file-manager.php` — upload, delete, rename files and create subfolders
+- **Manage Tags** → `tag-admin.php` — assign searchable tags to files for the owner search feature
 - **Storage Report** → `storage-report.php` — Drive storage usage breakdown by folder
 - **User Manual** → Google Doc with step-by-step admin instructions (opens in new tab)
 
@@ -265,6 +286,68 @@ Calls `dir-display-bridge.gs` with `action=storageReport` — NOT the building's
 ```
 https://sheepsite.com/Scripts/storage-report.php?building=LyndhurstH
 ```
+
+---
+
+### `file-manager.php` — Admin File Manager
+
+**Location:** `sheepsite.com/Scripts/file-manager.php`
+
+Admin page for managing files in the Public and Private Drive folders without leaving the admin panel. Reuses the `manage_auth_{building}` session — no separate login needed if already logged into the admin page.
+
+**Access:**
+```
+https://sheepsite.com/Scripts/file-manager.php?building=LyndhurstH
+```
+
+**Features:**
+- **Upload** — drag and drop one or more files onto the drop zone, or click Browse. Files upload sequentially with per-file progress ("2 of 5 — Uploading filename… 34%"). Maximum 15 MB per file.
+- **Duplicate detection** — if an uploaded filename already exists, prompts to replace. On multi-file uploads, duplicates can be skipped individually while the rest proceed.
+- **Delete** — removes a file (moves to Drive trash) after confirmation.
+- **Rename** — inline rename with Save/Cancel without leaving the page.
+- **New Folder** — creates a subfolder inside the current folder.
+- **Public / Private tabs** with breadcrumb navigation.
+
+Files are uploaded via PHP (which base64-encodes them and POSTs to Apps Script's `doPost` handler) — the secret token never reaches the browser.
+
+> **Note:** After uploading a replacement document with the same filename, `get-doc-byname.php` embeds will automatically serve the new version — no URL changes needed on the building site.
+
+---
+
+### `tag-admin.php` — File Tag Editor
+
+**Location:** `sheepsite.com/Scripts/tag-admin.php`
+
+Admin page for assigning free-form searchable tags to files in Public and Private folders. Tags are stored in `tags/{building}.json` and used by `search.php` to let owners find documents by topic even when they don't know the exact filename.
+
+**Access:**
+```
+https://sheepsite.com/Scripts/tag-admin.php?building=LyndhurstH
+```
+
+- Browse Public or Private folder tree, click any file to open the tag editor
+- Add tags by typing and pressing Enter or comma; remove tags with the × button
+- Autocomplete suggests tags already used across the building's files
+- Tags are stored as `{ tags, name, tree }` per file ID in `tags/{building}.json`
+- The `tags/` directory and its `.htaccess` (blocks web access) are created automatically on first use
+
+---
+
+### `search.php` — Owner File Search
+
+**Location:** `sheepsite.com/Scripts/search.php`
+
+Owner-facing search page. Requires the same owner login as `display-private-dir.php` — session is shared. Searches filenames across both Public and Private folder trees (via Apps Script `search` action) and cross-references results against the tag index.
+
+**Access (from footer script):**
+```javascript
+openSearch()
+```
+
+**Search logic:**
+- Space-separated words are AND-ed — all words must appear in the filename or tags
+- Results show filename, Public/Private badge, any assigned tags, and a download link
+- Private file downloads are proxied through PHP (Drive URLs never exposed)
 
 ---
 
@@ -336,7 +419,7 @@ After login, displays the report embedded in an iframe. The Apps Script URL is s
 | Parameter  | Required | Description |
 |------------|----------|-------------|
 | `building` | Yes      | Building name — must match a key in `$buildings` array |
-| `page`     | Yes      | `parking`, `elevator`, `board`, or `resident` |
+| `page`     | Yes      | `parking`, `elevator`, or `resident` (`board` is public — use `public-report.php`) |
 | `return`   | No       | URL to link back to — pass `window.location.href` from the button |
 
 **Adding a new building:** add an entry to the `$buildings` array in both `protected-report.php` and `manage-users.php` with the Google Sheets Web App deployment URL. Get this URL from the building's Apps Script project: **Deploy → Manage deployments**.
