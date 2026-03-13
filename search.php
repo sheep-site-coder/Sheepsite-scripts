@@ -341,6 +341,12 @@ $currentUser = $_SESSION[$sessionKey];
     <button type="submit" class="search-btn">Search</button>
   </form>
 
+  <p style="font-size:0.9rem;color:#555;margin-bottom:1.25rem;">
+    Search for documents by file name or keyword. Results include both public documents
+    and private resident-only accessible files. Files may be previewed or downloaded
+    directly from this page.
+  </p>
+
   <div id="results"><p class="hint">Enter a search term above.</p></div>
 
   <script>

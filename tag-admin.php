@@ -215,6 +215,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
   <a href="admin.php?building=<?= urlencode($building) ?>" class="back">← Admin</a>
 </div>
 
+<p style="font-size:0.9rem;color:#555;margin-bottom:1.25rem;">
+  Assign searchable tags to files in the Public and Private folders. Tags allow residents
+  to find documents by topic or keyword, even when they do not know the exact file name.
+  Browse to a file, click the edit icon to open the tag editor, enter one or more tags,
+  and click Save.
+</p>
+
 <div class="tabs">
   <button class="tab active" id="tab-public"   onclick="switchTree('public')">Public</button>
   <button class="tab"        id="tab-private"  onclick="switchTree('private')">Private</button>
