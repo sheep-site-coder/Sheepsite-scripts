@@ -184,6 +184,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 
+  // ---- Migrate tags (old file ID → new file ID after replace) ----
+  if ($action === 'migrateTags') {
+    $oldFileId = trim($_POST['oldFileId'] ?? '');
+    $newFileId = trim($_POST['newFileId'] ?? '');
+    if (!$oldFileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $oldFileId)) {
+      echo json_encode(['ok' => false, 'error' => 'Invalid old file ID']);
+      exit;
+    }
+    if (!$newFileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $newFileId)) {
+      echo json_encode(['ok' => false, 'error' => 'Invalid new file ID']);
+      exit;
+    }
+    $tagsFile = __DIR__ . '/tags/' . $building . '.json';
+    if (!file_exists($tagsFile)) {
+      echo json_encode(['ok' => true, 'migrated' => false]);
+      exit;
+    }
+    $tags = json_decode(file_get_contents($tagsFile), true) ?: [];
+    if (isset($tags[$oldFileId])) {
+      $tags[$newFileId] = $tags[$oldFileId];
+      unset($tags[$oldFileId]);
+      file_put_contents($tagsFile, json_encode($tags, JSON_PRETTY_PRINT));
+      echo json_encode(['ok' => true, 'migrated' => true]);
+    } else {
+      echo json_encode(['ok' => true, 'migrated' => false]);
+    }
+    exit;
+  }
+
   // ---- Create Folder ----
   if ($action === 'createFolder') {
     $parentFolderId = trim($_POST['parentFolderId'] ?? '');
@@ -693,9 +722,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try { result = JSON.parse(xhr.responseText); } catch (err) { result = {}; }
 
         if (result.ok) {
+          var newFileId = result.id;
           var next = function () { index++; uploadNext(); };
           if (existing) {
-            post({ action: 'delete', fileId: existing.id }).catch(function () {}).then(next);
+            // Migrate tags from old file ID to new file ID, then delete old file
+            post({ action: 'migrateTags', oldFileId: existing.id, newFileId: newFileId })
+              .catch(function () {})
+              .then(function () {
+                return post({ action: 'delete', fileId: existing.id }).catch(function () {});
+              })
+              .then(next);
           } else {
             next();
           }
