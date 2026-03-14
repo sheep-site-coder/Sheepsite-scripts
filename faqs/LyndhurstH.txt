@@ -1,0 +1,22 @@
+# Lyndhurst H — Building-Specific FAQ
+
+## [TEMPLATE — replace with actual building info]
+
+## How do I access the private document portal?
+Visit the Residents section of this website and click "Private Files". You'll need your
+username and password. Contact the board if you need your login credentials.
+
+## Who do I contact for maintenance issues?
+[Add property manager name and contact info here]
+
+## What are the amenity hours?
+[Add pool, gym, clubhouse hours here]
+
+## Where is visitor parking?
+[Add parking details here]
+
+## What is the pet policy?
+[Add pet rules here — number, weight limit, registration requirements, etc.]
+
+## What is the move-in/move-out procedure?
+[Add elevator reservation requirements, deposit, scheduling process here]
