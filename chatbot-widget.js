@@ -175,50 +175,33 @@
         justify-content: center;
       }
 
-      /* Full-screen iframe overlay for resident chat */
-      #ss-chat-overlay {
-        display: none;
+      #ss-chat-bubble {
         position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,.5);
-        z-index: 10000;
-        align-items: center;
-        justify-content: center;
-      }
-      #ss-chat-overlay.open { display: flex; }
-      #ss-chat-overlay-box {
+        bottom: 28px;
+        right: 82px;
         background: #fff;
-        border-radius: 12px;
-        overflow: hidden;
-        width: min(420px, 95vw);
-        height: min(600px, 90vh);
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 8px 40px rgba(0,0,0,.35);
-      }
-      #ss-chat-overlay-header {
-        background: #2c5f8a;
-        color: #fff;
-        padding: 10px 14px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+        color: #2c5f8a;
         font-family: sans-serif;
+        font-size: 13px;
         font-weight: bold;
-        font-size: 14px;
-      }
-      #ss-chat-overlay-close {
-        background: none;
-        border: none;
-        color: #fff;
-        font-size: 18px;
+        padding: 6px 10px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.2);
+        z-index: 9998;
+        white-space: nowrap;
         cursor: pointer;
       }
-      #ss-chat-overlay iframe {
-        flex: 1;
-        border: none;
-        width: 100%;
+      #ss-chat-bubble::after {
+        content: '';
+        position: absolute;
+        right: -7px;
+        top: 50%;
+        transform: translateY(-50%);
+        border-width: 6px 0 6px 8px;
+        border-style: solid;
+        border-color: transparent transparent transparent #fff;
       }
+
     `;
     document.head.appendChild(style);
   }
@@ -233,7 +216,7 @@
     widget.id = WIDGET_ID;
     widget.innerHTML = `
       <div id="ss-chat-header">
-        <span>Community Assistant</span>
+        <span>Woolsy</span>
         <button id="ss-chat-close" aria-label="Close">✕</button>
       </div>
       <div id="ss-chat-messages"></div>
@@ -244,41 +227,29 @@
     `;
     document.body.appendChild(widget);
 
-    // Floating button
+    // Floating button + speech bubble
     if (!document.getElementById('ss-chat-fab')) {
       const fab = document.createElement('button');
       fab.id = 'ss-chat-fab';
-      fab.innerHTML = '💬';
-      fab.title = 'Community Assistant';
+      fab.innerHTML = '🐑';
+      fab.title = 'Woolsy';
       fab.onclick = openChatbot;
       document.body.appendChild(fab);
+
+      const bubble = document.createElement('div');
+      bubble.id = 'ss-chat-bubble';
+      bubble.textContent = 'Ask Woolsy!';
+      bubble.onclick = openChatbot;
+      document.body.appendChild(bubble);
     }
 
-    // Resident chat overlay
-    const overlay = document.createElement('div');
-    overlay.id = 'ss-chat-overlay';
-    overlay.innerHTML = `
-      <div id="ss-chat-overlay-box">
-        <div id="ss-chat-overlay-header">
-          <span>Resident Assistant</span>
-          <button id="ss-chat-overlay-close" aria-label="Close">✕</button>
-        </div>
-        <iframe id="ss-chat-frame" title="Resident Chat"></iframe>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    document.getElementById('ss-chat-close').onclick         = closeChatbot;
-    document.getElementById('ss-chat-overlay-close').onclick = closeOverlay;
-    document.getElementById('ss-chat-send').onclick          = handleSend;
+    document.getElementById('ss-chat-close').onclick = closeChatbot;
+    document.getElementById('ss-chat-send').onclick  = handleSend;
     document.getElementById('ss-chat-input').addEventListener('keydown', e => {
       if (e.key === 'Enter') handleSend();
     });
-    overlay.addEventListener('click', e => {
-      if (e.target === overlay) closeOverlay();
-    });
 
-    addMessage('bot', 'Hi! I can help answer questions about your community. What would you like to know?');
+    addMessage('bot', 'Hi! I\'m Woolsy, your community assistant. What would you like to know?');
   }
 
   function addMessage(role, html) {
@@ -331,17 +302,8 @@
   };
 
   function openResidentChat(url) {
-    const overlay = document.getElementById('ss-chat-overlay');
-    const frame   = document.getElementById('ss-chat-frame');
-    if (!overlay || !frame) return;
-    frame.src = url;
-    overlay.classList.add('open');
     closeChatbot();
-  }
-
-  function closeOverlay() {
-    const overlay = document.getElementById('ss-chat-overlay');
-    if (overlay) overlay.classList.remove('open');
+    window.open(url, 'woolsy-chat', 'width=440,height=620,resizable=yes');
   }
 
   // --- Public API ---
@@ -350,6 +312,8 @@
     document.getElementById(WIDGET_ID).style.display = 'flex';
     const fab = document.getElementById('ss-chat-fab');
     if (fab) fab.style.display = 'none';
+    const bubble = document.getElementById('ss-chat-bubble');
+    if (bubble) bubble.style.display = 'none';
     document.getElementById('ss-chat-input').focus();
   };
 
@@ -358,6 +322,15 @@
     if (w) w.style.display = 'none';
     const fab = document.getElementById('ss-chat-fab');
     if (fab) fab.style.display = 'flex';
+    const bubble = document.getElementById('ss-chat-bubble');
+    if (bubble) bubble.style.display = 'block';
   }
+
+  // Auto-init: show the floating sheep button on page load
+  window.addEventListener('load', function () {
+    createPublicWidget();
+    const fab = document.getElementById('ss-chat-fab');
+    if (fab) fab.style.display = 'flex';
+  });
 
 })();

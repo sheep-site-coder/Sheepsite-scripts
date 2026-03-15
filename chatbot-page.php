@@ -37,6 +37,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
     $loginError = 'Incorrect username or password.';
 }
 
+if (isset($_GET['logout'])) {
+    unset($_SESSION[$sessionKey]);
+    header('Location: ?building=' . urlencode($building));
+    exit;
+}
+
 $loggedIn = !empty($_SESSION[$sessionKey]);
 $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 ?>
@@ -45,7 +51,7 @@ $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Resident Assistant — <?= htmlspecialchars($buildLabel) ?></title>
+<title>Woolsy — <?= htmlspecialchars($buildLabel) ?></title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -192,7 +198,7 @@ $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 
 <div id="chat-header">
   <div>
-    <strong>Resident Assistant</strong><br>
+    <strong>Woolsy</strong><br>
     <span><?= htmlspecialchars($buildLabel) ?></span>
   </div>
   <?php if ($loggedIn): ?>
@@ -209,7 +215,7 @@ $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 <div id="login-wrap">
   <div id="login-box">
     <h2>Resident Login</h2>
-    <p>Log in with your resident account to chat with the community assistant.</p>
+    <p>Log in with your resident account to chat with Woolsy.</p>
     <?php if ($loginError): ?>
       <div class="login-error"><?= htmlspecialchars($loginError) ?></div>
     <?php endif ?>
@@ -289,7 +295,7 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 });
 
 // Greeting
-addMessage('bot', 'Hi <?= htmlspecialchars(ucfirst($username)) ?>! Ask me anything about <?= htmlspecialchars($buildLabel) ?> — rules, procedures, documents, amenities. I\'m here to help.');
+addMessage('bot', 'Hi <?= htmlspecialchars(ucfirst($username)) ?>! I\'m Woolsy, your community assistant. Ask me anything about <?= htmlspecialchars($buildLabel) ?> — rules, procedures, documents, amenities.');
 document.getElementById('chat-input').focus();
 </script>
 

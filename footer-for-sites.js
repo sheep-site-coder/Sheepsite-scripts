@@ -20,6 +20,7 @@
 
 <script>
 const BUILDING_NAME = 'QGscratch';
+window.BUILDING_NAME = BUILDING_NAME;  // expose for external scripts (e.g. chatbot-widget.js)
 
 document.addEventListener('DOMContentLoaded', function () {
   const PUBLIC_URL  = 'https://sheepsite.com/Scripts/display-public-dir.php';
