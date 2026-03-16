@@ -5,10 +5,11 @@
 // Returns:   {"answer": "..."}
 //
 // Context layers loaded (if files exist):
-//   faqs/_global.txt           — universal condo/HOA concepts
-//   faqs/states/{STATE}.txt    — state-specific law (e.g. FL.txt)
-//   faqs/{building}.txt        — building-specific FAQ
-//   faqs/{building}_rules.md   — distilled governing docs (from setup phase)
+//   faqs/_global.txt                  — universal condo/HOA concepts
+//   faqs/states/{STATE}.txt           — state-specific law (e.g. FL.txt)
+//   faqs/communities/{COMMUNITY}.txt  — master community rules (e.g. CVE.txt)
+//   faqs/{building}.txt               — building-specific FAQ
+//   faqs/{building}_rules.md          — distilled governing docs (from setup phase)
 
 header('Content-Type: application/json');
 
@@ -26,7 +27,8 @@ if (!$question || !isset($buildings[$building])) {
 
 // --- Assemble FAQ context ---
 
-$state = $buildings[$building]['state'] ?? 'FL';
+$state     = $buildings[$building]['state']     ?? 'FL';
+$community = $buildings[$building]['community'] ?? '';
 
 function loadFaq(string $path): string {
     return file_exists($path) ? "\n\n" . trim(file_get_contents($path)) : '';
@@ -34,6 +36,9 @@ function loadFaq(string $path): string {
 
 $context  = loadFaq(__DIR__ . '/faqs/_global.txt');
 $context .= loadFaq(__DIR__ . "/faqs/states/{$state}.txt");
+if ($community) {
+    $context .= loadFaq(__DIR__ . "/faqs/communities/{$community}.txt");
+}
 $context .= loadFaq(__DIR__ . "/faqs/{$building}.txt");
 $context .= loadFaq(__DIR__ . "/faqs/{$building}_rules.md");
 
