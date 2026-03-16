@@ -3,3 +3,6 @@ credentials/*.json
 
 # Chatbot: distilled governing docs (building-specific, generated during setup)
 faqs/*_rules.md
+
+# Local working files — PDFs, screenshots, etc.
+Sharefolder/

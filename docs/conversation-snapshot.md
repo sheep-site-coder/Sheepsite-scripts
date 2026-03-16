@@ -160,11 +160,30 @@ PHP renders file browser in iframe on building website
       - faqs/ folder structure: _global.txt (written), states/FL.txt (written),
         {building}.txt templates, {building}_rules.md (gitignored, generated during setup phase)
       - FAQ context layers: _global.txt → states/{STATE}.txt → {building}.txt → {building}_rules.md
+- [x] LyndhurstH governing docs extracted → faqs/LyndhurstH_rules.md:
+      - Source documents: Articles of Incorporation, Bylaws, Declaration of Condominium (all 2021
+        Amended and Restated versions); text-based PDFs stored in Sharefolder/
+      - Full extraction covering: age/ownership rules, pets, guests, rentals, parking, smoking,
+        alterations, floor coverings, maintenance split, assessments, insurance, fines, board structure,
+        common element rules, washing machines, EV charging, and more
+      - Key nuances captured: ownership vs. residency age rules are separate; 55+ rule is per unit
+        not per person; spouse of 55+ owner may reside regardless of own age; adult child of
+        part-year owner faces 14-day guest cap when owner absent + unresolved compliance question
+        if seeking approved resident status; both scenarios include full supporting reasoning
+      - File is gitignored (faqs/*_rules.md) — must be uploaded to server manually at
+        Scripts/faqs/LyndhurstH_rules.md; faqs/ folder does not yet exist on server
 
 ---
 
 ## Next Steps
 
+- **Create faqs/ folder on server** at Scripts/faqs/ (and subfolder states/); upload:
+  - faqs/_global.txt, faqs/states/FL.txt, faqs/LyndhurstH.txt, faqs/SampleSite.txt
+  - faqs/LyndhurstH_rules.md (gitignored — copy from local)
+- **Fill in building FAQs** — faqs/LyndhurstH.txt is a template, needs real content
+  (office hours, management contact, pool/amenity info, etc.)
+- **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` +
+  chatbot-widget.js script tag to their footers
 - **Upload file-manager.php** to server — tag-on-replace fix requires this updated file
 - **Merge `feature/search-and-tagging` → main** — search, tagging, and file manager all tested and working
 - **Redeploy dir-display-bridge.gs** (new version needed for all new actions to go live — already done on server)
@@ -172,13 +191,9 @@ PHP renders file browser in iframe on building website
 - **Create tags/ folder** on server (writable by PHP); .htaccess auto-created by tag-admin.php
 - Upload docs/ folder files to Sharefolder / distribute as needed
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
-- **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` + chatbot-widget.js script tag to their footers
-- **Fill in building FAQs** — faqs/LyndhurstH.txt is a template, needs real content
-- **Build governing doc extraction** — user has condo PDFs for LyndhurstH; need to read and write {building}_rules.md
-  - PDF is scanned (no embedded text); user will provide text-based versions or separate doc files
-  - Extract: rules, owner rights/responsibilities, rental policy, visitor rules, application/approval process, board powers, etc.
+- **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
 
 ---
 
-*Snapshot updated: March 15, 2026 (session 6)*
+*Snapshot updated: March 15, 2026 (session 7)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
