@@ -1,7 +1,25 @@
 # Century Village East (CVE) — Community Rules
 # Deerfield Beach, Florida
-# Sources: CVE Master Management Co., Inc. (centuryvillageeast.com) and
-#          CenClub Recreation Management, Inc. (cenclub.com)
+#
+# SOURCES (for future refresh — last researched March 2026):
+#
+# CVE Master Management Co., Inc.:
+#   - Website: centuryvillageeast.com
+#   - Water/irrigation rules: centuryvillageeast.com (community rules page) + SFWMD/Broward County
+#     watering restrictions sourced from sfwmd.gov and broward.org
+#   - Car washing prohibition: CVE community rules via centuryvillageeast.com
+#   - Phone/address confirmed via centuryvillageeast.com contact page
+#
+# CenClub Recreation Management, Inc.:
+#   - Website: cenclub.com
+#   - Member portal: flcvrfdeerfieldweb.myvscloud.com/webtrac
+#   - Facility rules, hours, guest policy, dress code: cenclub.com (Rules & Regulations section)
+#   - Pet policy (no animals incl. ESAs, service animals only per FL §413.08): cenclub.com rules
+#   - Monthly fee ($110/month as of 2025): cenclub.com
+#   - Contact directory (phone extensions, emails): cenclub.com contact page
+#
+# To refresh: visit the above URLs and check for updated rules, fee changes, or hours changes.
+# Also check SFWMD (sfwmd.gov) for any active water shortage orders in Broward County.
 #
 # IMPORTANT: CVE has THREE separate governing entities. Rules from each are
 # distinct and independent. When answering questions, be clear about which
