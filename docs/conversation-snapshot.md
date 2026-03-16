@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 14, 2026 (updated)
+**Date:** March 15, 2026 (updated)
 
 ---
 
@@ -159,7 +159,18 @@ PHP renders file browser in iframe on building website
         scripts to access building name (const doesn't go on window, var does)
       - faqs/ folder structure: _global.txt (written), states/FL.txt (written),
         {building}.txt templates, {building}_rules.md (gitignored, generated during setup phase)
-      - FAQ context layers: _global.txt → states/{STATE}.txt → {building}.txt → {building}_rules.md
+      - FAQ context layers: _global.txt → states/{STATE}.txt → communities/{COMMUNITY}.txt → {building}.txt → {building}_rules.md
+- [x] CVE community FAQ layer — `faqs/communities/CVE.txt` (new):
+      - Covers all three governing entities at CVE (building association, CVE Master Management, CenClub)
+      - CVE Master Management rules: city water prohibition, mobile car wash ban, SFWMD/Broward County
+        watering schedule (hours, banned days, address-based schedule, hand-watering exemption)
+      - CenClub Recreation Management rules: full facility list + hours, ID card requirement, general
+        conduct, pet policy (NO animals incl. ESAs — service animals only per FL §413.08), children/minors
+        restrictions, dress code, guest rules (2 max, no guests in classes, fitness after 1pm, 30-day pass),
+        fitness center rules, sauna rules, full contact directory
+      - chatbot.php updated: loads community layer between state and building layers
+      - buildings.php updated: added `community => 'CVE'` to SampleSite, LyndhurstH, LyndhurstI
+      - Source attribution added: specific URLs and refresh instructions for future updates
 - [x] LyndhurstH governing docs extracted → faqs/LyndhurstH_rules.md:
       - Source documents: Articles of Incorporation, Bylaws, Declaration of Condominium (all 2021
         Amended and Restated versions); text-based PDFs stored in Sharefolder/
@@ -177,8 +188,9 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
-- **Create faqs/ folder on server** at Scripts/faqs/ (and subfolder states/); upload:
-  - faqs/_global.txt, faqs/states/FL.txt, faqs/LyndhurstH.txt, faqs/SampleSite.txt
+- **Create faqs/ folder on server** at Scripts/faqs/ (and subfolders states/, communities/); upload:
+  - faqs/_global.txt, faqs/states/FL.txt, faqs/communities/CVE.txt
+  - faqs/LyndhurstH.txt, faqs/SampleSite.txt
   - faqs/LyndhurstH_rules.md (gitignored — copy from local)
 - **Fill in building FAQs** — faqs/LyndhurstH.txt is a template, needs real content
   (office hours, management contact, pool/amenity info, etc.)
@@ -195,5 +207,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot updated: March 15, 2026 (session 7)*
+*Snapshot updated: March 15, 2026 (session 8)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
