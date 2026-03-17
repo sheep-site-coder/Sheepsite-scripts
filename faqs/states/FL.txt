@@ -54,6 +54,14 @@ Yes. Unit owners may **audio record or videotape** any board or membership meeti
 cannot be taken away. The Division may adopt rules about where recording equipment may be placed,
 but cannot prohibit recording altogether.
 
+## Is the association required to record board meetings?
+**No** — Florida Statute 718 does not require the association to make an audio or video recording
+of board meetings. What IS required is that **written minutes** be taken and kept for every board
+and membership meeting. Minutes must be retained for a minimum of **7 years** and made available
+on the association's password-protected website. Owners may also request copies within 10 working
+days. The right to make your own recording belongs to you as an owner — the association just isn't
+obligated to do it for you.
+
 ## Can I get an item added to the board meeting agenda?
 Yes. If **20% of all voting interests** sign a petition requesting that a specific item be addressed,
 the board must place it on the agenda at its **next regular board meeting within 60 days** of
@@ -147,6 +155,7 @@ condo elections **first-degree misdemeanors**. [HB 1021, 2024]
 The association must maintain official records including:
 - Declaration, Bylaws, and Articles of Incorporation (permanently)
 - Rules and regulations
+- **Minutes of all board and membership meetings** (7 years)
 - Minutes of all board and membership meetings
 - Current roster of all unit owners (with mailing addresses and email, if provided)
 - Insurance policies
