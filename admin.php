@@ -13,6 +13,16 @@ session_start();
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 define('USER_MANUAL_URL', 'https://docs.google.com/document/d/1bomDarmk1_RbPJ0x_NphQ1-m-t9OKZwzNZrm1ztEhQM/edit?tab=t.td3lj68pttu5#heading=h.vwhtrlhtc5t2');
+define('CREDITS_FILE', __DIR__ . '/faqs/woolsy_credits.json');
+define('CREDITS_DEFAULT_ALLOCATED', 1.0);
+
+function getWoolsyCredits(string $building): array {
+    if (!file_exists(CREDITS_FILE)) {
+        return ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
+    }
+    $all = json_decode(file_get_contents(CREDITS_FILE), true) ?? [];
+    return $all[$building] ?? ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
+}
 
 // -------------------------------------------------------
 // Validate building
@@ -193,6 +203,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     .message    { padding: 0.6rem 0.9rem; border-radius: 4px; margin-bottom: 1.5rem; font-size: 0.9rem; }
     .message.ok    { background: #e6f4ea; color: #1a7f37; }
     .message.error { background: #ffeef0; color: #c00; }
+    .woolsy-card    { padding: 1.25rem; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1rem; }
+    .woolsy-header  { display: flex; align-items: flex-start; gap: 1.25rem; }
+    .woolsy-icon    { font-size: 1.8rem; line-height: 1; flex-shrink: 0; }
+    .woolsy-title   { font-size: 1rem; font-weight: bold; margin-bottom: 0.3rem; color: #0070f3; }
+    .woolsy-desc    { font-size: 0.875rem; color: #555; line-height: 1.45; }
+    .woolsy-status  { margin-top: 0.75rem; font-size: 0.85rem; color: #555; }
+    .woolsy-status .ok   { color: #1a7f37; font-weight: bold; }
+    .woolsy-status .warn { color: #b45309; font-weight: bold; }
+    .credit-bar     { margin-top: 0.5rem; background: #eee; border-radius: 4px; height: 6px; }
+    .credit-fill    { height: 6px; border-radius: 4px; background: #0070f3; }
+    .credit-fill.warn { background: #f59e0b; }
+    .credit-fill.danger { background: #dc2626; }
+    .low-credit-warn { margin-top: 0.6rem; padding: 0.4rem 0.7rem; background: #fffbeb;
+                       border: 1px solid #f59e0b; border-radius: 4px; font-size: 0.82rem; color: #92400e; }
   </style>
 </head>
 <body>
@@ -263,6 +287,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
       </div>
     </div>
   </a>
+
+  <?php
+    $wc        = getWoolsyCredits($building);
+    $wAlloc    = (float)($wc['allocated'] ?? CREDITS_DEFAULT_ALLOCATED);
+    $wUsed     = (float)($wc['used']      ?? 0);
+    $wRemain   = max(0, $wAlloc - $wUsed);
+    $wPct      = $wAlloc > 0 ? min(100, round($wUsed / $wAlloc * 100)) : 100;
+    $wLow      = $wPct >= 80;
+    $wBarClass = $wPct >= 100 ? 'danger' : ($wPct >= 80 ? 'warn' : '');
+  ?>
+  <div class="woolsy-card">
+    <div class="woolsy-header">
+      <div class="woolsy-icon">🐑</div>
+      <div>
+        <div class="woolsy-title">Woolsy Knowledge Base</div>
+        <div class="woolsy-desc">
+          AI-powered assistant for residents. Answers questions about building rules,
+          Florida condo law, and community policies.
+        </div>
+        <div class="woolsy-status">
+          Credits used: <strong><?= number_format($wUsed, 4) ?></strong>
+          of <strong><?= number_format($wAlloc, 2) ?></strong>
+          &nbsp;(<?= number_format($wRemain, 4) ?> remaining)
+          <div class="credit-bar">
+            <div class="credit-fill <?= $wBarClass ?>" style="width:<?= $wPct ?>%"></div>
+          </div>
+          <?php if ($wLow && $wPct < 100): ?>
+            <div class="low-credit-warn">
+              ⚠️ Running low on credits. Contact SheepSite to add more.
+            </div>
+          <?php elseif ($wPct >= 100): ?>
+            <div class="low-credit-warn" style="background:#fef2f2;border-color:#dc2626;color:#7f1d1d;">
+              ⛔ Credits exhausted — Woolsy is currently unavailable to residents.
+              Contact SheepSite to top up.
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <hr>
 <?php endif; ?>

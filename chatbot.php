@@ -15,6 +15,31 @@ header('Content-Type: application/json');
 
 $buildings = require __DIR__ . '/buildings.php';
 
+// --- Credit system ---
+
+define('CREDITS_FILE', __DIR__ . '/faqs/woolsy_credits.json');
+define('CREDITS_DEFAULT_ALLOCATED', 1.0);
+
+function loadCredits(): array {
+    if (!file_exists(CREDITS_FILE)) return [];
+    return json_decode(file_get_contents(CREDITS_FILE), true) ?? [];
+}
+
+function saveCredits(array $credits): void {
+    file_put_contents(CREDITS_FILE, json_encode($credits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
+function deductCost(string $building, int $inputTokens, int $outputTokens): void {
+    // Haiku pricing: $0.80/MTok input, $4.00/MTok output → 1 credit = $1
+    $cost = ($inputTokens * 0.0000008) + ($outputTokens * 0.000004);
+    $credits = loadCredits();
+    if (!isset($credits[$building])) {
+        $credits[$building] = ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
+    }
+    $credits[$building]['used'] = round(($credits[$building]['used'] ?? 0) + $cost, 6);
+    saveCredits($credits);
+}
+
 $body     = json_decode(file_get_contents('php://input'), true);
 $building = $body['building'] ?? '';
 $question = trim($body['question'] ?? '');
@@ -22,6 +47,17 @@ $history  = $body['history'] ?? [];
 
 if (!$question || !isset($buildings[$building])) {
     echo json_encode(['error' => 'Invalid request']);
+    exit;
+}
+
+// --- Credit check ---
+$credits        = loadCredits();
+$buildingCredit = $credits[$building] ?? ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
+$allocated      = (float)($buildingCredit['allocated'] ?? CREDITS_DEFAULT_ALLOCATED);
+$used           = (float)($buildingCredit['used']      ?? 0);
+
+if ($used >= $allocated) {
+    echo json_encode(['error' => 'Woolsy is temporarily unavailable. Please contact your building administrator.']);
     exit;
 }
 
@@ -131,6 +167,11 @@ foreach ($data['content'] ?? [] as $block) {
 if (!$answer) {
     echo json_encode(['error' => 'No response from assistant']);
     exit;
+}
+
+// Deduct credit cost using token counts from API response
+if (isset($data['usage']['input_tokens'], $data['usage']['output_tokens'])) {
+    deductCost($building, (int)$data['usage']['input_tokens'], (int)$data['usage']['output_tokens']);
 }
 
 echo json_encode(['answer' => $answer]);
