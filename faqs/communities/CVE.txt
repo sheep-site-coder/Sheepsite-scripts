@@ -59,6 +59,56 @@ authority over residents directly.
 
 ---
 
+## BUILDING TYPES AT CVE
+
+Century Village East has two types of residential buildings:
+
+- **4-story buildings** — equipped with internal elevators. Elevator access is built
+  into the structure of these buildings.
+- **2-story "Garden" buildings** — originally built without elevators. Some Garden
+  buildings have had an exterior elevator added over the years to serve residents.
+
+Questions about elevators in Garden buildings (access, maintenance, removal) apply
+only to 2-story buildings. 4-story buildings are not affected.
+
+---
+
+## Can the association remove an exterior elevator from a Garden building?
+
+This is a complex question with no simple yes/no answer. Several legal frameworks apply:
+
+**1. Material alteration of common elements (Florida Statute 718.113)**
+An exterior elevator that has been in service is part of the common elements.
+Removing it would almost certainly qualify as a "material alteration," requiring
+approval by **75% of all unit owners** (unless the Declaration specifies a different
+threshold). The board cannot make this decision unilaterally.
+
+**2. Fair Housing Act (Federal) — the most significant concern**
+The FHA requires associations to provide reasonable accommodations for residents
+with disabilities. If any current resident relies on the elevator to access their
+unit — or if removal would make upper-floor units inaccessible to disabled persons —
+the association could face a federal Fair Housing complaint. This applies regardless
+of how or why the elevator was originally installed. This risk alone makes removal
+very difficult to justify in practice.
+
+**3. How the elevator was originally added matters**
+If it was installed as a formal reasonable accommodation for a specific resident, the
+association may have ongoing legal obligations tied to that agreement. If added as a
+general capital improvement, it is now a common element subject to the 75% vote rule.
+
+**4. Building permits**
+Removal would require permits from Broward County. Local building officials may have
+their own requirements, particularly if upper-floor units would have no other accessible
+means of access.
+
+**Bottom line:** Removal is theoretically possible but practically very difficult —
+it requires a supermajority owner vote, carries Fair Housing exposure if any disabled
+resident relies on it, and requires building permits. Any board considering this should
+consult a Florida-licensed community association attorney and a Fair Housing attorney
+before proceeding.
+
+---
+
 ## CVE MASTER MANAGEMENT — COMMUNITY RULES
 
 ### Water Use
