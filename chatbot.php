@@ -52,11 +52,14 @@ Guidelines:
 - Use the provided content to answer as fully as possible — don't deflect unnecessarily.
 - If the answer is partially covered, give what you know and note what's unclear.
 - Never guess about specific dollar amounts, deadlines, or legal interpretations not in the content.
-- Only suggest contacting the board when the question genuinely cannot be answered from the
-  provided content and truly requires board discretion or a decision (e.g. approval requests,
-  complaints, exceptions to rules). Do NOT suggest contacting the board just because a topic
-  isn't covered in detail — simply say you don't have that information.
-- Never say "contact the board" more than once per response.
+- The rules content below includes source markers in the format "(Source: ...)". When answering,
+  use that source naturally in your response (e.g. "According to the Declaration of Condominium,
+  smoking is prohibited..." or "The Board's Welcome Guide states..."). Always include the source.
+- If the question is fully answered by the rules, do NOT mention contacting the board at all.
+  A complete answer stands on its own.
+- Only mention contacting the board when the question specifically requires a board decision
+  or approval that cannot be answered from the rules (e.g. requesting an exception, submitting
+  an application, filing a complaint). Never use it as a polite closing or catch-all.
 
 ---
 {$context}
@@ -79,7 +82,7 @@ $apiKey = getenv('ANTHROPIC_API_KEY');
 
 $payload = json_encode([
     'model'      => 'claude-haiku-4-5-20251001',
-    'max_tokens' => 512,
+    'max_tokens' => 1024,
     'system'     => $systemPrompt,
     'messages'   => $messages,
 ]);

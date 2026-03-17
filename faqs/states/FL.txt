@@ -1,46 +1,348 @@
-# Florida Condominium Law — Owner FAQ
+# Florida Condominium Law — Resident FAQ
+# Source: Florida Statute Chapter 718 (Condominium Act)
+# Last updated: March 2026 — reflects amendments through 2024 legislative session (HB 1021)
+# Note: Florida condo law has been amended every session since 2022. Verify critical details
+# with a Florida-licensed community association attorney for specific legal situations.
+
+---
 
 ## What law governs Florida condominiums?
 Florida Statute Chapter 718 (the "Condominium Act") governs all condominiums in Florida.
-The association must operate in compliance with both Chapter 718 and its own governing documents.
+The association must operate in compliance with both Chapter 718 and its own governing documents
+(Declaration, Bylaws, Articles of Incorporation, and Rules). Where they conflict, Florida law prevails.
 
-## What documents must be posted on the association website?
-Under Florida Statute 718.111(12), associations with 25 or more units must maintain a website
-with the following documents:
-- Declaration of Condominium and all amendments
-- Bylaws and all amendments
-- Rules and Regulations
-- Current year budget and most recent annual financial report
-- Frequently asked questions (FAQ) sheet
-- All board meeting agendas and minutes (for the past 7 years)
-- All financial reports and budgets (for the past 7 years)
-- Names and contact info for all board members and association representatives
+---
 
-## Can I inspect association records?
-Yes. Florida Statute 718.111(12) gives owners the right to inspect and copy official records
-of the association. A request must be honored within 10 business days. Certain records
-(like attorney-client communications) may be exempt.
+## BOARD MEETINGS
 
-## How much notice is required for board meetings?
-At least 48 hours posted notice is required for board meetings. Annual meetings require
-14 days' written notice mailed or delivered to each owner.
+## How often must the board meet?
+Associations with more than 10 units must hold board meetings at least **quarterly** (4 times per year).
+[s. 718.112(2)(c)]
+
+## How much notice is required for a board meeting?
+**Regular board meetings:** Notice must be posted conspicuously on the condominium property at least
+**48 continuous hours** before the meeting. The notice must list all agenda items.
+
+**Meetings involving special assessments or rule changes affecting unit use:** These require a separate
+notice of at least **14 days**, either mailed or posted conspicuously on the property, in addition to
+the standard 48-hour posting.
+
+## Where must board meetings be held?
+**Annual and membership meetings** must be held within **45 miles of the condominium property**,
+unless the bylaws specify a different location. Regular board meetings have no specific location
+requirement by statute.
+
+## Can board members participate by phone or video?
+Yes. Board members may participate via **telephone, real-time videoconferencing, or similar
+real-time electronic communication**. Remote participation counts toward quorum. However,
+the physical meeting location must remain accessible to unit owners who wish to attend.
+
+## Are board meetings open to residents?
+Yes — board meetings are **open to all unit owners**. The only permitted closed-session topics are:
+- Meetings with the association's attorney regarding **pending or proposed litigation**
+- Discussion of **personnel matters**
+
+For all other topics, owners have the right to attend.
+
+## Can I speak at a board meeting?
+Yes. Unit owners have a **statutory right to speak on all designated agenda items** before the board
+votes on them. The board may impose reasonable rules (e.g., a 3-minute time limit per speaker) but
+cannot eliminate the right to speak entirely.
+
+## Can I record a board meeting?
+Yes. Unit owners may **audio record or videotape** any board or membership meeting. This right
+cannot be taken away. The Division may adopt rules about where recording equipment may be placed,
+but cannot prohibit recording altogether.
+
+## Can I get an item added to the board meeting agenda?
+Yes. If **20% of all voting interests** sign a petition requesting that a specific item be addressed,
+the board must place it on the agenda at its **next regular board meeting within 60 days** of
+receiving the petition.
+
+---
+
+## ANNUAL MEETINGS AND ELECTIONS
+
+## How much notice is required for the annual meeting?
+At least **14 days** written notice, including the full agenda, must be mailed, hand-delivered,
+or electronically transmitted to each unit owner. The notice must also be posted conspicuously
+on the property at the same time.
+
+## How are board elections conducted?
+- Elections are conducted by **secret ballot**
+- At least **20% of eligible voters must cast a ballot** for a valid election; if this threshold
+  is not met, candidates run unopposed and are deemed elected without a vote
+- **General proxies may not be used** for board elections; limited proxies are allowed for
+  other membership votes
+- Any eligible unit owner may run for the board; association employees are not eligible
+- A person convicted of a felony is ineligible to serve unless civil rights were restored
+  at least 5 years prior
+
+## Is there a term limit for board members?
+Yes. Since 2024, board members may not serve **more than 8 consecutive years** unless approved
+by an affirmative vote of **two-thirds of all votes cast** at the election. [HB 1021, 2024]
+
+## Are newly elected board members required to get training?
+Yes. Within **90 days** of election, every new director must:
+1. Submit a written certification that they have read and understood the governing documents
+   and will uphold their fiduciary duties, AND
+2. Complete a **4-hour educational curriculum** covering structural integrity, elections, and
+   financial literacy.
+
+Failure to meet this requirement within 90 days results in the director being **suspended from
+the board** until the requirement is completed. [HB 1021, 2024]
+
+---
+
+## RESIDENT RIGHTS AND MEETING PARTICIPATION
+
+## Can I petition for a special membership meeting?
+Yes. If **10% of all voting interests** sign a petition requesting a special meeting, the board
+must call and hold the meeting within **60 days** of receiving the petition.
+
+## Can the board suspend my right to use the pool, gym, or other amenities for a violation?
+Yes, but with important limits. The association may suspend use of **common elements and
+facilities** for rule violations or non-payment. However, suspensions **may never apply to**:
+- Your **assigned parking space** (if there are no other parking options available to you)
+- **Elevators** (necessary for access)
+- **Utility services**
+- Any essential access to and from the property
+
+## Can the board suspend my voting rights?
+Yes, but only for delinquencies exceeding **$1,000** that remain unpaid for more than **90 days**.
+The association must give **30 days' written notice** before the suspension takes effect.
+While suspended, those voting interests are excluded from quorum calculations.
+
+---
+
+## FINES AND ENFORCEMENT
+
+## What is the maximum fine the board can levy?
+Fines are capped at **$100 per violation per day** (for continuing violations), with a maximum
+aggregate of **$1,000 per violation**. A fine cannot exceed these limits unless otherwise
+permitted by statute. [s. 718.303]
+
+## What process must the board follow before fining me?
+The board must:
+1. Vote to levy the fine
+2. Provide **at least 14 days' written notice** specifying the violation and proposed fine
+3. Offer you a **hearing before a fining committee** — a committee of at least **3 unit owners**
+   who are not officers, directors, or employees of the association
+4. The committee may only confirm or reject the fine — it cannot change the amount
+5. If the committee rejects the fine by majority vote, **the fine cannot be imposed**
+6. If confirmed, payment is due within **5 days** of the committee's decision
+
+If you did not receive proper written notice and a hearing opportunity, the fine is
+procedurally defective and may be challenged.
+
+## What counts as election fraud?
+Florida law (as of 2024) explicitly makes ballot tampering, coercion, and bribery related to
+condo elections **first-degree misdemeanors**. [HB 1021, 2024]
+
+---
+
+## OFFICIAL RECORDS AND DOCUMENT ACCESS
+
+## What records must the association keep?
+The association must maintain official records including:
+- Declaration, Bylaws, and Articles of Incorporation (permanently)
+- Rules and regulations
+- Minutes of all board and membership meetings
+- Current roster of all unit owners (with mailing addresses and email, if provided)
+- Insurance policies
+- All contracts for work to be performed
+- Accounting records (receipts, expenditures, assets, liabilities)
+- Bank statements and reconciliations
+- Invoices and cancelled checks
+- Audits, financial reviews, and monthly financial statements
+- Election ballots, proxies, and sign-in sheets (retained for **1 year**)
+- Milestone inspection reports and structural integrity reserve studies (**15 years**)
+- All other written records related to the operation of the association
+
+Most financial and operational records must be retained for a **minimum of 7 years**.
+
+## How do I request association records?
+Submit a **written request** to the association. You do not need to state a reason or justify
+your request. The association must make records available within **10 working days** (not
+calendar days). After the 10-working-day period, failure to produce creates a rebuttable
+presumption of willful non-compliance.
+
+## What can the association charge me for copies?
+Associations may charge a **reasonable copying fee** (typically no more than **25 cents per page**
+for paper copies). Importantly, if you bring your own device (phone, scanner) to inspect records,
+the association **cannot charge you** for the time spent scanning — you can photograph records
+for free.
+
+## What records can the association refuse to show me?
+Exempt records include:
+- Attorney-client privileged communications and attorney work product
+- Personnel records of association employees (other than total compensation)
+- Medical records of owners or employees
+- Social Security numbers, driver license numbers, credit card or bank account numbers
+- Security system information (passwords, codes, access details)
+- Information related to pending litigation that would otherwise be privileged
+
+## What happens if the association refuses to provide records?
+Starting on the **11th working day** after your request, you begin accruing **$50 per calendar day**
+in statutory damages, for up to 10 days (maximum $500 in statutory damages), plus actual damages
+and reasonable attorney's fees if you prevail. Directors or managers who repeatedly violate records
+access requirements commit a **misdemeanor of the second degree**. Willfully destroying records to
+conceal mismanagement is a **first-degree misdemeanor**. [s. 718.111(12)]
+
+---
+
+## WEBSITE REQUIREMENTS
+
+## Does the association have to maintain a website?
+- **Currently (through December 31, 2025):** Associations managing **150 or more units** must
+  maintain a website.
+- **Effective January 1, 2026:** The threshold drops to **25 or more units** — meaning virtually
+  all Florida condo associations will be required to maintain a compliant website.
+[s. 718.111(12)]
+
+## What must be on the association's website?
+All required documents are posted on a **password-protected section** accessible only to unit
+owners and employees. Required documents include:
+- Declaration, Bylaws, Articles of Incorporation, and all amendments
+- Rules and regulations
+- Current year's budget and proposed budgets
+- Monthly financial statements
+- All contracts and bids (for contracts exceeding 5% of annual budget)
+- Board and membership meeting notices and agendas
+- Minutes of all board and membership meetings (7 years)
+- Financial reports and audits (7 years)
+- Names and contact information for all board members
+- Director certifications and conflict of interest disclosures
+- Structural integrity reserve studies
+- Milestone inspection reports
+- All current insurance policies
+- Building permits
+
+**Posting deadlines:** Membership meeting notices must be posted at least **14 days** before the
+meeting; board meeting notices at least **48 hours** before the meeting. Documents to be
+considered at a meeting must be posted at least **7 days** before the meeting.
+
+**What must be redacted before posting:** Social Security numbers, driver license numbers, credit
+card and bank account information, emergency contact information, attorney-client materials, and
+security system details must be removed from all posted documents.
+
+---
+
+## STRUCTURAL INTEGRITY AND BUILDING SAFETY
+
+## What is a Structural Integrity Reserve Study (SIRS)?
+A SIRS is a professionally conducted study — by a licensed architect or engineer — assessing the
+condition and remaining useful life of a building's major structural components, and calculating
+the reserve funding needed to repair or replace them. It was created by Florida law in 2022 in
+direct response to the Champlain Towers South collapse in Surfside (June 2021, 98 deaths).
+[s. 718.112(2)(g); SB 4-D, 2022]
+
+## Which buildings require a SIRS?
+All residential condominium buildings **three stories or higher** must have a SIRS completed.
+
+## What are the SIRS deadlines?
+- Buildings that existed before July 1, 2022: SIRS must have been completed by **December 31, 2024**
+  (or by December 31, 2026 if the building also required a milestone inspection)
+- After the initial study: must be updated at least **every 10 years**
+
+## What does the SIRS cover?
+At minimum: roof, load-bearing walls and primary structural members, floors, foundation,
+fireproofing and fire protection systems, plumbing, electrical systems, waterproofing and
+exterior painting, windows and exterior doors, and **any other item** with a deferred
+maintenance or replacement cost exceeding **$10,000**.
+
+## Can owners vote to waive SIRS reserve funding?
+**No.** This is a hard prohibition. Owners may **not** vote to waive or reduce reserve funding
+for any components identified in the SIRS. This overrides the prior common practice of owners
+voting each year to waive reserves (which kept assessments low but deferred critical maintenance).
+This waiver ban does not apply to reserves for items not covered by the SIRS.
+
+## What is a Milestone Inspection?
+A separate requirement for buildings **3 or more stories** that have reached age **30** (or age
+**25** if within 3 miles of the coastline). Phase 1 is a visual inspection by a licensed
+architect or engineer. If no substantial structural deterioration is found, Phase 2 is not
+required. If deterioration is found, Phase 2 involves more detailed (potentially destructive)
+testing. Local building departments enforce compliance; non-compliant buildings may be deemed
+unsafe for occupancy. [s. 553.899]
+
+---
+
+## BUDGET AND ASSESSMENTS
+
+## How much notice must be given before the budget meeting?
+The board must deliver or mail each unit owner a **notice of the budget meeting and a copy of
+the proposed annual budget** at least **14 days** before the meeting. The notice must also be
+posted conspicuously on the property.
+
+## Can I challenge a large assessment increase?
+Yes — the "115% rule." If the board adopts a budget requiring assessments that exceed **115% of
+the prior year's assessments**, unit owners may challenge it:
+1. Gather signatures from at least **10% of all voting interests** within **21 days** of the
+   budget meeting
+2. The association must hold a **special membership meeting**
+3. At that meeting, owners may adopt a substitute budget by a **majority vote of all voting
+   interests** (not just those present)
+
+**Important exception:** The 115% override right does NOT apply to increases driven by mandatory
+SIRS reserve funding — those reserves must be fully funded regardless of the percentage increase.
+
+---
+
+## ESTOPPEL CERTIFICATES
 
 ## What is an estoppel certificate?
-An estoppel certificate states what a unit owner owes the association at a specific point in
-time. It is commonly required when a unit is sold. Under Florida law, the association must
-provide one within 10 business days of a request; the fee is capped by statute.
+An estoppel certificate states what a unit owner owes the association at a specific point in time —
+including assessments, fines, and any outstanding violations. It is required in most real estate
+sales and mortgage transactions. [s. 718.116(8)]
 
-## Are there limits on rental restrictions?
-Under Florida law, amendments to the Declaration that restrict rentals only apply to owners
-who acquired their unit after the amendment was recorded, unless they voted for it. Check
-your Declaration for the current rental rules and any grandfathering provisions.
+## How quickly must the association provide one?
+Within **10 business days** of a written request.
 
-## What are the reserve requirements?
-Florida condominiums are required to fund reserves for major components (roof, painting,
-paving, etc.) unless owners vote to waive or reduce them. Since 2025, buildings 3 stories
-or taller must conduct structural integrity reserve studies and fully fund those reserves.
+## How long is an estoppel certificate valid?
+- Delivered by **hand or email:** valid for **30 days**
+- Delivered by **regular mail:** valid for **35 days**
 
-## What are my rights if I disagree with the board?
-Owners may petition for a special meeting (at least 20% of owners must sign). Disputes can
-be submitted to the Florida Division of Condominiums, Timeshares, and Mobile Homes for
-non-binding arbitration before filing a lawsuit.
+## What fees can the association charge for an estoppel certificate?
+| Situation | Maximum Fee |
+|---|---|
+| No delinquency | $250 |
+| Expedited (within 3 business days) | +$100 (up to $350) |
+| Delinquency exists | +$150 (up to $400) |
+| Multiple units, same request | Capped: $750 (up to 25 units), $1,000 (26-50), $1,500 (51-100), $2,500 (101+) |
+
+If a buyer or lender relies in good faith on an estoppel certificate, the association **waives
+the right to collect** any amounts exceeding what was stated in the certificate, for the full
+validity period.
+
+---
+
+## ELECTRONIC NOTICES AND VOTING
+
+## Can the association send me notices by email?
+Only if you have **consented in writing** (or electronically) to receive notices by email.
+Consent is revocable at any time. Without consent, the association must mail or hand-deliver
+required notices.
+
+## Can I vote online in association elections?
+Yes, if the association has adopted an online voting system and you have individually consented.
+The system must authenticate your identity, prevent double-voting, issue a receipt confirming
+your vote, and permanently separate your identity from your ballot to preserve secrecy for
+board elections. The board must give at least **14 days' notice** before adopting an online
+voting resolution. [s. 718.128]
+
+---
+
+## DISPUTE RESOLUTION
+
+## What can I do if I disagree with the board?
+Options include:
+- **Petition for a special meeting** (10% of owners)
+- **File a complaint** with the Florida Division of Condominiums, Timeshares, and Mobile Homes
+- **Non-binding arbitration** through the Division (required before filing a lawsuit in most cases)
+- **Presuit mediation** (required for certain SIRS-related disputes)
+- **Civil lawsuit** (after exhausting required pre-suit procedures)
+
+## Am I protected if I file a complaint against the association?
+Yes. Florida's 2024 amendments added **anti-SLAPP protections** for unit owners who file
+legitimate complaints against their associations. The association cannot retaliate against you
+for exercising your legal rights. [HB 1021, 2024]
