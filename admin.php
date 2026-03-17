@@ -11,10 +11,12 @@
 // -------------------------------------------------------
 session_start();
 
-define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
-define('USER_MANUAL_URL', 'https://docs.google.com/document/d/1bomDarmk1_RbPJ0x_NphQ1-m-t9OKZwzNZrm1ztEhQM/edit?tab=t.td3lj68pttu5#heading=h.vwhtrlhtc5t2');
-define('CREDITS_FILE', __DIR__ . '/faqs/woolsy_credits.json');
+define('CREDENTIALS_DIR',      __DIR__ . '/credentials/');
+define('USER_MANUAL_URL',      'https://docs.google.com/document/d/1bomDarmk1_RbPJ0x_NphQ1-m-t9OKZwzNZrm1ztEhQM/edit?tab=t.td3lj68pttu5#heading=h.vwhtrlhtc5t2');
+define('CREDITS_FILE',         __DIR__ . '/faqs/woolsy_credits.json');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
+define('APPS_SCRIPT_URL',      'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
+define('APPS_SCRIPT_TOKEN',    'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
 
 function getWoolsyCredits(string $building): array {
     if (!file_exists(CREDITS_FILE)) {
@@ -41,6 +43,31 @@ if (!file_exists($adminCredFile)) {
 
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 $sessionKey = 'manage_auth_' . $building;
+
+// -------------------------------------------------------
+// AJAX: doc status endpoints (docStatus = cached result,
+// docCheck = on-demand scan). Returns JSON and exits.
+// -------------------------------------------------------
+if (isset($_GET['action']) && in_array($_GET['action'], ['docStatus', 'docCheck'], true)) {
+  header('Content-Type: application/json');
+  if (empty($_SESSION[$sessionKey])) {
+    echo json_encode(['error' => 'Unauthorized']);
+    exit;
+  }
+  $buildings      = require __DIR__ . '/buildings.php';
+  $publicFolderId = $buildings[$building]['publicFolderId'] ?? '';
+  $apAction       = $_GET['action'] === 'docCheck' ? 'docCheck' : 'docCheckResult';
+  $params         = ['action' => $apAction, 'building' => $building, 'token' => APPS_SCRIPT_TOKEN];
+  if ($apAction === 'docCheck') $params['publicFolderId'] = $publicFolderId;
+
+  $url = APPS_SCRIPT_URL . '?' . http_build_query($params);
+  $ch  = curl_init($url);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
+  $resp = curl_exec($ch);
+  curl_close($ch);
+  echo $resp ?: json_encode(['error' => 'Could not fetch status']);
+  exit;
+}
 
 // Load credentials
 $adminCred  = json_decode(file_get_contents($adminCredFile), true);
@@ -217,6 +244,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     .credit-fill.danger { background: #dc2626; }
     .low-credit-warn { margin-top: 0.6rem; padding: 0.4rem 0.7rem; background: #fffbeb;
                        border: 1px solid #f59e0b; border-radius: 4px; font-size: 0.82rem; color: #92400e; }
+    .woolsy-docstatus  { margin: 0.6rem 0 0.3rem; font-size: 0.85rem; color: #444; line-height: 1.5; }
+    .woolsy-docstatus .ds-ok   { color: #1a7f37; font-weight: bold; }
+    .woolsy-docstatus .ds-warn { color: #b45309; font-weight: bold; }
+    .woolsy-docstatus .ds-muted { color: #888; }
+    .ds-check-btn { margin-left: 0.5rem; padding: 0.15rem 0.5rem; font-size: 0.8rem;
+                    background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 3px;
+                    cursor: pointer; color: #374151; }
+    .ds-check-btn:hover { background: #e5e7eb; }
   </style>
 </head>
 <body>
@@ -306,6 +341,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
           AI-powered assistant for residents. Answers questions about building rules,
           Florida condo law, and community policies.
         </div>
+        <div class="woolsy-docstatus" id="woolsy-docstatus">
+          <span class="ds-muted">Checking knowledge base status…</span>
+        </div>
         <div class="woolsy-status">
           Credits used: <strong><?= number_format($wUsed, 4) ?></strong>
           of <strong><?= number_format($wAlloc, 2) ?></strong>
@@ -350,5 +388,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   <button type="submit" name="change_admin_pass" class="save-btn">Update password</button>
 </form>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('woolsy-docstatus')) loadDocStatus();
+});
+
+function loadDocStatus() {
+  fetchAndRender('admin.php?building=<?= urlencode($building) ?>&action=docStatus');
+}
+
+function checkDocNow() {
+  var el = document.getElementById('woolsy-docstatus');
+  if (el) el.innerHTML = '<span class="ds-muted">Checking…</span>';
+  fetchAndRender('admin.php?building=<?= urlencode($building) ?>&action=docCheck');
+}
+
+function fetchAndRender(url) {
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var el = document.getElementById('woolsy-docstatus');
+      if (el) el.innerHTML = buildDocStatusHtml(data);
+    })
+    .catch(function() {
+      var el = document.getElementById('woolsy-docstatus');
+      if (el) el.innerHTML = '<span class="ds-muted">Status unavailable.</span>';
+    });
+}
+
+function buildDocStatusHtml(data) {
+  var b         = '<?= urlencode($building) ?>';
+  var updateUrl = 'woolsy-update.php?building=' + b;
+
+  if (data.error || data.notInitialized) {
+    return '📋 <strong>Knowledge Base:</strong> Not set up — ' +
+      '<a href="' + updateUrl + '" style="color:#0070f3">Set Up Woolsy →</a>';
+  }
+  if (data.notCheckedYet) {
+    return '📋 <strong>Knowledge Base:</strong> Initialized — ' +
+      '<a href="' + updateUrl + '" style="color:#0070f3">Manage →</a>';
+  }
+
+  var checked = data.checkedAt ? 'Checked ' + fmtDate(data.checkedAt) : '';
+  var total   = data.fileCounts
+    ? (data.fileCounts.IncorporationDocs + data.fileCounts.RulesDocs) + ' files'
+    : '';
+
+  if (data.status === 'changes') {
+    var n = (data.changes || []).length;
+    return '📋 <strong>Knowledge Base:</strong> ' +
+      '<span class="ds-warn">⚠️ ' + n + ' file' + (n !== 1 ? 's' : '') + ' changed</span>' +
+      (checked ? ' &middot; ' + checked : '') +
+      ' &mdash; <a href="' + updateUrl + '" style="color:#0070f3">Review &amp; Update →</a>';
+  }
+  if (data.status === 'ok') {
+    return '📋 <strong>Knowledge Base:</strong> ' +
+      '<span class="ds-ok">✅ Up to date</span>' +
+      (checked ? ' &middot; ' + checked : '') +
+      (total   ? ' &middot; ' + total   : '') +
+      ' <button class="ds-check-btn" onclick="checkDocNow()">Check now</button>';
+  }
+  return '📋 <strong>Knowledge Base:</strong> <a href="' + updateUrl + '" style="color:#0070f3">Manage →</a>';
+}
+
+function fmtDate(iso) {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch(e) { return iso; }
+}
+</script>
 </body>
 </html>

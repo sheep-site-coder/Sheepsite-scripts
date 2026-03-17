@@ -212,6 +212,32 @@ PHP renders file browser in iframe on building website
 - [x] CVE.txt: added Building Types section (2-story Garden vs 4-story with internal
       elevators) and exterior elevator removal Q&A (FL 718.113 material alteration,
       Fair Housing Act exposure, permit requirements)
+- [x] Woolsy doc indexing by admin — fully built (session 12):
+      - woolsy-update.php: admin UI for setup (first time) and update (when changes detected)
+        · Setup mode: lists all docs in IncorporationDocs/ + RulesDocs/
+        · Update mode: same, with CHANGED/NEW/REMOVED badges on changed files
+        · Progressive AJAX probe — extracts text from each PDF one by one, live progress counter
+        · Handles scanned PDFs: Google Drive OCR; warns if text < 100 chars (likely unreadable)
+        · Credit estimate shown before committing: ~X credits (charCount/4 tokens, Haiku pricing)
+        · Calls Claude (Haiku) with full doc text; returns proposed rules.md; Accept / Cancel
+        · On Accept: saves faqs/{building}_rules.md + stamps baseline in Apps Script
+      - dir-display-bridge.gs: 8 new actions + checkAllBuildings() weekly trigger function:
+        · checkAllBuildings() — time-driven trigger; scans Drive metadata only, no API calls
+        · runDocCheck() — internal: compares file names + modifiedTime to stored baseline
+        · docCheckResult — returns stored check result from Script Properties
+        · docCheck — on-demand scan (called from admin "Check now" button)
+        · listDocFiles — file listing for IncorporationDocs + RulesDocs with sizes
+        · extractDocText — copies PDF as Google Doc (triggers OCR), exports plain text, deletes temp
+        · stampBaseline — stamps current file state, marks building initialized, registers for weekly checks
+      - admin.php: Woolsy card updated with async doc status section:
+        · Loads docCheckResult via AJAX on page load; no extra latency on page render
+        · Three states: Not set up → link to woolsy-update.php; ✅ Up to date + "Check now" button;
+          ⚠️ N files changed → link to woolsy-update.php
+        · "Check now" triggers on-demand scan and refreshes status inline
+      - Weekly trigger: set up checkAllBuildings() in Apps Script with time-driven trigger (weekly)
+        Skips buildings that haven't done initial setup (_initialized flag not set)
+      - Scanned PDF handling: Drive's OCR converts scanned PDFs automatically on copy;
+        files with < 100 extracted chars are flagged ⚠️ with user notice; skipped in processing
 
 ---
 
@@ -223,16 +249,16 @@ PHP renders file browser in iframe on building website
   chatbot-widget.js script tag to their footers
 - **Upload file-manager.php** to server — tag-on-replace fix requires this updated file
 - **Merge `feature/search-and-tagging` → main** — search, tagging, and file manager all tested and working
-- **Redeploy dir-display-bridge.gs** (new version needed for all new actions to go live — already done on server)
+- **Upload woolsy-update.php + updated admin.php + updated dir-display-bridge.gs** to server
+- **Set up checkAllBuildings() time-driven trigger** in Apps Script (weekly; deploy new version first)
+- **Redeploy dir-display-bridge.gs** — required for all new actions (docCheck, extractDocText, etc.)
 - **Wire up Search button** on building sites using `openSearch()`
 - **Create tags/ folder** on server (writable by PHP); .htaccess auto-created by tag-admin.php
 - Upload docs/ folder files to Sharefolder / distribute as needed
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 - **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
-- **Doc indexing by admin** (design locked, not yet built): checkRulesDocs() in dir-display-bridge.gs,
-  Update Woolsy button + delta review UI in admin.php, Claude-powered rules merge
 
 ---
 
-*Snapshot updated: March 17, 2026 (session 11)*
+*Snapshot updated: March 17, 2026 (session 12 — Woolsy doc indexing built and tested)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

@@ -6,6 +6,7 @@ function keepWarm() {
   DriveApp.getRootFolder();
 }
 
+
 function doGet(e) {
   const action = e.parameter.action || 'list';
 
@@ -18,6 +19,11 @@ function doGet(e) {
   if (action === 'deleteFile')    return handleDeleteFile(e);
   if (action === 'renameFile')    return handleRenameFile(e);
   if (action === 'createFolder')  return handleCreateFolder(e);
+  if (action === 'docCheckResult') return handleDocCheckResult(e);
+  if (action === 'docCheck')       return handleDocCheck(e);
+  if (action === 'listDocFiles')   return handleListDocFiles(e);
+  if (action === 'extractDocText') return handleExtractDocText(e);
+  if (action === 'stampBaseline')  return handleStampBaseline(e);
 
   return jsonError('Unknown action');
 }
@@ -380,4 +386,282 @@ function listFolder(folder, privateMode) {
   }
 
   return { folders: folderList, files: fileList };
+}
+
+// -------------------------------------------------------
+// Woolsy doc check — weekly time-driven trigger entry point
+// Checks all registered buildings for changes to their
+// IncorporationDocs and RulesDocs folders. No API calls —
+// purely Drive file metadata (names + modification times).
+// -------------------------------------------------------
+function checkAllBuildings() {
+  const props    = PropertiesService.getScriptProperties();
+  const listJson = props.getProperty('buildings_doccheck_list');
+  if (!listJson) return;
+
+  const buildings = JSON.parse(listJson);
+  buildings.forEach(function(b) {
+    try {
+      runDocCheck(b.building, b.publicFolderId);
+    } catch (err) {
+      console.error('checkAllBuildings [' + b.building + ']: ' + err.message);
+    }
+  });
+}
+
+// Internal: scan both doc folders and compare to stored baseline.
+// Writes {building}_doccheck to Script Properties.
+function runDocCheck(building, publicFolderId) {
+  const props        = PropertiesService.getScriptProperties();
+  const publicFolder = DriveApp.getFolderById(publicFolderId);
+
+  // Scan IncorporationDocs and RulesDocs
+  const current = {};
+  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+    const sub = publicFolder.getFoldersByName(folderName);
+    if (!sub.hasNext()) { current[folderName] = []; return; }
+    const folder = sub.next();
+    const files  = [];
+    const iter   = folder.getFiles();
+    while (iter.hasNext()) {
+      const f = iter.next();
+      files.push({
+        id:           f.getId(),
+        name:         f.getName(),
+        modifiedTime: f.getLastUpdated().toISOString(),
+        size:         f.getSize()
+      });
+    }
+    current[folderName] = files;
+  });
+
+  const baselineJson = props.getProperty(building + '_baseline');
+
+  if (!baselineJson) {
+    // No baseline yet — setup not completed; record file counts only
+    props.setProperty(building + '_doccheck', JSON.stringify({
+      checkedAt:  new Date().toISOString(),
+      status:     'nobaseline',
+      changes:    [],
+      fileCounts: {
+        IncorporationDocs: current.IncorporationDocs.length,
+        RulesDocs:         current.RulesDocs.length
+      }
+    }));
+    return;
+  }
+
+  const baseline = JSON.parse(baselineJson);
+  const changes  = [];
+
+  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+    const curFiles  = current[folderName]  || [];
+    const baseFiles = baseline[folderName] || [];
+
+    const baseMap = {};
+    baseFiles.forEach(function(f) { baseMap[f.id] = f; });
+    const curMap = {};
+    curFiles.forEach(function(f) { curMap[f.id] = f; });
+
+    curFiles.forEach(function(f) {
+      if (!baseMap[f.id]) {
+        changes.push({ name: f.name, folder: folderName, action: 'new' });
+      } else if (f.modifiedTime !== baseMap[f.id].modifiedTime) {
+        changes.push({ name: f.name, folder: folderName, action: 'modified' });
+      }
+    });
+    baseFiles.forEach(function(f) {
+      if (!curMap[f.id]) {
+        changes.push({ name: f.name, folder: folderName, action: 'removed' });
+      }
+    });
+  });
+
+  props.setProperty(building + '_doccheck', JSON.stringify({
+    checkedAt:  new Date().toISOString(),
+    status:     changes.length > 0 ? 'changes' : 'ok',
+    changes:    changes,
+    fileCounts: {
+      IncorporationDocs: current.IncorporationDocs.length,
+      RulesDocs:         current.RulesDocs.length
+    }
+  }));
+}
+
+// -------------------------------------------------------
+// docCheckResult — returns stored check result for admin card
+// -------------------------------------------------------
+function handleDocCheckResult(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const building = e.parameter.building;
+  if (!building)         return jsonError('No building provided');
+
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty(building + '_initialized')) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ notInitialized: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  const result = props.getProperty(building + '_doccheck');
+  if (!result) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ notCheckedYet: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService
+    .createTextOutput(result)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// docCheck — on-demand scan (called from admin "Check now")
+// -------------------------------------------------------
+function handleDocCheck(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const building       = e.parameter.building;
+  const publicFolderId = e.parameter.publicFolderId;
+  if (!building || !publicFolderId) return jsonError('Missing params');
+
+  runDocCheck(building, publicFolderId);
+
+  const result = PropertiesService.getScriptProperties().getProperty(building + '_doccheck');
+  return ContentService
+    .createTextOutput(result || '{}')
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// listDocFiles — file listing for IncorporationDocs + RulesDocs
+// -------------------------------------------------------
+function handleListDocFiles(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const publicFolderId = e.parameter.publicFolderId;
+  if (!publicFolderId)  return jsonError('Missing publicFolderId');
+
+  const publicFolder = DriveApp.getFolderById(publicFolderId);
+  const result       = {};
+
+  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+    const sub = publicFolder.getFoldersByName(folderName);
+    if (!sub.hasNext()) { result[folderName] = []; return; }
+    const folder = sub.next();
+    const files  = [];
+    const iter   = folder.getFiles();
+    while (iter.hasNext()) {
+      const f = iter.next();
+      files.push({
+        id:           f.getId(),
+        name:         f.getName(),
+        size:         f.getSize(),
+        modifiedTime: f.getLastUpdated().toISOString()
+      });
+    }
+    result[folderName] = files;
+  });
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// extractDocText — converts PDF to Google Doc and exports
+// plain text. Handles scanned PDFs via Drive's built-in OCR.
+// Requires the script to have drive scope authorized.
+// -------------------------------------------------------
+function handleExtractDocText(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const fileId = e.parameter.fileId;
+  if (!fileId)  return jsonError('No fileId provided');
+
+  try {
+    // Copy PDF as Google Doc — Drive performs OCR automatically on scanned files
+    // Requires Drive Advanced Service (Add via Services in the editor sidebar)
+    const copied = Drive.Files.copy(
+      { name: 'woolsy_tmp_extract', mimeType: 'application/vnd.google-apps.document' },
+      fileId
+    );
+    const docId = copied.id;
+
+    // Extract text via DocumentApp — no external requests needed
+    const text = DocumentApp.openById(docId).getBody().getText();
+
+    // Delete temporary Google Doc
+    DriveApp.getFileById(docId).setTrashed(true);
+
+    const trimmed  = text.trim();
+    const readable = trimmed.length > 100;
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ text: text, readable: readable, charCount: trimmed.length }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ text: '', readable: false, charCount: 0, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// -------------------------------------------------------
+// stampBaseline — called after admin accepts a knowledge base
+// build/update. Stores current file state as the new baseline,
+// marks building as initialized, and registers it for weekly checks.
+// -------------------------------------------------------
+function handleStampBaseline(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const building       = e.parameter.building;
+  const publicFolderId = e.parameter.publicFolderId;
+  if (!building || !publicFolderId) return jsonError('Missing params');
+
+  const props        = PropertiesService.getScriptProperties();
+  const publicFolder = DriveApp.getFolderById(publicFolderId);
+
+  // Scan current state for baseline
+  const current = {};
+  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+    const sub = publicFolder.getFoldersByName(folderName);
+    if (!sub.hasNext()) { current[folderName] = []; return; }
+    const folder = sub.next();
+    const files  = [];
+    const iter   = folder.getFiles();
+    while (iter.hasNext()) {
+      const f = iter.next();
+      files.push({
+        id:           f.getId(),
+        name:         f.getName(),
+        modifiedTime: f.getLastUpdated().toISOString(),
+        size:         f.getSize()
+      });
+    }
+    current[folderName] = files;
+  });
+
+  props.setProperty(building + '_baseline',    JSON.stringify(current));
+  props.setProperty(building + '_initialized', '1');
+
+  // Add to weekly check list if not already present
+  const listJson  = props.getProperty('buildings_doccheck_list');
+  const list      = listJson ? JSON.parse(listJson) : [];
+  if (!list.some(function(b) { return b.building === building; })) {
+    list.push({ building: building, publicFolderId: publicFolderId });
+    props.setProperty('buildings_doccheck_list', JSON.stringify(list));
+  }
+
+  // Record clean status immediately
+  props.setProperty(building + '_doccheck', JSON.stringify({
+    checkedAt:  new Date().toISOString(),
+    status:     'ok',
+    changes:    [],
+    fileCounts: {
+      IncorporationDocs: current.IncorporationDocs.length,
+      RulesDocs:         current.RulesDocs.length
+    }
+  }));
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
 }

@@ -1,0 +1,720 @@
+<?php
+// -------------------------------------------------------
+// woolsy-update.php
+// Admin UI to build or update Woolsy's knowledge base.
+//
+// Setup mode  — no faqs/{building}_rules.md exists yet.
+//               Reads all current docs, builds from scratch.
+// Update mode — rules.md exists; doc changes detected.
+//               Re-reads all current docs, regenerates fully.
+//
+// Auth: reuses manage_auth_{building} session from admin.php.
+// -------------------------------------------------------
+session_start();
+
+define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
+define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
+define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
+define('CREDITS_FILE',      __DIR__ . '/faqs/woolsy_credits.json');
+define('RULES_DIR',         __DIR__ . '/faqs/');
+define('CREDITS_DEFAULT_ALLOCATED', 1.0);
+
+// -------------------------------------------------------
+// Validate building + auth
+// -------------------------------------------------------
+$building = $_GET['building'] ?? '';
+if (!$building || !preg_match('/^[a-zA-Z0-9_-]+$/', $building)) {
+    die('<p style="color:red;">Invalid or missing building name.</p>');
+}
+
+$buildings = require __DIR__ . '/buildings.php';
+if (!isset($buildings[$building])) {
+    die('<p style="color:red;">Unknown building.</p>');
+}
+
+$adminCredFile = CREDENTIALS_DIR . $building . '_admin.json';
+if (!file_exists($adminCredFile)) {
+    header('Location: admin.php?building=' . urlencode($building));
+    exit;
+}
+
+$sessionKey = 'manage_auth_' . $building;
+if (empty($_SESSION[$sessionKey])) {
+    header('Location: admin.php?building=' . urlencode($building));
+    exit;
+}
+
+$publicFolderId = $buildings[$building]['publicFolderId'];
+
+// -------------------------------------------------------
+// Helper: call Apps Script (GET)
+// -------------------------------------------------------
+function callAppsScript(array $params, int $timeout = 60): array {
+    $url = APPS_SCRIPT_URL . '?' . http_build_query(
+        array_merge(['token' => APPS_SCRIPT_TOKEN], $params)
+    );
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => $timeout,
+    ]);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($resp ?: '{}', true) ?? ['error' => 'No response'];
+}
+
+// -------------------------------------------------------
+// Helper: credit management
+// -------------------------------------------------------
+function loadCredits(): array {
+    if (!file_exists(CREDITS_FILE)) return [];
+    return json_decode(file_get_contents(CREDITS_FILE), true) ?? [];
+}
+
+function hasCredits(string $building): bool {
+    $c = loadCredits()[$building] ?? ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
+    return (float)($c['used'] ?? 0) < (float)($c['allocated'] ?? CREDITS_DEFAULT_ALLOCATED);
+}
+
+function deductCredits(string $building, float $cost): void {
+    $credits = loadCredits();
+    if (!isset($credits[$building])) {
+        $credits[$building] = ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0.0];
+    }
+    $credits[$building]['used'] = round(($credits[$building]['used'] ?? 0) + $cost, 6);
+    file_put_contents(CREDITS_FILE, json_encode($credits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
+// -------------------------------------------------------
+// AJAX actions
+// -------------------------------------------------------
+$action = $_GET['action'] ?? '';
+
+// --- listFiles: return file listing from IncorporationDocs + RulesDocs ---
+if ($action === 'listFiles') {
+    header('Content-Type: application/json');
+    $result = callAppsScript([
+        'action'         => 'listDocFiles',
+        'building'       => $building,
+        'publicFolderId' => $publicFolderId,
+    ]);
+    echo json_encode($result);
+    exit;
+}
+
+// --- probeFile: extract text from one PDF, cache result in session ---
+if ($action === 'probeFile') {
+    header('Content-Type: application/json');
+    set_time_limit(120);
+    $fileId = $_GET['fileId'] ?? '';
+    if (!$fileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
+        echo json_encode(['error' => 'Invalid fileId']);
+        exit;
+    }
+    $result   = callAppsScript(['action' => 'extractDocText', 'fileId' => $fileId], 90);
+    $cacheKey = 'woolsy_text_' . $building . '_' . $fileId;
+    if (!empty($result['text']) && ($result['readable'] ?? false)) {
+        $_SESSION[$cacheKey] = $result['text'];
+    } else {
+        unset($_SESSION[$cacheKey]);
+    }
+    echo json_encode([
+        'readable'  => $result['readable']  ?? false,
+        'charCount' => $result['charCount'] ?? 0,
+        'error'     => $result['error']     ?? null,
+    ]);
+    exit;
+}
+
+// --- process: assemble docs + call Claude, return proposed rules.md ---
+if ($action === 'process' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    set_time_limit(180);
+
+    if (!hasCredits($building)) {
+        echo json_encode(['error' => 'Credits exhausted — contact SheepSite to top up.']);
+        exit;
+    }
+
+    $body         = json_decode(file_get_contents('php://input'), true) ?? [];
+    $files        = $body['files']        ?? [];
+    $mode         = $body['mode']         ?? 'setup';
+    $removedFiles = $body['removedFiles'] ?? [];
+
+    // Collect texts from session cache
+    $docTexts = [];
+    foreach ($files as $file) {
+        if (empty($file['readable'])) continue;
+        $cacheKey = 'woolsy_text_' . $building . '_' . ($file['id'] ?? '');
+        if (!empty($_SESSION[$cacheKey])) {
+            $docTexts[] = [
+                'name'   => $file['name'],
+                'folder' => $file['folder'],
+                'text'   => $_SESSION[$cacheKey],
+            ];
+        }
+    }
+
+    if (empty($docTexts)) {
+        echo json_encode(['error' => 'No readable documents found. Cannot build knowledge base.']);
+        exit;
+    }
+
+    // Build combined document text
+    $combinedText = '';
+    foreach ($docTexts as $doc) {
+        $combinedText .= "\n\n=== {$doc['folder']} / {$doc['name']} ===\n\n" . $doc['text'];
+    }
+
+    // Note about removed files
+    $removedNote = '';
+    if (!empty($removedFiles)) {
+        $removedNames = array_map(function($f) { return $f['folder'] . '/' . $f['name']; }, $removedFiles);
+        $removedNote  = "\n\nNote: The following files have been removed and their content should be omitted from the knowledge base:\n- " . implode("\n- ", $removedNames);
+    }
+
+    // Build Claude prompt
+    $rulesFile     = RULES_DIR . $building . '_rules.md';
+    $existingRules = ($mode === 'update' && file_exists($rulesFile))
+        ? file_get_contents($rulesFile)
+        : '';
+
+    if ($existingRules) {
+        $systemPrompt = <<<PROMPT
+You are updating the Woolsy knowledge base for the {$building} condominium association.
+
+The current knowledge base is shown first. Below it are the current authoritative governing documents. Regenerate the COMPLETE, updated knowledge base from these documents.
+
+Guidelines:
+- Organize by topic: Pets, Guests, Rentals, Parking, Smoking, Alterations, Maintenance, Assessments, Board Structure, Common Elements, Procedures, Contacts, etc.
+- After each rule or fact, add a source attribution in parentheses: (Source: Document Name)
+- Be comprehensive but readable — this is a reference document used by an AI chatbot
+- Skip boilerplate: recitals, "WHEREAS" clauses, signature blocks, and self-explanatory legal definitions
+- Include fees, fines, deadlines, and contact information when present{$removedNote}
+
+Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
+PROMPT;
+        $userContent = "CURRENT KNOWLEDGE BASE:\n\n{$existingRules}\n\n---\n\nCURRENT GOVERNING DOCUMENTS:\n{$combinedText}";
+    } else {
+        $systemPrompt = <<<PROMPT
+You are building a knowledge base for Woolsy, an AI assistant for the {$building} condominium association.
+
+The following governing documents have been extracted from PDFs. Distill them into a structured Markdown reference that Woolsy will use to answer resident questions accurately.
+
+Guidelines:
+- Organize by topic: Pets, Guests, Rentals, Parking, Smoking, Alterations, Maintenance, Assessments, Board Structure, Common Elements, Procedures, Contacts, etc.
+- After each rule or fact, add a source attribution in parentheses: (Source: Document Name)
+- Be comprehensive but readable — this is a reference document used by an AI chatbot
+- Skip boilerplate: recitals, "WHEREAS" clauses, signature blocks, and self-explanatory legal definitions
+- Include fees, fines, deadlines, and contact information when present
+
+Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
+PROMPT;
+        $userContent = "GOVERNING DOCUMENTS:\n{$combinedText}";
+    }
+
+    // Call Claude
+    $apiKey = getenv('ANTHROPIC_API_KEY');
+    if (!$apiKey) {
+        echo json_encode(['error' => 'API key not configured on server.']);
+        exit;
+    }
+
+    $payload = json_encode([
+        'model'      => 'claude-haiku-4-5-20251001',
+        'max_tokens' => 6000,
+        'system'     => $systemPrompt,
+        'messages'   => [['role' => 'user', 'content' => $userContent]],
+    ]);
+
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'x-api-key: '          . $apiKey,
+            'anthropic-version: 2023-06-01',
+        ],
+        CURLOPT_TIMEOUT        => 120,
+    ]);
+    $response = curl_exec($ch);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr) {
+        echo json_encode(['error' => 'API request failed: ' . $curlErr]);
+        exit;
+    }
+
+    $data     = json_decode($response, true);
+    $proposed = '';
+    foreach ($data['content'] ?? [] as $block) {
+        if ($block['type'] === 'text') { $proposed = $block['text']; break; }
+    }
+
+    if (!$proposed) {
+        echo json_encode(['error' => 'No response from Claude. Check API key and credits.']);
+        exit;
+    }
+
+    // Deduct credits
+    $inputTokens  = (int)($data['usage']['input_tokens']  ?? 0);
+    $outputTokens = (int)($data['usage']['output_tokens'] ?? 0);
+    $creditsUsed  = round(($inputTokens * 0.0000008) + ($outputTokens * 0.000004), 6);
+    deductCredits($building, $creditsUsed);
+
+    // Cache proposed content in session
+    $_SESSION['woolsy_proposed_' . $building] = $proposed;
+
+    echo json_encode(['proposed' => $proposed, 'creditsUsed' => $creditsUsed]);
+    exit;
+}
+
+// --- save: write rules.md, stamp baseline ---
+if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+
+    $proposed = $_SESSION['woolsy_proposed_' . $building] ?? '';
+    if (!$proposed) {
+        echo json_encode(['error' => 'No proposed content to save. Please re-run the process.']);
+        exit;
+    }
+
+    $rulesFile = RULES_DIR . $building . '_rules.md';
+    if (file_exists($rulesFile)) {
+        copy($rulesFile, $rulesFile . '.bak');
+    }
+    if (file_put_contents($rulesFile, $proposed) === false) {
+        echo json_encode(['error' => 'Could not save file. Check that faqs/ folder is writable.']);
+        exit;
+    }
+
+    // Stamp baseline in Apps Script (registers building for weekly checks)
+    callAppsScript([
+        'action'         => 'stampBaseline',
+        'building'       => $building,
+        'publicFolderId' => $publicFolderId,
+    ], 30);
+
+    // Clear session caches for this building
+    $prefix = 'woolsy_text_' . $building . '_';
+    foreach (array_keys($_SESSION) as $key) {
+        if (strpos($key, $prefix) === 0 || $key === 'woolsy_proposed_' . $building) {
+            unset($_SESSION[$key]);
+        }
+    }
+
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// -------------------------------------------------------
+// Page render — determine mode + fetch doccheck if update
+// -------------------------------------------------------
+$rulesFile    = RULES_DIR . $building . '_rules.md';
+$mode         = file_exists($rulesFile) ? 'update' : 'setup';
+$changedFiles = [];
+$lastChecked  = '';
+
+if ($mode === 'update') {
+    $checkResult  = callAppsScript(['action' => 'docCheckResult', 'building' => $building], 15);
+    $changedFiles = $checkResult['changes']   ?? [];
+    $lastChecked  = $checkResult['checkedAt'] ?? '';
+}
+
+$buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
+$pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Woolsy Knowledge Base';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><?= htmlspecialchars($buildLabel) ?> – <?= htmlspecialchars($pageTitle) ?></title>
+  <style>
+    body             { font-family: sans-serif; max-width: 820px; margin: 3rem auto; padding: 0 1rem; }
+    .top-bar         { display: flex; align-items: baseline; gap: 1.5rem; margin-bottom: 1.5rem; }
+    h1               { margin: 0; font-size: 1.4rem; }
+    .back-link       { font-size: 0.9rem; color: #0070f3; text-decoration: none; white-space: nowrap; }
+    .back-link:hover { text-decoration: underline; }
+    .page-title      { font-size: 1.15rem; font-weight: bold; margin-bottom: 0.4rem; }
+    .page-desc       { font-size: 0.9rem; color: #555; margin-bottom: 1.5rem; line-height: 1.5; }
+    .muted           { color: #888; }
+    .progress-msg    { font-size: 0.95rem; color: #555; margin-bottom: 1rem; line-height: 1.6; }
+    .file-table      { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-bottom: 1rem; }
+    .file-table th   { text-align: left; border-bottom: 2px solid #ddd; padding: 0.4rem 0.6rem; color: #333; }
+    .file-table td   { border-bottom: 1px solid #eee; padding: 0.4rem 0.6rem; vertical-align: middle; }
+    .file-name       { max-width: 320px; word-break: break-word; }
+    .st-ok           { color: #1a7f37; }
+    .st-warn         { color: #b45309; }
+    .st-muted        { color: #aaa; }
+    .badge           { font-size: 0.75rem; font-weight: bold; padding: 0.15rem 0.45rem; border-radius: 3px; }
+    .badge-new       { background: #dcfce7; color: #166534; }
+    .badge-modified  { background: #fef9c3; color: #713f12; }
+    .badge-removed   { background: #fee2e2; color: #7f1d1d; }
+    .warn-box        { padding: 0.65rem 0.9rem; background: #fffbeb; border: 1px solid #f59e0b;
+                       border-radius: 4px; font-size: 0.875rem; color: #92400e; margin-bottom: 1rem; }
+    .estimate-box    { padding: 0.65rem 0.9rem; background: #eff6ff; border: 1px solid #bfdbfe;
+                       border-radius: 4px; font-size: 0.9rem; margin-bottom: 1.25rem; }
+    .action-row      { display: flex; align-items: center; gap: 1.5rem; margin-top: 0.5rem; }
+    .action-btn      { padding: 0.6rem 1.4rem; background: #0070f3; color: #fff; border: none;
+                       border-radius: 4px; font-size: 0.95rem; cursor: pointer; }
+    .action-btn:hover     { background: #005bb5; }
+    .action-btn:disabled  { background: #ccc; cursor: not-allowed; }
+    .action-btn-link { display: inline-block; padding: 0.5rem 1.2rem; background: #0070f3;
+                       color: #fff; border-radius: 4px; font-size: 0.9rem; text-decoration: none; }
+    .cancel-link          { color: #666; font-size: 0.9rem; text-decoration: none; }
+    .cancel-link:hover    { text-decoration: underline; }
+    .proposed-wrap   { border: 1px solid #ddd; border-radius: 4px; background: #fafafa;
+                       max-height: 500px; overflow-y: auto; margin-bottom: 1.25rem; padding: 1rem; }
+    .proposed-wrap pre    { margin: 0; white-space: pre-wrap; font-family: sans-serif;
+                            font-size: 0.85rem; line-height: 1.65; }
+    .review-note     { font-size: 0.9rem; margin-bottom: 0.75rem; }
+    .success-msg     { font-size: 1.1rem; color: #1a7f37; margin-bottom: 1rem; }
+    .error-box       { padding: 0.7rem 1rem; background: #fef2f2; border: 1px solid #fca5a5;
+                       border-radius: 4px; color: #7f1d1d; font-size: 0.9rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="admin.php?building=<?= urlencode($building) ?>" class="back-link">← Admin</a>
+  <h1><?= htmlspecialchars($buildLabel) ?> – Woolsy</h1>
+</div>
+
+<div class="page-title">🐑 <?= htmlspecialchars($pageTitle) ?></div>
+<div class="page-desc">
+  <?php if ($mode === 'setup'): ?>
+    Woolsy will read the governing documents in your Public folder and build a knowledge base
+    for answering resident questions. This only needs to be done once.
+  <?php else: ?>
+    Changes were detected in your governing documents. Woolsy will re-read all current documents
+    and regenerate the knowledge base.
+    <?php if ($lastChecked): ?>
+      <br><span class="muted">Last checked: <?= htmlspecialchars(date('M j, Y', strtotime($lastChecked))) ?></span>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+
+<!-- Step: probe (file listing + progress) -->
+<div id="step-probe">
+  <div class="progress-msg" id="progress-msg">⏳ Fetching document list… please wait</div>
+  <table class="file-table" id="file-table" style="display:none">
+    <thead>
+      <tr>
+        <th>Folder</th>
+        <th>File</th>
+        <th>Status</th>
+        <?php if ($mode === 'update'): ?><th>Change</th><?php endif; ?>
+      </tr>
+    </thead>
+    <tbody id="file-tbody"></tbody>
+  </table>
+</div>
+
+<!-- Step: ready to process -->
+<div id="step-ready" style="display:none">
+  <div id="readability-warning" class="warn-box" style="display:none"></div>
+  <div class="estimate-box" id="estimate-box"></div>
+  <div class="action-row">
+    <button class="action-btn" id="process-btn" onclick="startProcess()">
+      <?= $mode === 'setup' ? 'Build Knowledge Base' : 'Update Knowledge Base' ?>
+    </button>
+    <a href="admin.php?building=<?= urlencode($building) ?>" class="cancel-link">Cancel</a>
+  </div>
+</div>
+
+<!-- Step: processing -->
+<div id="step-processing" style="display:none">
+  <div class="progress-msg">
+    ⏳ Woolsy is reading your documents and building the knowledge base…<br>
+    <span class="muted">This may take up to a minute.</span>
+  </div>
+</div>
+
+<!-- Step: review proposed content -->
+<div id="step-review" style="display:none">
+  <div class="review-note">
+    ✅ Woolsy has generated your knowledge base. Review it below before saving.<br>
+    <span class="muted" id="credits-used-line"></span>
+  </div>
+  <div class="proposed-wrap"><pre id="proposed-content"></pre></div>
+  <div class="action-row">
+    <button class="action-btn" onclick="saveKnowledgeBase()">Accept &amp; Save</button>
+    <a href="admin.php?building=<?= urlencode($building) ?>" class="cancel-link">Cancel</a>
+  </div>
+</div>
+
+<!-- Step: saving -->
+<div id="step-saving" style="display:none">
+  <div class="progress-msg">⏳ Saving knowledge base…</div>
+</div>
+
+<!-- Step: done -->
+<div id="step-done" style="display:none">
+  <div class="success-msg">✅ Knowledge base saved successfully!</div>
+  <p><a href="admin.php?building=<?= urlencode($building) ?>" class="action-btn-link">← Back to Admin</a></p>
+</div>
+
+<!-- Error display (shown alongside current step) -->
+<div id="error-box" class="error-box" style="display:none"></div>
+
+<script>
+const BUILDING     = <?= json_encode($building) ?>;
+const MODE         = <?= json_encode($mode) ?>;
+const CHANGED_FILES = <?= json_encode($changedFiles) ?>;
+const BASE_URL     = 'woolsy-update.php?building=' + encodeURIComponent(BUILDING);
+
+let allFiles = [];
+
+// -------------------------------------------------------
+// Boot
+// -------------------------------------------------------
+document.addEventListener('DOMContentLoaded', startProbe);
+
+// -------------------------------------------------------
+// Step 1: Fetch file list
+// -------------------------------------------------------
+async function startProbe() {
+  showStep('probe');
+  setProgress('⏳ Fetching document list… please wait');
+
+  let data;
+  try {
+    const resp = await fetch(BASE_URL + '&action=listFiles');
+    data = await resp.json();
+  } catch(e) {
+    showError('Could not load document list. Please try again.');
+    return;
+  }
+  if (data.error) { showError(data.error); return; }
+
+  const inc  = (data.IncorporationDocs || []).map(f => ({...f, folder: 'IncorporationDocs', status: 'pending'}));
+  const rules = (data.RulesDocs        || []).map(f => ({...f, folder: 'RulesDocs',         status: 'pending'}));
+  allFiles = [...inc, ...rules];
+
+  if (allFiles.length === 0) {
+    showError('No documents found in IncorporationDocs or RulesDocs folders.');
+    return;
+  }
+
+  document.getElementById('file-table').style.display = '';
+  renderTable();
+  await probeAllFiles();
+}
+
+// -------------------------------------------------------
+// Step 2: Probe files one by one (AJAX, sequential)
+// -------------------------------------------------------
+async function probeAllFiles() {
+  for (let i = 0; i < allFiles.length; i++) {
+    const file = allFiles[i];
+    setProgress('⏳ Checking documents… (' + (i + 1) + ' of ' + allFiles.length + ')');
+    file.status = 'checking';
+    updateRow(file);
+
+    try {
+      const resp = await fetch(BASE_URL + '&action=probeFile&fileId=' + encodeURIComponent(file.id));
+      const data = await resp.json();
+      file.readable  = data.readable === true;
+      file.charCount = data.charCount || 0;
+      file.status    = file.readable ? 'readable' : 'scanned';
+    } catch(e) {
+      file.readable  = false;
+      file.charCount = 0;
+      file.status    = 'error';
+    }
+    updateRow(file);
+  }
+  setProgress('');
+  showReadySummary();
+}
+
+// -------------------------------------------------------
+// Step 3: Summary + credit estimate
+// -------------------------------------------------------
+function showReadySummary() {
+  const readable   = allFiles.filter(f => f.readable);
+  const unreadable = allFiles.filter(f => !f.readable && f.status === 'scanned');
+  const errors     = allFiles.filter(f => f.status === 'error');
+
+  // Estimate: charCount / 4 ≈ tokens; output ≈ 25% of input
+  // Haiku: 0.80 credits/MTok input, 4.00 credits/MTok output
+  const inputTokens  = readable.reduce((s, f) => s + (f.charCount / 4), 0);
+  const outputTokens = inputTokens * 0.25;
+  const estimated    = (inputTokens / 1e6 * 0.80) + (outputTokens / 1e6 * 4.00);
+  const estStr       = estimated < 0.01 ? '< 0.01' : estimated.toFixed(2);
+  const fileSummary  = readable.length + ' of ' + allFiles.length + ' file' + (allFiles.length !== 1 ? 's' : '') + ' readable';
+
+  document.getElementById('estimate-box').innerHTML =
+    '<strong>Estimated cost:</strong> ~' + estStr + ' credits' +
+    '&nbsp; <span class="muted">(' + fileSummary + ', ~' + Math.round(inputTokens).toLocaleString() + ' input tokens — approximate)</span>';
+
+  const warnParts = [];
+  if (unreadable.length > 0) {
+    const names = unreadable.map(f => f.name).join(', ');
+    warnParts.push('<strong>' + unreadable.length + ' file' + (unreadable.length !== 1 ? 's' : '') +
+      ' could not be read</strong> (possibly scanned images): ' + escHtml(names) +
+      '. For best results, replace scanned PDFs with text-based versions. Woolsy will skip these.');
+  }
+  if (errors.length > 0) {
+    warnParts.push(errors.length + ' file' + (errors.length !== 1 ? 's' : '') + ' could not be checked due to a connection error and will be skipped.');
+  }
+  const warnEl = document.getElementById('readability-warning');
+  if (warnParts.length > 0) {
+    warnEl.innerHTML = '⚠️ ' + warnParts.join(' ');
+    warnEl.style.display = '';
+  }
+
+  if (readable.length === 0) {
+    document.getElementById('process-btn').disabled = true;
+  }
+
+  showStep('ready');
+}
+
+// -------------------------------------------------------
+// Step 4: Process (call Claude via PHP)
+// -------------------------------------------------------
+async function startProcess() {
+  showStep('processing');
+  clearError();
+
+  const removedFiles = CHANGED_FILES.filter(f => f.action === 'removed');
+
+  let data;
+  try {
+    const resp = await fetch(BASE_URL + '&action=process', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ files: allFiles, mode: MODE, removedFiles: removedFiles })
+    });
+    data = await resp.json();
+  } catch(e) {
+    showError('Request failed. Please try again.');
+    showStep('probe');
+    return;
+  }
+
+  if (data.error) {
+    showError(data.error);
+    showStep('probe');
+    return;
+  }
+
+  document.getElementById('proposed-content').textContent = data.proposed;
+  document.getElementById('credits-used-line').textContent = 'Credits used: ' + data.creditsUsed;
+  showStep('review');
+}
+
+// -------------------------------------------------------
+// Step 5: Save
+// -------------------------------------------------------
+async function saveKnowledgeBase() {
+  showStep('saving');
+  clearError();
+
+  let data;
+  try {
+    const resp = await fetch(BASE_URL + '&action=save', { method: 'POST' });
+    data = await resp.json();
+  } catch(e) {
+    showError('Save failed. Please try again.');
+    showStep('review');
+    return;
+  }
+
+  if (data.error) {
+    showError(data.error);
+    showStep('review');
+    return;
+  }
+  showStep('done');
+}
+
+// -------------------------------------------------------
+// Table rendering
+// -------------------------------------------------------
+function renderTable() {
+  const tbody = document.getElementById('file-tbody');
+  tbody.innerHTML = '';
+  allFiles.forEach(file => {
+    const tr = document.createElement('tr');
+    tr.id = 'row-' + file.id;
+    tbody.appendChild(tr);
+    updateRow(file);
+  });
+}
+
+function updateRow(file) {
+  const tr = document.getElementById('row-' + file.id);
+  if (!tr) return;
+
+  const statusHtml = {
+    pending:  '<span class="st-muted">⏳ Pending</span>',
+    checking: '<span class="st-muted">⏳ Checking…</span>',
+    readable: '<span class="st-ok">✅ Readable</span>',
+    scanned:  '<span class="st-warn">⚠️ Possibly scanned</span>',
+    error:    '<span class="st-warn">⚠️ Could not check</span>',
+  }[file.status] || '';
+
+  let changeBadge = '';
+  if (MODE === 'update') {
+    const chg = CHANGED_FILES.find(c => c.name === file.name && c.folder === file.folder);
+    if (chg) {
+      const labels  = { new: 'NEW', modified: 'MODIFIED', removed: 'REMOVED' };
+      const classes = { new: 'badge-new', modified: 'badge-modified', removed: 'badge-removed' };
+      changeBadge = '<span class="badge ' + (classes[chg.action] || '') + '">' + (labels[chg.action] || chg.action.toUpperCase()) + '</span>';
+    }
+  }
+
+  tr.innerHTML =
+    '<td>' + escHtml(file.folder) + '</td>' +
+    '<td class="file-name">' + escHtml(file.name) + '</td>' +
+    '<td>' + statusHtml + '</td>' +
+    (MODE === 'update' ? '<td>' + changeBadge + '</td>' : '');
+}
+
+// -------------------------------------------------------
+// UI helpers
+// -------------------------------------------------------
+const STEPS = ['probe', 'ready', 'processing', 'review', 'saving', 'done'];
+
+function showStep(step) {
+  STEPS.forEach(s => {
+    const el = document.getElementById('step-' + s);
+    if (el) el.style.display = s === step ? '' : 'none';
+  });
+  // Keep probe table visible as background during ready step
+  if (step === 'ready') {
+    document.getElementById('step-probe').style.display = '';
+  }
+}
+
+function setProgress(msg) {
+  const el = document.getElementById('progress-msg');
+  if (el) el.innerHTML = msg;
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-box');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = '';
+}
+
+function clearError() {
+  document.getElementById('error-box').style.display = 'none';
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
