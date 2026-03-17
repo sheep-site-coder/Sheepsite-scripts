@@ -197,14 +197,21 @@ PHP renders file browser in iframe on building website
 - [x] Condo-Life-at-Lyndhurst-H.html — styled HTML version of the Rules Summary PDF,
       matching the PDF's Garamond font, blue/black label colors, red highlights, and layout;
       saved to Sharefolder/lyndhurst-rules-new/
+- [x] Woolsy credit system — tracking, gating, and admin display:
+      - chatbot.php: credit check before each API call (hard stop at limit); token-cost
+        deduction after successful call using Haiku pricing ($0.80/$4.00 per MTok)
+      - faqs/woolsy_credits.json: seed file (gitignored, upload manually); all buildings
+        start at 1 credit allocated, 0 used
+      - admin.php: Woolsy Knowledge Base card always visible; shows used/allocated with
+        progress bar, low-credit warning (≥80%), exhausted notice (100%)
+      - master-admin.php: new operator-only page (auth: _master.json); Woolsy Management
+        section — all-buildings credit table (allocated/used/remaining/status) + top-up form
+      - All files uploaded to server ✓
 
 ---
 
 ## Next Steps
 
-- **faqs/ folder fully uploaded to server** ✓ — all files in place:
-  _global.txt, states/FL.txt, communities/CVE.txt, LyndhurstH.txt, SampleSite.txt,
-  LyndhurstH_rules.md, SampleSite_rules.md
 - **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates;
   need real content (office hours, management contact, pool/amenity info specific to the building)
 - **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` +
@@ -217,8 +224,10 @@ PHP renders file browser in iframe on building website
 - Upload docs/ folder files to Sharefolder / distribute as needed
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 - **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
+- **Doc indexing by admin** (design locked, not yet built): checkRulesDocs() in dir-display-bridge.gs,
+  Update Woolsy button + delta review UI in admin.php, Claude-powered rules merge
 
 ---
 
-*Snapshot updated: March 17, 2026 (session 9)*
+*Snapshot updated: March 17, 2026 (session 10)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
