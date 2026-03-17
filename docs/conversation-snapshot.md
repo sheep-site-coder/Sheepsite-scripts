@@ -181,19 +181,33 @@ PHP renders file browser in iframe on building website
         not per person; spouse of 55+ owner may reside regardless of own age; adult child of
         part-year owner faces 14-day guest cap when owner absent + unresolved compliance question
         if seeking approved resident status; both scenarios include full supporting reasoning
-      - File is gitignored (faqs/*_rules.md) — must be uploaded to server manually at
-        Scripts/faqs/LyndhurstH_rules.md; faqs/ folder does not yet exist on server
+      - File is gitignored (faqs/*_rules.md) — must be uploaded to server manually
+- [x] LyndhurstH_rules.md expanded with 3 additional Board documents (March 2026):
+      - "Welcome to Lyndhurst H" (Dec 2025), "Condo Life at Lyndhurst H" (Apr 2025),
+        Bulk & Debris Rules — all merged into LyndhurstH_rules.md
+      - New sections: Contacts & Resources, Bulk Trash & Debris, Major Deliveries & Moving,
+        Electric Bikes/Scooters, Security Gate & ID Cards, Communications & Board Contact
+      - Updated sections: Smoking (25-ft rule), Renovation Rules (hours, permits, approval
+        package, contractor requirements), Maintenance (A/C fluid, water heater, pest control),
+        Common Elements (garbage disposal, laundry hours/no-bleach, catwalks fire rule, no
+        feeding animals), Parking (15 guest spots, forward-in rule, car washing clarified),
+        Guest Rules (must be present; guest pass process), Rental (55+ occupant required)
+      - Source PDFs stored in Sharefolder/lyndhurst-rules-new/
+- [x] SampleSite.txt and SampleSite_rules.md created (mirrors LyndhurstH — same community)
+- [x] Condo-Life-at-Lyndhurst-H.html — styled HTML version of the Rules Summary PDF,
+      matching the PDF's Garamond font, blue/black label colors, red highlights, and layout;
+      saved to Sharefolder/lyndhurst-rules-new/
 
 ---
 
 ## Next Steps
 
-- **Create faqs/ folder on server** at Scripts/faqs/ (and subfolders states/, communities/); upload:
-  - faqs/_global.txt, faqs/states/FL.txt, faqs/communities/CVE.txt
+- **Upload faqs/ folder to server** — communities/ folder created, CVE.txt uploaded; still needed:
+  - faqs/_global.txt, faqs/states/FL.txt (create states/ subfolder first)
   - faqs/LyndhurstH.txt, faqs/SampleSite.txt
-  - faqs/LyndhurstH_rules.md (gitignored — copy from local)
-- **Fill in building FAQs** — faqs/LyndhurstH.txt is a template, needs real content
-  (office hours, management contact, pool/amenity info, etc.)
+  - faqs/LyndhurstH_rules.md, faqs/SampleSite_rules.md (gitignored — copy from local)
+- **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates;
+  need real content (office hours, management contact, pool/amenity info specific to the building)
 - **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` +
   chatbot-widget.js script tag to their footers
 - **Upload file-manager.php** to server — tag-on-replace fix requires this updated file
@@ -207,5 +221,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot updated: March 15, 2026 (session 8)*
+*Snapshot updated: March 17, 2026 (session 9)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
