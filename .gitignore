@@ -4,5 +4,8 @@ credentials/*.json
 # Chatbot: distilled governing docs (building-specific, generated during setup)
 faqs/*_rules.md
 
+# Chatbot: live credit data (server-managed, upload manually)
+faqs/woolsy_credits.json
+
 # Local working files — PDFs, screenshots, etc.
 Sharefolder/
