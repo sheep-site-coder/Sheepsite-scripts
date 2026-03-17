@@ -204,9 +204,14 @@ PHP renders file browser in iframe on building website
         start at 1 credit allocated, 0 used
       - admin.php: Woolsy Knowledge Base card always visible; shows used/allocated with
         progress bar, low-credit warning (≥80%), exhausted notice (100%)
-      - master-admin.php: new operator-only page (auth: _master.json); Woolsy Management
-        section — all-buildings credit table (allocated/used/remaining/status) + top-up form
+      - master-admin.php: operator card hub (auth: _master.json); Woolsy Management card
+        links to woolsy-admin.php
+      - woolsy-admin.php: all-buildings credit table (allocated/used/remaining/status) +
+        top-up form; "← Master Admin" back link
       - All files uploaded to server ✓
+- [x] CVE.txt: added Building Types section (2-story Garden vs 4-story with internal
+      elevators) and exterior elevator removal Q&A (FL 718.113 material alteration,
+      Fair Housing Act exposure, permit requirements)
 
 ---
 
@@ -229,5 +234,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot updated: March 17, 2026 (session 10)*
+*Snapshot updated: March 17, 2026 (session 11)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
