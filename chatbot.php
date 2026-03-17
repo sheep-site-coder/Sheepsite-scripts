@@ -34,19 +34,28 @@ function loadFaq(string $path): string {
     return file_exists($path) ? "\n\n" . trim(file_get_contents($path)) : '';
 }
 
+// Always load: global, community (if any), building-specific layers
 $context  = loadFaq(__DIR__ . '/faqs/_global.txt');
-$context .= loadFaq(__DIR__ . "/faqs/states/{$state}.txt");
 if ($community) {
     $context .= loadFaq(__DIR__ . "/faqs/communities/{$community}.txt");
 }
 $context .= loadFaq(__DIR__ . "/faqs/{$building}.txt");
 $context .= loadFaq(__DIR__ . "/faqs/{$building}_rules.md");
 
+// Selectively load state law layer — only when question is about legal rights,
+// meetings, records, statutes, or association governance
+$stateKeywords = '/\b(record|meeting|vote|elect|fine|right|statute|law|718|website|reserve|inspection|estoppel|petition|suspend|quorum|notice|proxy|amendment|budget|assessment|arbitration|hearing|committee|sirs|milestone)\b/i';
+if ($state && preg_match($stateKeywords, $question)) {
+    $context .= loadFaq(__DIR__ . "/faqs/states/{$state}.txt");
+}
+
 $systemPrompt = <<<PROMPT
 You are Woolsy, a friendly and knowledgeable assistant for {$building} condominium association residents.
 
 Answer questions based on the FAQ and governing document information provided below.
-Be concise and friendly.
+Be concise and conversational — this is a chat interface, not a document. For simple questions,
+answer in 2-4 sentences. For multi-part questions, use brief bullets. Avoid headers and avoid
+restating the question.
 
 Guidelines:
 - Use the provided content to answer as fully as possible — don't deflect unnecessarily.
@@ -82,7 +91,7 @@ $apiKey = getenv('ANTHROPIC_API_KEY');
 
 $payload = json_encode([
     'model'      => 'claude-haiku-4-5-20251001',
-    'max_tokens' => 1024,
+    'max_tokens' => 768,
     'system'     => $systemPrompt,
     'messages'   => $messages,
 ]);
