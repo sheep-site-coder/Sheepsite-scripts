@@ -202,10 +202,9 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
-- **Upload faqs/ folder to server** — communities/ folder created, CVE.txt uploaded; still needed:
-  - faqs/_global.txt, faqs/states/FL.txt (create states/ subfolder first)
-  - faqs/LyndhurstH.txt, faqs/SampleSite.txt
-  - faqs/LyndhurstH_rules.md, faqs/SampleSite_rules.md (gitignored — copy from local)
+- **faqs/ folder fully uploaded to server** ✓ — all files in place:
+  _global.txt, states/FL.txt, communities/CVE.txt, LyndhurstH.txt, SampleSite.txt,
+  LyndhurstH_rules.md, SampleSite_rules.md
 - **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates;
   need real content (office hours, management contact, pool/amenity info specific to the building)
 - **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` +
