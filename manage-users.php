@@ -437,7 +437,10 @@ $users = loadUsers($building);
 
 <div class="top-bar">
   <h1><?= htmlspecialchars($buildLabel) ?> – Resident Admin</h1>
-  <a href="?building=<?= urlencode($building) ?>&logout=1" class="logout-btn">Log out</a>
+  <div style="display:flex;gap:0.75rem;align-items:center;">
+    <a href="admin.php?building=<?= urlencode($building) ?>" class="logout-btn">← Admin</a>
+    <a href="?building=<?= urlencode($building) ?>&logout=1" class="logout-btn">Log out</a>
+  </div>
 </div>
 
 <?php if ($message): ?>

@@ -5,8 +5,10 @@
 //
 // Setup mode  — no faqs/{building}_rules.md exists yet.
 //               Reads all current docs, builds from scratch.
+//               All sections shown as NEW checkboxes.
 // Update mode — rules.md exists; doc changes detected.
 //               Re-reads all current docs, regenerates fully.
+//               Only changed/added/removed sections shown.
 //
 // Auth: reuses manage_auth_{building} session from admin.php.
 // -------------------------------------------------------
@@ -87,11 +89,97 @@ function deductCredits(string $building, float $cost): void {
 }
 
 // -------------------------------------------------------
+// Helper: section-level diff of rules.md content
+// Splits on ## headings. Returns assoc [title => body].
+// -------------------------------------------------------
+function parseSections(string $md): array {
+    $sections = [];
+    $current  = null;
+    $body     = '';
+    foreach (explode("\n", $md) as $line) {
+        if (preg_match('/^## (.+)/', $line, $m)) {
+            if ($current !== null) {
+                $sections[$current] = trim($body);
+            }
+            $current = trim($m[1]);
+            $body    = '';
+        } else {
+            $body .= $line . "\n";
+        }
+    }
+    if ($current !== null) {
+        $sections[$current] = trim($body);
+    }
+    return $sections;
+}
+
+// Compute delta between old and new section maps.
+// Returns array of ['type'=>NEW|CHANGED|REMOVED, 'title'=>..., 'content'=>..., 'old'=>...]
+function computeDelta(array $old, array $new): array {
+    $delta = [];
+    foreach ($new as $title => $body) {
+        if (!isset($old[$title])) {
+            $delta[] = ['type' => 'NEW',     'title' => $title, 'content' => $body];
+        } elseif ($old[$title] !== $body) {
+            $delta[] = ['type' => 'CHANGED', 'title' => $title, 'content' => $body, 'old' => $old[$title]];
+        }
+        // unchanged → omitted from delta, always kept
+    }
+    foreach ($old as $title => $body) {
+        if (!isset($new[$title])) {
+            $delta[] = ['type' => 'REMOVED', 'title' => $title, 'old' => $body];
+        }
+    }
+    return $delta;
+}
+
+// Rebuild final rules.md from accepted delta titles.
+// accepted = set of section titles whose proposed change was accepted.
+function rebuildRules(array $oldSections, array $newSections, array $delta, array $accepted): string {
+    $acceptedSet = array_flip($accepted);
+    $result      = [];
+
+    // Walk through proposed sections in order
+    foreach ($newSections as $title => $newBody) {
+        $deltaType = null;
+        foreach ($delta as $d) {
+            if ($d['title'] === $title) { $deltaType = $d['type']; break; }
+        }
+        if ($deltaType === null) {
+            // Unchanged — always include (new content === old content)
+            $result[$title] = $newBody;
+        } elseif ($deltaType === 'NEW') {
+            // Include only if accepted
+            if (isset($acceptedSet[$title])) {
+                $result[$title] = $newBody;
+            }
+        } elseif ($deltaType === 'CHANGED') {
+            // Use new content if accepted; keep old if not
+            $result[$title] = isset($acceptedSet[$title]) ? $newBody : ($oldSections[$title] ?? $newBody);
+        }
+    }
+
+    // Re-append REMOVED sections whose removal was rejected (not accepted)
+    foreach ($delta as $d) {
+        if ($d['type'] === 'REMOVED' && !isset($acceptedSet[$d['title']])) {
+            $result[$d['title']] = $d['old'];
+        }
+    }
+
+    // Assemble markdown
+    $md = '';
+    foreach ($result as $title => $body) {
+        $md .= "## {$title}\n\n{$body}\n\n";
+    }
+    return trim($md);
+}
+
+// -------------------------------------------------------
 // AJAX actions
 // -------------------------------------------------------
 $action = $_GET['action'] ?? '';
 
-// --- listFiles: return file listing from IncorporationDocs + RulesDocs ---
+// --- listFiles ---
 if ($action === 'listFiles') {
     header('Content-Type: application/json');
     $result = callAppsScript([
@@ -103,7 +191,7 @@ if ($action === 'listFiles') {
     exit;
 }
 
-// --- probeFile: extract text from one PDF, cache result in session ---
+// --- probeFile: extract text from one PDF, cache in session ---
 if ($action === 'probeFile') {
     header('Content-Type: application/json');
     set_time_limit(120);
@@ -127,7 +215,7 @@ if ($action === 'probeFile') {
     exit;
 }
 
-// --- process: assemble docs + call Claude, return proposed rules.md ---
+// --- process: call Claude, compute delta, return to client ---
 if ($action === 'process' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     set_time_limit(180);
@@ -161,20 +249,17 @@ if ($action === 'process' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // Build combined document text
     $combinedText = '';
     foreach ($docTexts as $doc) {
         $combinedText .= "\n\n=== {$doc['folder']} / {$doc['name']} ===\n\n" . $doc['text'];
     }
 
-    // Note about removed files
     $removedNote = '';
     if (!empty($removedFiles)) {
         $removedNames = array_map(function($f) { return $f['folder'] . '/' . $f['name']; }, $removedFiles);
-        $removedNote  = "\n\nNote: The following files have been removed and their content should be omitted from the knowledge base:\n- " . implode("\n- ", $removedNames);
+        $removedNote  = "\n\nNote: The following files have been removed and their content should be omitted:\n- " . implode("\n- ", $removedNames);
     }
 
-    // Build Claude prompt
     $rulesFile     = RULES_DIR . $building . '_rules.md';
     $existingRules = ($mode === 'update' && file_exists($rulesFile))
         ? file_get_contents($rulesFile)
@@ -214,7 +299,6 @@ PROMPT;
         $userContent = "GOVERNING DOCUMENTS:\n{$combinedText}";
     }
 
-    // Call Claude
     $apiKey = getenv('ANTHROPIC_API_KEY');
     if (!$apiKey) {
         echo json_encode(['error' => 'API key not configured on server.']);
@@ -266,43 +350,78 @@ PROMPT;
     $creditsUsed  = round(($inputTokens * 0.0000008) + ($outputTokens * 0.000004), 6);
     deductCredits($building, $creditsUsed);
 
-    // Cache proposed content in session
-    $_SESSION['woolsy_proposed_' . $building] = $proposed;
+    // Compute delta
+    $newSections = parseSections($proposed);
+    $oldSections = $existingRules ? parseSections($existingRules) : [];
+    // Setup mode: every section is "NEW"
+    $delta = $existingRules
+        ? computeDelta($oldSections, $newSections)
+        : array_map(function($title, $body) {
+            return ['type' => 'NEW', 'title' => $title, 'content' => $body];
+          }, array_keys($newSections), array_values($newSections));
 
-    echo json_encode(['proposed' => $proposed, 'creditsUsed' => $creditsUsed]);
+    // Store sections in session for save step
+    $_SESSION['woolsy_new_sections_' . $building] = $newSections;
+    $_SESSION['woolsy_old_sections_' . $building] = $oldSections;
+    $_SESSION['woolsy_delta_'        . $building] = $delta;
+
+    echo json_encode(['delta' => $delta, 'creditsUsed' => $creditsUsed]);
     exit;
 }
 
-// --- save: write rules.md, stamp baseline ---
+// --- save: apply accepted delta items, write rules.md ---
 if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
 
-    $proposed = $_SESSION['woolsy_proposed_' . $building] ?? '';
-    if (!$proposed) {
-        echo json_encode(['error' => 'No proposed content to save. Please re-run the process.']);
+    $newSections = $_SESSION['woolsy_new_sections_' . $building] ?? [];
+    $oldSections = $_SESSION['woolsy_old_sections_' . $building] ?? [];
+    $delta       = $_SESSION['woolsy_delta_'        . $building] ?? [];
+
+    if (empty($newSections)) {
+        echo json_encode(['error' => 'Session expired. Please re-run the process.']);
         exit;
     }
 
+    $body     = json_decode(file_get_contents('php://input'), true) ?? [];
+    $accepted = $body['accepted'] ?? [];
+
+    $final     = rebuildRules($oldSections, $newSections, $delta, $accepted);
     $rulesFile = RULES_DIR . $building . '_rules.md';
+
     if (file_exists($rulesFile)) {
         copy($rulesFile, $rulesFile . '.bak');
     }
-    if (file_put_contents($rulesFile, $proposed) === false) {
+    if (file_put_contents($rulesFile, $final) === false) {
         echo json_encode(['error' => 'Could not save file. Check that faqs/ folder is writable.']);
         exit;
     }
 
-    // Stamp baseline in Apps Script (registers building for weekly checks)
+    // Stamp baseline in Apps Script
     callAppsScript([
         'action'         => 'stampBaseline',
         'building'       => $building,
         'publicFolderId' => $publicFolderId,
     ], 30);
 
-    // Clear session caches for this building
+    // Rebuild document index automatically after each save
+    $indexResult = callAppsScript(['action' => 'buildDocIndex', 'publicFolderId' => $publicFolderId], 30);
+    if (!empty($indexResult['sections'])) {
+        $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
+        foreach ($indexResult['sections'] as $section) {
+            $lines[] = $section['path'] . '/';
+            foreach ($section['files'] as $file) { $lines[] = "  \u{2022} " . $file; }
+            $lines[] = '';
+        }
+        file_put_contents(RULES_DIR . $building . '_docindex.txt', implode("\n", $lines));
+    }
+
+    // Clear session caches
     $prefix = 'woolsy_text_' . $building . '_';
     foreach (array_keys($_SESSION) as $key) {
-        if (strpos($key, $prefix) === 0 || $key === 'woolsy_proposed_' . $building) {
+        if (strpos($key, $prefix) === 0
+            || $key === 'woolsy_new_sections_' . $building
+            || $key === 'woolsy_old_sections_' . $building
+            || $key === 'woolsy_delta_'        . $building) {
             unset($_SESSION[$key]);
         }
     }
@@ -312,7 +431,7 @@ if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // -------------------------------------------------------
-// Page render — determine mode + fetch doccheck if update
+// Page render
 // -------------------------------------------------------
 $rulesFile    = RULES_DIR . $building . '_rules.md';
 $mode         = file_exists($rulesFile) ? 'update' : 'setup';
@@ -367,14 +486,31 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
                        color: #fff; border-radius: 4px; font-size: 0.9rem; text-decoration: none; }
     .cancel-link          { color: #666; font-size: 0.9rem; text-decoration: none; }
     .cancel-link:hover    { text-decoration: underline; }
-    .proposed-wrap   { border: 1px solid #ddd; border-radius: 4px; background: #fafafa;
-                       max-height: 500px; overflow-y: auto; margin-bottom: 1.25rem; padding: 1rem; }
-    .proposed-wrap pre    { margin: 0; white-space: pre-wrap; font-family: sans-serif;
-                            font-size: 0.85rem; line-height: 1.65; }
-    .review-note     { font-size: 0.9rem; margin-bottom: 0.75rem; }
-    .success-msg     { font-size: 1.1rem; color: #1a7f37; margin-bottom: 1rem; }
+    /* Delta checklist */
+    .review-header   { font-size: 0.95rem; margin-bottom: 0.75rem; }
+    .review-header .credits-line { color: #888; font-size: 0.85rem; margin-top: 0.2rem; }
+    .no-changes-box  { padding: 0.75rem 1rem; background: #f0faf0; border: 1px solid #86efac;
+                       border-radius: 4px; color: #166534; font-size: 0.9rem; margin-bottom: 1rem; }
+    .delta-list      { list-style: none; margin: 0 0 1.25rem 0; padding: 0; }
+    .delta-item      { border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.6rem;
+                       background: #fff; }
+    .delta-item.type-new      { border-left: 4px solid #22c55e; }
+    .delta-item.type-changed  { border-left: 4px solid #eab308; }
+    .delta-item.type-removed  { border-left: 4px solid #ef4444; }
+    .delta-item label { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.7rem 0.9rem;
+                        cursor: pointer; }
+    .delta-item input[type=checkbox] { margin-top: 0.2rem; flex-shrink: 0; width: 1rem; height: 1rem; cursor: pointer; }
+    .delta-item-body { flex: 1; min-width: 0; }
+    .delta-title     { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+    .delta-preview   { font-size: 0.8rem; color: #555; line-height: 1.5; }
+    .delta-old       { color: #9a3412; background: #fff7ed; border-radius: 3px;
+                       padding: 0.25rem 0.4rem; margin-bottom: 0.2rem; }
+    .delta-new       { color: #166534; background: #f0fdf4; border-radius: 3px;
+                       padding: 0.25rem 0.4rem; }
+    .delta-label     { font-size: 0.7rem; font-weight: 600; color: #888; margin-bottom: 0.15rem; }
     .error-box       { padding: 0.7rem 1rem; background: #fef2f2; border: 1px solid #fca5a5;
                        border-radius: 4px; color: #7f1d1d; font-size: 0.9rem; margin-top: 1rem; }
+    .success-msg     { font-size: 1.1rem; color: #1a7f37; margin-bottom: 1rem; }
   </style>
 </head>
 <body>
@@ -434,15 +570,18 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
   </div>
 </div>
 
-<!-- Step: review proposed content -->
+<!-- Step: review delta as checklist -->
 <div id="step-review" style="display:none">
-  <div class="review-note">
-    ✅ Woolsy has generated your knowledge base. Review it below before saving.<br>
-    <span class="muted" id="credits-used-line"></span>
+  <div class="review-header">
+    <div id="review-intro"></div>
+    <div class="credits-line" id="credits-used-line"></div>
   </div>
-  <div class="proposed-wrap"><pre id="proposed-content"></pre></div>
+  <div id="no-changes-box" class="no-changes-box" style="display:none">
+    ✅ No differences detected — the knowledge base is already up to date with the current documents.
+  </div>
+  <ul class="delta-list" id="delta-list"></ul>
   <div class="action-row">
-    <button class="action-btn" onclick="saveKnowledgeBase()">Accept &amp; Save</button>
+    <button class="action-btn" id="save-btn" onclick="saveKnowledgeBase()">Save Knowledge Base</button>
     <a href="admin.php?building=<?= urlencode($building) ?>" class="cancel-link">Cancel</a>
   </div>
 </div>
@@ -458,16 +597,17 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
   <p><a href="admin.php?building=<?= urlencode($building) ?>" class="action-btn-link">← Back to Admin</a></p>
 </div>
 
-<!-- Error display (shown alongside current step) -->
+<!-- Error display -->
 <div id="error-box" class="error-box" style="display:none"></div>
 
 <script>
-const BUILDING     = <?= json_encode($building) ?>;
-const MODE         = <?= json_encode($mode) ?>;
+const BUILDING      = <?= json_encode($building) ?>;
+const MODE          = <?= json_encode($mode) ?>;
 const CHANGED_FILES = <?= json_encode($changedFiles) ?>;
-const BASE_URL     = 'woolsy-update.php?building=' + encodeURIComponent(BUILDING);
+const BASE_URL      = 'woolsy-update.php?building=' + encodeURIComponent(BUILDING);
 
 let allFiles = [];
+let currentDelta = [];
 
 // -------------------------------------------------------
 // Boot
@@ -491,8 +631,8 @@ async function startProbe() {
   }
   if (data.error) { showError(data.error); return; }
 
-  const inc  = (data.IncorporationDocs || []).map(f => ({...f, folder: 'IncorporationDocs', status: 'pending'}));
-  const rules = (data.RulesDocs        || []).map(f => ({...f, folder: 'RulesDocs',         status: 'pending'}));
+  const inc   = (data.IncorporationDocs || []).map(f => ({...f, folder: 'IncorporationDocs', status: 'pending'}));
+  const rules = (data.RulesDocs         || []).map(f => ({...f, folder: 'RulesDocs',         status: 'pending'}));
   allFiles = [...inc, ...rules];
 
   if (allFiles.length === 0) {
@@ -506,7 +646,7 @@ async function startProbe() {
 }
 
 // -------------------------------------------------------
-// Step 2: Probe files one by one (AJAX, sequential)
+// Step 2: Probe files one by one
 // -------------------------------------------------------
 async function probeAllFiles() {
   for (let i = 0; i < allFiles.length; i++) {
@@ -540,8 +680,6 @@ function showReadySummary() {
   const unreadable = allFiles.filter(f => !f.readable && f.status === 'scanned');
   const errors     = allFiles.filter(f => f.status === 'error');
 
-  // Estimate: charCount / 4 ≈ tokens; output ≈ 25% of input
-  // Haiku: 0.80 credits/MTok input, 4.00 credits/MTok output
   const inputTokens  = readable.reduce((s, f) => s + (f.charCount / 4), 0);
   const outputTokens = inputTokens * 0.25;
   const estimated    = (inputTokens / 1e6 * 0.80) + (outputTokens / 1e6 * 4.00);
@@ -604,21 +742,106 @@ async function startProcess() {
     return;
   }
 
-  document.getElementById('proposed-content').textContent = data.proposed;
+  currentDelta = data.delta || [];
   document.getElementById('credits-used-line').textContent = 'Credits used: ' + data.creditsUsed;
+
+  renderDelta(currentDelta);
   showStep('review');
 }
 
 // -------------------------------------------------------
-// Step 5: Save
+// Render delta as checklist
+// -------------------------------------------------------
+function renderDelta(delta) {
+  const list    = document.getElementById('delta-list');
+  const introEl = document.getElementById('review-intro');
+  const noChg   = document.getElementById('no-changes-box');
+
+  list.innerHTML = '';
+
+  if (delta.length === 0) {
+    noChg.style.display = '';
+    introEl.textContent = '';
+    document.getElementById('save-btn').textContent = 'Save (no changes)';
+    return;
+  }
+
+  noChg.style.display = 'none';
+
+  if (MODE === 'setup') {
+    introEl.innerHTML = 'Review the sections below. Uncheck any you want to <strong>exclude</strong> from the knowledge base. All are included by default.';
+  } else {
+    introEl.innerHTML = 'The following sections changed. Uncheck any you want to <strong>reject</strong> — rejected changes keep the previous version. All are accepted by default.';
+  }
+
+  const typeClass = { NEW: 'type-new', CHANGED: 'type-changed', REMOVED: 'type-removed' };
+  const typeBadge = {
+    NEW:     '<span class="badge badge-new">NEW</span>',
+    CHANGED: '<span class="badge badge-modified">CHANGED</span>',
+    REMOVED: '<span class="badge badge-removed">REMOVED</span>',
+  };
+
+  delta.forEach(function(item) {
+    const li    = document.createElement('li');
+    li.className = 'delta-item ' + (typeClass[item.type] || '');
+
+    const preview = buildPreview(item);
+
+    li.innerHTML =
+      '<label>' +
+        '<input type="checkbox" checked data-title="' + escAttr(item.title) + '">' +
+        '<div class="delta-item-body">' +
+          '<div class="delta-title">' + typeBadge[item.type] + escHtml(item.title) + '</div>' +
+          '<div class="delta-preview">' + preview + '</div>' +
+        '</div>' +
+      '</label>';
+    list.appendChild(li);
+  });
+}
+
+function buildPreview(item) {
+  const LIMIT = 220;
+  function trunc(str) {
+    if (!str) return '';
+    const s = str.trim().replace(/\n+/g, ' ');
+    return s.length > LIMIT ? escHtml(s.slice(0, LIMIT)) + '…' : escHtml(s);
+  }
+
+  if (item.type === 'NEW') {
+    return trunc(item.content || '');
+  }
+  if (item.type === 'REMOVED') {
+    return '<div class="delta-label">Will be removed:</div>' +
+           '<div class="delta-old">' + trunc(item.old || '') + '</div>';
+  }
+  // CHANGED
+  return '<div class="delta-label">Before:</div>' +
+         '<div class="delta-old">'  + trunc(item.old     || '') + '</div>' +
+         '<div class="delta-label" style="margin-top:0.3rem;">After:</div>' +
+         '<div class="delta-new">' + trunc(item.content || '') + '</div>';
+}
+
+// -------------------------------------------------------
+// Step 5: Save — send accepted titles to server
 // -------------------------------------------------------
 async function saveKnowledgeBase() {
   showStep('saving');
   clearError();
 
+  // Collect checked titles
+  const checkboxes = document.querySelectorAll('#delta-list input[type=checkbox]');
+  const accepted   = [];
+  checkboxes.forEach(function(cb) {
+    if (cb.checked) accepted.push(cb.dataset.title);
+  });
+
   let data;
   try {
-    const resp = await fetch(BASE_URL + '&action=save', { method: 'POST' });
+    const resp = await fetch(BASE_URL + '&action=save', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ accepted: accepted })
+    });
     data = await resp.json();
   } catch(e) {
     showError('Save failed. Please try again.');
@@ -640,7 +863,7 @@ async function saveKnowledgeBase() {
 function renderTable() {
   const tbody = document.getElementById('file-tbody');
   tbody.innerHTML = '';
-  allFiles.forEach(file => {
+  allFiles.forEach(function(file) {
     const tr = document.createElement('tr');
     tr.id = 'row-' + file.id;
     tbody.appendChild(tr);
@@ -662,7 +885,7 @@ function updateRow(file) {
 
   let changeBadge = '';
   if (MODE === 'update') {
-    const chg = CHANGED_FILES.find(c => c.name === file.name && c.folder === file.folder);
+    const chg = CHANGED_FILES.find(function(c) { return c.name === file.name && c.folder === file.folder; });
     if (chg) {
       const labels  = { new: 'NEW', modified: 'MODIFIED', removed: 'REMOVED' };
       const classes = { new: 'badge-new', modified: 'badge-modified', removed: 'badge-removed' };
@@ -683,11 +906,10 @@ function updateRow(file) {
 const STEPS = ['probe', 'ready', 'processing', 'review', 'saving', 'done'];
 
 function showStep(step) {
-  STEPS.forEach(s => {
+  STEPS.forEach(function(s) {
     const el = document.getElementById('step-' + s);
     if (el) el.style.display = s === step ? '' : 'none';
   });
-  // Keep probe table visible as background during ready step
   if (step === 'ready') {
     document.getElementById('step-probe').style.display = '';
   }
@@ -714,6 +936,10 @@ function escHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function escAttr(str) {
+  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 </script>
 </body>

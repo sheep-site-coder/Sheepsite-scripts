@@ -19,6 +19,13 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildLabel = ucwords(str_replace(['_','-'], ' ', $building));
 $sessionKey = 'private_auth_' . $building;
 
+// Carry the original question through login via session (more reliable than URL round-trip)
+$pendingQKey = 'woolsy_pending_q_' . $building;
+if (!empty($_GET['q'])) {
+    $_SESSION[$pendingQKey] = trim($_GET['q']);
+}
+$q = '';  // resolved after login check below
+
 // --- Login POST ---
 $loginError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
@@ -45,6 +52,12 @@ if (isset($_GET['logout'])) {
 
 $loggedIn = !empty($_SESSION[$sessionKey]);
 $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
+
+// Retrieve and clear the pending question now that we know login state
+if ($loggedIn && !empty($_SESSION[$pendingQKey])) {
+    $q = $_SESSION[$pendingQKey];
+    unset($_SESSION[$pendingQKey]);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -239,6 +252,7 @@ $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 <script>
 const BUILDING  = <?= json_encode($building) ?>;
 const USERNAME  = <?= json_encode($username) ?>;
+const INITIAL_Q = <?= json_encode($q) ?>;
 let   history   = [];
 
 function addMessage(role, text) {
@@ -296,7 +310,14 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 
 // Greeting
 addMessage('bot', 'Hi <?= htmlspecialchars(ucfirst($username)) ?>! I\'m Woolsy, your community assistant. Ask me anything about <?= htmlspecialchars($buildLabel) ?> — rules, procedures, documents, amenities.');
-document.getElementById('chat-input').focus();
+
+// Auto-send question carried over from the public widget
+if (INITIAL_Q) {
+  document.getElementById('chat-input').value = INITIAL_Q;
+  send();
+} else {
+  document.getElementById('chat-input').focus();
+}
 </script>
 
 <?php endif ?>

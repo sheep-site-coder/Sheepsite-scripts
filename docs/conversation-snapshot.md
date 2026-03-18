@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 15, 2026 (updated)
+**Date:** March 17, 2026 (updated)
 
 ---
 
@@ -238,27 +238,54 @@ PHP renders file browser in iframe on building website
         Skips buildings that haven't done initial setup (_initialized flag not set)
       - Scanned PDF handling: Drive's OCR converts scanned PDFs automatically on copy;
         files with < 100 extracted chars are flagged ⚠️ with user notice; skipped in processing
+- [x] Session 13 — Documentation, UX fixes, and Woolsy document awareness:
+      - manage-users.php: added "← Admin" back link to top bar (matches other card pages)
+      - Manual rename: Manual-admin.html → Sheepsite-Admin-Manual.html,
+        Manual-resident.html → Sheepsite-Resident-Manual.html; docs/ served from Scripts/docs/
+      - admin.php: "User Manual" card renamed "Admin User Manual"; URL updated to docs/Sheepsite-Admin-Manual.html
+      - build-manual.py: added Section 9 (Woolsy Knowledge Base) with "Before You Begin" block,
+        setup/update flow reflecting new checklist UI, scanned PDF conversion note, weekly check description;
+        updated TOC and dashboard card table
+      - build-resident.py: NEW — converts static Sheepsite-Resident-Manual.html to Python build
+        script matching build-manual.py structure; adds Section 6 (Ask Woolsy), adds Section 9
+        (Getting Help with Woolsy-first guidance); credential delivery wording corrected
+      - woolsy-update.php: review step redesigned — instead of raw text dump, shows a section-level
+        delta checklist (NEW/CHANGED/REMOVED per ## heading); all checked by default; admin unchecks
+        to reject; save applies only accepted changes; setup mode shows all sections as NEW checkboxes
+      - dir-display-bridge.gs: added buildDocIndex action (recursive public folder walk → {path, files[]});
+        Forms folder added to runDocCheck + handleStampBaseline weekly scan
+      - admin.php: added buildDocIndex AJAX action; Woolsy card shows Document Index row with
+        Build/Rebuild button and inline status feedback
+      - chatbot.php: loads faqs/{building}_docindex.txt; injected into system prompt with instruction
+        to reference document locations and suggest Search when unsure
+      - woolsy-update.php: auto-rebuilds document index after each knowledge base save
+      - Known bug (saved to memory): question typed in public Woolsy widget is lost after resident
+        logs in — two fixes attempted (URL param + session stash), root cause not yet resolved
 
 ---
 
 ## Next Steps
 
+- **Test document index feature** — build index from admin card, then ask Woolsy about a form
+- **Fix Woolsy question-lost-on-login bug** — see memory file bug_woolsy_question_lost_on_login.md
+- **Upload to server** (session 13 changes):
+    - manage-users.php, admin.php, chatbot.php, chatbot-page.php, chatbot-widget.js
+    - woolsy-update.php
+    - dir-display-bridge.gs (redeploy as new version)
+    - docs/Sheepsite-Admin-Manual.html, docs/Sheepsite-Resident-Manual.html
 - **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates;
   need real content (office hours, management contact, pool/amenity info specific to the building)
 - **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` +
   chatbot-widget.js script tag to their footers
 - **Upload file-manager.php** to server — tag-on-replace fix requires this updated file
 - **Merge `feature/search-and-tagging` → main** — search, tagging, and file manager all tested and working
-- **Upload woolsy-update.php + updated admin.php + updated dir-display-bridge.gs** to server
 - **Set up checkAllBuildings() time-driven trigger** in Apps Script (weekly; deploy new version first)
-- **Redeploy dir-display-bridge.gs** — required for all new actions (docCheck, extractDocText, etc.)
 - **Wire up Search button** on building sites using `openSearch()`
 - **Create tags/ folder** on server (writable by PHP); .htaccess auto-created by tag-admin.php
-- Upload docs/ folder files to Sharefolder / distribute as needed
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 - **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
 
 ---
 
-*Snapshot updated: March 17, 2026 (session 12 — Woolsy doc indexing built and tested)*
+*Snapshot updated: March 17, 2026 (session 13 — docs overhaul, Woolsy delta checklist, document index)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

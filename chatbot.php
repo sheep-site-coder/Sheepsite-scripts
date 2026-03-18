@@ -78,6 +78,12 @@ if ($community) {
 $context .= loadFaq(__DIR__ . "/faqs/{$building}.txt");
 $context .= loadFaq(__DIR__ . "/faqs/{$building}_rules.md");
 
+// Document index — file listing of all public documents on the site
+$docIndexFile = __DIR__ . "/faqs/{$building}_docindex.txt";
+$docIndex = file_exists($docIndexFile)
+    ? "\n\n---\nDOCUMENT INDEX — files available on the building website:\n" . trim(file_get_contents($docIndexFile))
+    : '';
+
 // Selectively load state law layer — only when question is about legal rights,
 // meetings, records, statutes, or association governance
 $stateKeywords = '/\b(record|meeting|vote|elect|fine|right|statute|law|718|website|reserve|inspection|estoppel|petition|suspend|quorum|notice|proxy|amendment|budget|assessment|arbitration|hearing|committee|sirs|milestone)\b/i';
@@ -105,9 +111,13 @@ Guidelines:
 - Only mention contacting the board when the question specifically requires a board decision
   or approval that cannot be answered from the rules (e.g. requesting an exception, submitting
   an application, filing a complaint). Never use it as a polite closing or catch-all.
+- A document index is provided below the FAQ content listing all files available on the website.
+  When relevant, tell the resident where to find a specific document or form (e.g. "The Renovation
+  Request Form is in the Forms section of the Public Resources"). If you're not sure which document
+  applies, suggest using the site's Search feature.
 
 ---
-{$context}
+{$context}{$docIndex}
 PROMPT;
 
 // --- Build messages array (include conversation history) ---

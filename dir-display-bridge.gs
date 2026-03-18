@@ -24,6 +24,7 @@ function doGet(e) {
   if (action === 'listDocFiles')   return handleListDocFiles(e);
   if (action === 'extractDocText') return handleExtractDocText(e);
   if (action === 'stampBaseline')  return handleStampBaseline(e);
+  if (action === 'buildDocIndex')  return handleBuildDocIndex(e);
 
   return jsonError('Unknown action');
 }
@@ -415,9 +416,9 @@ function runDocCheck(building, publicFolderId) {
   const props        = PropertiesService.getScriptProperties();
   const publicFolder = DriveApp.getFolderById(publicFolderId);
 
-  // Scan IncorporationDocs and RulesDocs
+  // Scan IncorporationDocs, RulesDocs, and Forms
   const current = {};
-  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+  ['IncorporationDocs', 'RulesDocs', 'Forms'].forEach(function(folderName) {
     const sub = publicFolder.getFoldersByName(folderName);
     if (!sub.hasNext()) { current[folderName] = []; return; }
     const folder = sub.next();
@@ -454,7 +455,7 @@ function runDocCheck(building, publicFolderId) {
   const baseline = JSON.parse(baselineJson);
   const changes  = [];
 
-  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+  ['IncorporationDocs', 'RulesDocs', 'Forms'].forEach(function(folderName) {
     const curFiles  = current[folderName]  || [];
     const baseFiles = baseline[folderName] || [];
 
@@ -483,7 +484,8 @@ function runDocCheck(building, publicFolderId) {
     changes:    changes,
     fileCounts: {
       IncorporationDocs: current.IncorporationDocs.length,
-      RulesDocs:         current.RulesDocs.length
+      RulesDocs:         current.RulesDocs.length,
+      Forms:             current.Forms.length
     }
   }));
 }
@@ -621,7 +623,7 @@ function handleStampBaseline(e) {
 
   // Scan current state for baseline
   const current = {};
-  ['IncorporationDocs', 'RulesDocs'].forEach(function(folderName) {
+  ['IncorporationDocs', 'RulesDocs', 'Forms'].forEach(function(folderName) {
     const sub = publicFolder.getFoldersByName(folderName);
     if (!sub.hasNext()) { current[folderName] = []; return; }
     const folder = sub.next();
@@ -657,11 +659,54 @@ function handleStampBaseline(e) {
     changes:    [],
     fileCounts: {
       IncorporationDocs: current.IncorporationDocs.length,
-      RulesDocs:         current.RulesDocs.length
+      RulesDocs:         current.RulesDocs.length,
+      Forms:             current.Forms.length
     }
   }));
 
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// buildDocIndex — recursively walks the public folder tree
+// and returns a flat list of {path, files[]} sections.
+// Used by Woolsy to know what documents exist on the site.
+// -------------------------------------------------------
+function handleBuildDocIndex(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const publicFolderId = e.parameter.publicFolderId;
+  if (!publicFolderId) return jsonError('Missing publicFolderId');
+
+  const sections = [];
+
+  function walkFolder(folder, path) {
+    const files = [];
+    const fileIter = folder.getFiles();
+    while (fileIter.hasNext()) {
+      files.push(fileIter.next().getName());
+    }
+    if (files.length > 0) {
+      files.sort();
+      sections.push({ path: path, files: files });
+    }
+    const subIter = folder.getFolders();
+    while (subIter.hasNext()) {
+      const sub = subIter.next();
+      walkFolder(sub, path + '/' + sub.getName());
+    }
+  }
+
+  // Walk each top-level subfolder of the public root
+  const root    = DriveApp.getFolderById(publicFolderId);
+  const subIter = root.getFolders();
+  while (subIter.hasNext()) {
+    const sub = subIter.next();
+    walkFolder(sub, sub.getName());
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, sections: sections }))
     .setMimeType(ContentService.MimeType.JSON);
 }

@@ -131,6 +131,7 @@ html = f"""<!DOCTYPE html>
     <li>Storage Report</li>
     <li>The Owner &amp; Resident Database</li>
     <li>Search &mdash; Training Your Residents</li>
+    <li>Woolsy Knowledge Base</li>
     <li>Appendix: Sample Introduction Email</li>
   </ol>
 </div>
@@ -182,6 +183,7 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>File Management</strong></td><td>Upload, organize, rename, and delete documents in the public and private folders.</td></tr>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
+  <tr><td><strong>Woolsy Knowledge Base</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
 
@@ -446,6 +448,66 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
+<h2>Section 9 &mdash; Woolsy Knowledge Base</h2>
+
+<h3>What Is Woolsy?</h3>
+<p>Woolsy is the AI assistant built into your building website. Residents can ask it questions about the building &mdash; parking rules, pet policy, renovation procedures, and more &mdash; and receive accurate answers drawn directly from your governing documents.</p>
+<p>Woolsy&rsquo;s answers are grounded in a <strong>knowledge base</strong> specific to your building. This knowledge base is a summary of your governing documents (Articles of Incorporation, Bylaws, Declaration of Condominium, Board rules) that you set up once and update whenever your documents change.</p>
+
+<h3>The Woolsy Card on Your Dashboard</h3>
+<p>The Admin Dashboard always shows a <strong>Woolsy Knowledge Base</strong> card. It tells you the current status at a glance:</p>
+<table>
+  <tr><th>Status</th><th>What It Means</th></tr>
+  <tr><td><strong>Not set up</strong></td><td>Woolsy has no knowledge of your specific building rules yet. Click &ldquo;Set up now&rdquo; to begin.</td></tr>
+  <tr><td><strong>&#10003; Up to date</strong></td><td>The knowledge base matches the documents currently in your Drive folders. No action needed.</td></tr>
+  <tr><td><strong>&#9888; Files changed</strong></td><td>One or more documents have been added, modified, or removed since the knowledge base was last updated. Click &ldquo;Update&rdquo; to refresh it.</td></tr>
+</table>
+<p>The card also shows a <strong>Check now</strong> button that triggers an immediate scan of your document folders, and a credit usage bar showing how much of your Woolsy budget has been used.</p>
+
+<h3>Credit Usage</h3>
+<p>Woolsy uses AI credits each time a resident asks a question, and again when you update the knowledge base. Credits are tracked automatically:</p>
+<ul>
+  <li>The card shows <strong>used / allocated</strong> credits and a progress bar</li>
+  <li>A warning appears when usage reaches 80% of the allocated amount</li>
+  <li>When credits are exhausted, Woolsy displays a message to residents to contact the building administrator. Contact SheepSite to top up credits.</li>
+</ul>
+
+<h3>Before You Begin &mdash; Upload Your Documents First</h3>
+<blockquote><strong>Important:</strong> All governing documents must be uploaded to the correct Drive folders <em>before</em> starting the setup process. Woolsy reads only what is in those folders at the time you run setup &mdash; documents added afterwards will not be included until you run an update.</blockquote>
+<p>The two folders Woolsy reads from are:</p>
+<ul>
+  <li><code>IncorporationDocs</code> &mdash; Articles of Incorporation, Bylaws, Declaration of Condominium</li>
+  <li><code>RulesDocs</code> &mdash; Board rules, Welcome guides, and any other governing rules documents</li>
+</ul>
+<p>Use the <strong>File Management</strong> card to upload documents to these folders if you have not already done so. Both folders are in the Public section of your Drive.</p>
+
+<h3>Setting Up Woolsy for the First Time</h3>
+<ol>
+  <li>From the Admin Dashboard, click <strong>Set up now</strong> in the Woolsy Knowledge Base card</li>
+  <li>The page lists all documents found in <code>IncorporationDocs</code> and <code>RulesDocs</code>. The system checks each one for readability &mdash; a live counter shows progress (e.g. &ldquo;Checking documents… 3 of 7&rdquo;)</li>
+  <li>A <strong>credit estimate</strong> is shown once all documents have been checked. Review it, then click <strong>Build Knowledge Base</strong> to proceed, or <strong>Cancel</strong> to stop without using any credits</li>
+  <li>Woolsy reads all documents and generates the knowledge base. This may take up to a minute</li>
+  <li>The results are presented as a <strong>checklist of sections</strong> &mdash; one item per topic (Pets, Parking, Guest Rules, etc.). All sections are checked by default. Uncheck any section you want to exclude, then click <strong>Save Knowledge Base</strong></li>
+</ol>
+
+<blockquote><strong>Note:</strong> Scanned PDFs (documents that were photographed or printed and scanned rather than created digitally) may not contain readable text. Any such files are flagged with a warning <strong>&#9888;</strong> during the checking step. The process continues with the remaining documents, but the flagged files will not contribute to Woolsy&rsquo;s knowledge. If you have important rules in a scanned document, you will need to convert it to a text-based PDF before Woolsy can use it. Most word processors (Microsoft Word, Google Docs) can export a text-based PDF directly &mdash; use the original editable document if you have it, or retype the content and export as PDF.</blockquote>
+
+<h3>Updating Woolsy After a Document Change</h3>
+<p>When the Woolsy card shows <strong>&#9888; Files changed</strong>, click <strong>Update</strong> to refresh the knowledge base. The process is the same as setup, with one key difference: instead of showing all sections, the checklist shows <strong>only what changed</strong> &mdash; sections marked <strong>NEW</strong>, <strong>CHANGED</strong>, or <strong>REMOVED</strong>. Sections with no changes are kept automatically and are not shown.</p>
+<p>For each changed section, you can:</p>
+<ul>
+  <li><strong>Leave it checked</strong> &mdash; accept the change (new content replaces old, removed section is dropped, new section is added)</li>
+  <li><strong>Uncheck it</strong> &mdash; reject the change (previous version is kept as-is)</li>
+</ul>
+
+<h3>Weekly Automatic Change Detection</h3>
+<p>You do not need to manually check whether documents have changed. The system automatically scans your document folders once a week in the background &mdash; no AI is involved and no credits are used for this check. If changes are detected, the Woolsy card on your dashboard will show the alert the next time you log into the Admin Dashboard.</p>
+<p>You can also trigger an immediate scan at any time using the <strong>Check now</strong> button on the dashboard card.</p>
+
+<div class="tip"><strong>Tip:</strong> You only need to update Woolsy when you add new governing documents or significantly revise existing ones. Uploading board meeting minutes or financial statements to other folders does not affect Woolsy&rsquo;s knowledge and does not require an update.</div>
+
+{divider()}
+
 <h2>Appendix &mdash; Sample Introduction Email</h2>
 
 <div style="display:flex; gap:1.5em; align-items:flex-start;">
@@ -477,7 +539,7 @@ html = f"""<!DOCTYPE html>
 </html>
 """
 
-out = os.path.join(os.path.dirname(__file__), "Manual-admin.html")
+out = os.path.join(os.path.dirname(__file__), "Sheepsite-Admin-Manual.html")
 with open(out, "w", encoding="utf-8") as f:
     f.write(html)
 

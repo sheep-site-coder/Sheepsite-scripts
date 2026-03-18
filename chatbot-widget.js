@@ -276,7 +276,7 @@
     const deflection = getDeflection(question);
     const building   = window.BUILDING_NAME || '';
     const loginUrl   = `${SCRIPTS_URL}/display-private-dir.php?building=${encodeURIComponent(building)}`;
-    const chatUrl    = `${SCRIPTS_URL}/chatbot-page.php?building=${encodeURIComponent(building)}`;
+    const chatUrl    = `${SCRIPTS_URL}/chatbot-page.php?building=${encodeURIComponent(building)}&q=${encodeURIComponent(question)}`;
 
     addMessage('bot',
       escapeHtml(deflection) +

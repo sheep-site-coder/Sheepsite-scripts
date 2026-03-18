@@ -12,7 +12,7 @@
 session_start();
 
 define('CREDENTIALS_DIR',      __DIR__ . '/credentials/');
-define('USER_MANUAL_URL',      'https://docs.google.com/document/d/1bomDarmk1_RbPJ0x_NphQ1-m-t9OKZwzNZrm1ztEhQM/edit?tab=t.td3lj68pttu5#heading=h.vwhtrlhtc5t2');
+define('USER_MANUAL_URL',      'docs/Sheepsite-Admin-Manual.html');
 define('CREDITS_FILE',         __DIR__ . '/faqs/woolsy_credits.json');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
 define('APPS_SCRIPT_URL',      'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
@@ -48,6 +48,33 @@ $sessionKey = 'manage_auth_' . $building;
 // AJAX: doc status endpoints (docStatus = cached result,
 // docCheck = on-demand scan). Returns JSON and exits.
 // -------------------------------------------------------
+if (isset($_GET['action']) && $_GET['action'] === 'buildDocIndex') {
+  header('Content-Type: application/json');
+  if (empty($_SESSION[$sessionKey])) { echo json_encode(['error' => 'Unauthorized']); exit; }
+  $buildings      = require __DIR__ . '/buildings.php';
+  $publicFolderId = $buildings[$building]['publicFolderId'] ?? '';
+  $url = APPS_SCRIPT_URL . '?' . http_build_query([
+    'action' => 'buildDocIndex', 'publicFolderId' => $publicFolderId, 'token' => APPS_SCRIPT_TOKEN
+  ]);
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
+  $resp = curl_exec($ch); curl_close($ch);
+  $data = json_decode($resp ?: '{}', true);
+  if (!empty($data['sections'])) {
+    $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
+    foreach ($data['sections'] as $section) {
+      $lines[] = $section['path'] . '/';
+      foreach ($section['files'] as $file) { $lines[] = "  \u{2022} " . $file; }
+      $lines[] = '';
+    }
+    file_put_contents(__DIR__ . '/faqs/' . $building . '_docindex.txt', implode("\n", $lines));
+    echo json_encode(['ok' => true, 'generated' => date('F j, Y'), 'sectionCount' => count($data['sections'])]);
+  } else {
+    echo json_encode(['error' => $data['error'] ?? 'Failed to build index']);
+  }
+  exit;
+}
+
 if (isset($_GET['action']) && in_array($_GET['action'], ['docStatus', 'docCheck'], true)) {
   header('Content-Type: application/json');
   if (empty($_SESSION[$sessionKey])) {
@@ -245,6 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     .low-credit-warn { margin-top: 0.6rem; padding: 0.4rem 0.7rem; background: #fffbeb;
                        border: 1px solid #f59e0b; border-radius: 4px; font-size: 0.82rem; color: #92400e; }
     .woolsy-docstatus  { margin: 0.6rem 0 0.3rem; font-size: 0.85rem; color: #444; line-height: 1.5; }
+    .woolsy-index-row  { margin: 0.3rem 0 0.5rem; font-size: 0.85rem; color: #444; }
     .woolsy-docstatus .ds-ok   { color: #1a7f37; font-weight: bold; }
     .woolsy-docstatus .ds-warn { color: #b45309; font-weight: bold; }
     .woolsy-docstatus .ds-muted { color: #888; }
@@ -315,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   <a href="<?= htmlspecialchars(USER_MANUAL_URL) ?>" target="_blank" class="card">
     <div class="card-icon">📖</div>
     <div>
-      <div class="card-title">User Manual</div>
+      <div class="card-title">Admin User Manual</div>
       <div class="card-desc">
         Step-by-step guide covering all admin tasks — initial setup, importing owners,
         managing passwords, and troubleshooting. Opens in a new tab.
@@ -331,6 +359,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     $wPct      = $wAlloc > 0 ? min(100, round($wUsed / $wAlloc * 100)) : 100;
     $wLow      = $wPct >= 80;
     $wBarClass = $wPct >= 100 ? 'danger' : ($wPct >= 80 ? 'warn' : '');
+    $docIndexFile   = __DIR__ . '/faqs/' . $building . '_docindex.txt';
+    $docIndexExists = file_exists($docIndexFile);
+    $docIndexDate   = $docIndexExists ? date('F j, Y', filemtime($docIndexFile)) : '';
   ?>
   <div class="woolsy-card">
     <div class="woolsy-header">
@@ -343,6 +374,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
         </div>
         <div class="woolsy-docstatus" id="woolsy-docstatus">
           <span class="ds-muted">Checking knowledge base status…</span>
+        </div>
+        <div class="woolsy-index-row">
+          📄 <strong>Document Index:</strong>
+          <?php if ($docIndexExists): ?>
+            Built <?= htmlspecialchars($docIndexDate) ?>
+            &nbsp;<button class="ds-check-btn" id="build-index-btn" onclick="buildDocIndex()">Rebuild</button>
+          <?php else: ?>
+            <span class="ds-warn">Not built</span>
+            &nbsp;<button class="ds-check-btn" id="build-index-btn" onclick="buildDocIndex()">Build Index</button>
+          <?php endif; ?>
+          <span id="index-status-msg"></span>
         </div>
         <div class="woolsy-status">
           Credits used: <strong><?= number_format($wUsed, 4) ?></strong>
@@ -449,6 +491,28 @@ function buildDocStatusHtml(data) {
       ' <button class="ds-check-btn" onclick="checkDocNow()">Check now</button>';
   }
   return '📋 <strong>Knowledge Base:</strong> <a href="' + updateUrl + '" style="color:#0070f3">Manage →</a>';
+}
+
+function buildDocIndex() {
+  var btn = document.getElementById('build-index-btn');
+  var msg = document.getElementById('index-status-msg');
+  if (btn) btn.disabled = true;
+  if (msg) { msg.style.color = '#888'; msg.textContent = ' Building…'; }
+  fetch('admin.php?building=<?= urlencode($building) ?>&action=buildDocIndex')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        if (msg) { msg.style.color = '#1a7f37'; msg.textContent = ' ✅ Built ' + data.generated + ' (' + data.sectionCount + ' folder' + (data.sectionCount !== 1 ? 's' : '') + ')'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Rebuild'; }
+      } else {
+        if (msg) { msg.style.color = '#c00'; msg.textContent = ' ⚠️ ' + (data.error || 'Unknown error'); }
+        if (btn) btn.disabled = false;
+      }
+    })
+    .catch(function() {
+      if (msg) { msg.style.color = '#c00'; msg.textContent = ' ⚠️ Request failed.'; }
+      if (btn) btn.disabled = false;
+    });
 }
 
 function fmtDate(iso) {
