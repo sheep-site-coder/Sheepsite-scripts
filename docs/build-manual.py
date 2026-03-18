@@ -461,8 +461,19 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Not set up</strong></td><td>Woolsy has no knowledge of your specific building rules yet. Click &ldquo;Set up now&rdquo; to begin.</td></tr>
   <tr><td><strong>&#10003; Up to date</strong></td><td>The knowledge base matches the documents currently in your Drive folders. No action needed.</td></tr>
   <tr><td><strong>&#9888; Files changed</strong></td><td>One or more documents have been added, modified, or removed since the knowledge base was last updated. Click &ldquo;Update&rdquo; to refresh it.</td></tr>
+  <tr><td><strong>&#9888; Prompt updated &mdash; rebuild recommended</strong></td><td>SheepSite has expanded the list of topics Woolsy is trained to look for. A rebuild will re-read your existing documents and extract the new topic categories. Your documents have not changed &mdash; only the extraction logic has improved. See below.</td></tr>
 </table>
 <p>The card also shows a <strong>Check now</strong> button that triggers an immediate scan of your document folders, and a credit usage bar showing how much of your Woolsy budget has been used.</p>
+
+<h3>Rebuilding After a Prompt Update</h3>
+<p>Occasionally, SheepSite improves the Woolsy extraction logic &mdash; for example, adding new topic categories such as water damage responsibilities, amendment voting requirements, or sunroom rules. When this happens, your existing knowledge base was built using an older version of the extraction prompt and may be missing those topics entirely, even if the information is in your documents.</p>
+<p>When the card shows <strong>&#9888; Prompt updated &mdash; rebuild recommended</strong>, click <strong>Rebuild now</strong> to regenerate the knowledge base. The process is the same as a normal update:</p>
+<ul>
+  <li>Woolsy re-reads all your current documents</li>
+  <li>A checklist shows only the sections that are <strong>new or changed</strong> compared to what was previously saved &mdash; you do not need to review sections that are unchanged</li>
+  <li>Accept or skip each proposed change, then save</li>
+</ul>
+<div class="tip"><strong>Note:</strong> This type of rebuild is triggered by improvements to the SheepSite platform, not by changes to your building&rsquo;s documents. It uses a small number of credits (same as a normal update). Your existing knowledge base remains in place until you save the rebuild &mdash; Woolsy continues working normally in the meantime.</div>
 
 <h3>Credit Usage</h3>
 <p>Woolsy uses AI credits each time a resident asks a question, and again when you update the knowledge base. Credits are tracked automatically:</p>

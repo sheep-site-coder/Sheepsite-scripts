@@ -238,6 +238,30 @@ PHP renders file browser in iframe on building website
         Skips buildings that haven't done initial setup (_initialized flag not set)
       - Scanned PDF handling: Drive's OCR converts scanned PDFs automatically on copy;
         files with < 100 extracted chars are flagged ⚠️ with user notice; skipped in processing
+- [x] Session 14 — Woolsy quality improvements, Architecture Manual, UX fixes:
+      - woolsy-update.php: switched extraction model from Haiku → Sonnet 4.6 (better legal doc
+        comprehension); CURL timeout 120→240s; PHP set_time_limit 180→300s; processing message
+        updated to "2–3 minutes"; live elapsed-time counter added to processing step
+      - woolsy-update.php: document exclusion feature — "Include" checkbox per readable file;
+        admin can uncheck duplicates/scans before build; estimate updates live; excluded files
+        omitted from Claude call
+      - woolsy-update.php: credit estimate overhauled for Sonnet pricing ($3/$15 per MTok);
+        now includes existing rules.md tokens in input estimate; output ratio raised to 55%;
+        label changed to "up to ~X credits"
+      - master-admin.php: Architecture Manual card added (links to docs/Sheepsite-Architecture.html)
+      - docs/build-architecture.py + Sheepsite-Architecture.html: NEW — comprehensive architecture
+        manual covering system overview, actors, deployment topology, GAS layer rationale, file
+        inventory, auth architecture, Woolsy stack, data files, adding a building, and Operator
+        Procedures (prompt versioning, credit top-up, server maintenance)
+      - Woolsy question-lost bug RESOLVED: root cause was browser caching old chatbot-widget.js;
+        fix: ?q= in popup URL + URLSearchParams read in JS + preserve ?q= through login redirect
+      - LyndhurstH Woolsy widget activated: chatbot-widget.js script tag added to footer
+      - PROMPT_VERSION bump to v3: admin card shows amber rebuild banner for outdated buildings
+      - normalizeKey() + rewritten computeDelta(): fuzzy heading matching prevents false NEW+REMOVED
+        pairs from Claude varying dash style or capitalization
+      - Extraction prompt overhauled: removed predefined topic list; resident-focused "would a
+        resident ask about this?" test; explicit callouts for unit boundary definitions and common
+        element modification rules
 - [x] Session 13 — Documentation, UX fixes, and Woolsy document awareness:
       - manage-users.php: added "← Admin" back link to top bar (matches other card pages)
       - Manual rename: Manual-admin.html → Sheepsite-Admin-Manual.html,
@@ -266,26 +290,27 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
-- **Test document index feature** — build index from admin card, then ask Woolsy about a form
-- **Fix Woolsy question-lost-on-login bug** — see memory file bug_woolsy_question_lost_on_login.md
-- **Upload to server** (session 13 changes):
-    - manage-users.php, admin.php, chatbot.php, chatbot-page.php, chatbot-widget.js
-    - woolsy-update.php
-    - dir-display-bridge.gs (redeploy as new version)
-    - docs/Sheepsite-Admin-Manual.html, docs/Sheepsite-Resident-Manual.html
-- **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates;
-  need real content (office hours, management contact, pool/amenity info specific to the building)
-- **Wire chatbot on LyndhurstH/I** — add `window.BUILDING_NAME = BUILDING_NAME` +
-  chatbot-widget.js script tag to their footers
-- **Upload file-manager.php** to server — tag-on-replace fix requires this updated file
-- **Merge `feature/search-and-tagging` → main** — search, tagging, and file manager all tested and working
-- **Set up checkAllBuildings() time-driven trigger** in Apps Script (weekly; deploy new version first)
+- **Deploy session 14 files to server:**
+    - woolsy-update.php (Sonnet model, exclusion checkbox, timeout, estimate fix)
+    - admin.php (PROMPT_VERSION v3, rebuild banner)
+    - master-admin.php (Architecture Manual card)
+    - chatbot-page.php, chatbot-widget.js (question-lost fix)
+    - footer-for-sites.js (chatbot-widget.js script tag documented)
+    - docs/Sheepsite-Architecture.html (new architecture manual)
+- **Rebuild LyndhurstH knowledge base** with Sonnet + new prompts (after deploying woolsy-update.php)
+    - Restore LyndhurstH_rules.md from .bak on server first if needed
+    - Exclude scanned duplicate PDF using new checkbox feature
+- **Test Sonnet extraction quality** — ask Woolsy about smoking, windows/doors, unit boundaries
+- **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates
+- **Upload file-manager.php** to server
+- **Merge `feature/search-and-tagging` → main**
+- **Set up checkAllBuildings() time-driven trigger** in Apps Script (weekly)
 - **Wire up Search button** on building sites using `openSearch()`
-- **Create tags/ folder** on server (writable by PHP); .htaccess auto-created by tag-admin.php
+- **Create tags/ folder** on server (writable by PHP)
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 - **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
 
 ---
 
-*Snapshot updated: March 17, 2026 (session 13 — docs overhaul, Woolsy delta checklist, document index)*
+*Snapshot updated: March 18, 2026 (session 14 — Sonnet extraction, Architecture Manual, doc exclusion, question-lost fix)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

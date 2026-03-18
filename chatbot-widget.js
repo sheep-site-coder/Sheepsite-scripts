@@ -275,7 +275,6 @@
 
     const deflection = getDeflection(question);
     const building   = window.BUILDING_NAME || '';
-    const loginUrl   = `${SCRIPTS_URL}/display-private-dir.php?building=${encodeURIComponent(building)}`;
     const chatUrl    = `${SCRIPTS_URL}/chatbot-page.php?building=${encodeURIComponent(building)}&q=${encodeURIComponent(question)}`;
 
     addMessage('bot',
@@ -288,6 +287,7 @@
     button.disabled = false;
     input.focus();
   }
+
 
   function escapeHtml(str) {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

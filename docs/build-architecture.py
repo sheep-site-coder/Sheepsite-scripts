@@ -1,0 +1,541 @@
+#!/usr/bin/env python3
+"""Build the SheepSite Architecture Manual (Sheepsite-Architecture.html)."""
+
+import os
+
+OUTPUT = os.path.join(os.path.dirname(__file__), 'Sheepsite-Architecture.html')
+
+def divider():
+    return '<hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">'
+
+html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SheepSite — Architecture Manual</title>
+<style>
+  body        {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 15px; line-height: 1.7;
+                max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; color: #222; }}
+  h1          {{ font-size: 2rem; color: #3D0066; margin-bottom: 0.25rem; }}
+  h2          {{ font-size: 1.4rem; color: #3D0066; margin-top: 2rem; }}
+  h3          {{ font-size: 1.1rem; color: #5a0099; margin-top: 1.5rem; }}
+  h4          {{ font-size: 1rem; color: #333; margin-top: 1rem; margin-bottom: 0.25rem; }}
+  .subtitle   {{ color: #777; font-size: 0.95rem; margin-bottom: 2rem; }}
+  table       {{ width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }}
+  th          {{ background: #f3e6ff; text-align: left; padding: 0.5rem 0.75rem;
+                border-bottom: 2px solid #c090e0; }}
+  td          {{ padding: 0.45rem 0.75rem; border-bottom: 1px solid #eee; vertical-align: top; }}
+  tr:hover td {{ background: #fdf6ff; }}
+  code        {{ background: #f3e6ff; padding: 0.1em 0.35em; border-radius: 3px;
+                font-size: 0.88em; font-family: monospace; }}
+  pre         {{ background: #1e1e2e; color: #cdd6f4; padding: 1rem 1.25rem;
+                border-radius: 8px; overflow-x: auto; font-size: 0.85rem; line-height: 1.6; }}
+  .tip        {{ background: #f0fdf4; border-left: 4px solid #22c55e;
+                padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }}
+  .warn       {{ background: #fffbeb; border-left: 4px solid #f59e0b;
+                padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }}
+  .role-card  {{ background: #faf5ff; border: 1px solid #d8b4fe; border-radius: 8px;
+                padding: 1rem 1.25rem; margin: 1rem 0; }}
+  .role-card h4 {{ margin-top: 0; color: #3D0066; }}
+  ol, ul      {{ padding-left: 1.5rem; }}
+  li          {{ margin-bottom: 0.3rem; }}
+  .toc a      {{ color: #5a0099; text-decoration: none; }}
+  .toc a:hover {{ text-decoration: underline; }}
+  .toc li     {{ margin-bottom: 0.2rem; }}
+  .tag        {{ display: inline-block; font-size: 0.75rem; padding: 0.1em 0.5em;
+                border-radius: 10px; font-weight: bold; margin-left: 0.3rem; }}
+  .tag-php    {{ background: #dbeafe; color: #1e40af; }}
+  .tag-js     {{ background: #fef9c3; color: #854d0e; }}
+  .tag-gs     {{ background: #dcfce7; color: #166534; }}
+  .tag-data   {{ background: #fce7f3; color: #9d174d; }}
+</style>
+</head>
+<body>
+
+<h1>🐑 SheepSite — Architecture Manual</h1>
+<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated {__import__('datetime').date.today().strftime('%B %Y')}</div>
+
+<nav>
+<ol class="toc">
+  <li><a href="#overview">System Overview</a></li>
+  <li><a href="#actors">Actors &amp; Roles</a></li>
+  <li><a href="#topology">Deployment Topology</a></li>
+  <li><a href="#gas">Google Apps Script Layer &mdash; Why &amp; How</a></li>
+  <li><a href="#files">File Inventory</a></li>
+  <li><a href="#auth">Authentication Architecture</a></li>
+  <li><a href="#woolsy">Woolsy Chatbot Stack</a></li>
+  <li><a href="#data">Data &amp; Config Files</a></li>
+  <li><a href="#buildings">Adding a Building</a></li>
+  <li><a href="#operator">Operator Procedures</a></li>
+</ol>
+</nav>
+
+{divider()}
+
+<h2 id="overview">1. System Overview</h2>
+
+<p>SheepSite is a multi-building condominium website platform. It provides each building with:</p>
+<ul>
+  <li>Public and private Google Drive folder browsers</li>
+  <li>Resident login with per-building credential management</li>
+  <li>Auto-generated reports (elevator, parking, resident, board) sourced from Google Sheets</li>
+  <li>Woolsy &mdash; an AI chatbot that answers resident questions from the building&rsquo;s governing documents</li>
+  <li>Admin tools for building presidents/managers (user management, storage, Woolsy knowledge base)</li>
+  <li>A master admin interface for the SheepSite operator (Alain) to manage credits and platform-wide settings</li>
+</ul>
+
+<p>All server-side logic lives in PHP scripts hosted at <code>sheepsite.com/Scripts/</code>. Building websites
+are hosted separately (typically on Namecheap Website Builder) and integrate with SheepSite by pasting
+a footer script. Google Drive and Sheets access is handled by Google Apps Script web apps &mdash;
+PHP never calls Google APIs directly (see <a href="#gas">Section 4</a> for why).</p>
+
+{divider()}
+
+<h2 id="actors">2. Actors &amp; Roles</h2>
+
+<div class="role-card">
+  <h4>&#x1F451; SheepSite Operator (Alain)</h4>
+  <p>Has master-level access to all buildings. Manages Woolsy credits, onboards new buildings,
+  deploys code updates, and handles escalations that building admins cannot resolve.</p>
+  <p><strong>Entry point:</strong> <code>master-admin.php</code> &mdash; authenticated with
+  <code>credentials/_master.json</code>. Session key: <code>master_admin_auth</code>.</p>
+  <p><strong>Can also:</strong> log into any building&rsquo;s <code>manage-users.php</code> or
+  <code>admin.php</code> using the master credential (shared bcrypt credentials file).</p>
+</div>
+
+<div class="role-card">
+  <h4>&#x1F3E2; Building Admin (President / Property Manager)</h4>
+  <p>Manages one building. Adds/removes resident accounts, imports owners from the Google Sheet,
+  handles password resets, monitors Drive storage, and manages the Woolsy knowledge base.</p>
+  <p><strong>Entry point:</strong> <code>admin.php?building=X</code> &mdash; authenticated with
+  <code>credentials/{{building}}_admin.json</code>. Session key: <code>manage_auth_{{building}}</code>.</p>
+  <p><strong>Sub-pages:</strong> manage-users.php, storage-report.php, woolsy-update.php, woolsy-admin.php</p>
+</div>
+
+<div class="role-card">
+  <h4>&#x1F3E0; Resident (Owner)</h4>
+  <p>Logs into the private area of their building&rsquo;s site to browse private Drive files,
+  view protected reports (elevator, parking, resident lists), chat with Woolsy, and change their password.</p>
+  <p><strong>Entry point:</strong> <code>display-private-dir.php?building=X</code> &mdash; authenticated
+  against <code>credentials/{{building}}.json</code>. Session key: <code>private_auth_{{building}}</code>.</p>
+</div>
+
+<div class="role-card">
+  <h4>&#x1F464; Public Visitor</h4>
+  <p>No login required. Can browse the public Drive folder, view public reports (board of directors),
+  and interact with the public Woolsy widget (deflections only &mdash; no AI cost).</p>
+</div>
+
+{divider()}
+
+<h2 id="topology">3. Deployment Topology</h2>
+
+<h3>Server: sheepsite.com (cPanel / shared hosting)</h3>
+<table>
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td><code>/sheepsite.com/Scripts/</code></td><td>All PHP scripts, JS files, and GAS reference files</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/credentials/</code></td><td>Per-building JSON credential files (not in git, writable by PHP)</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/faqs/</code></td><td>Woolsy knowledge base files, document indexes, credit balances</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin and resident manuals (HTML), this architecture doc</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/sheets/</code></td><td>Google Apps Script source files (for reference; deployed via Google)</td></tr>
+</table>
+
+<h3>Google (Alain&rsquo;s account)</h3>
+<table>
+  <tr><th>Where</th><th>What</th></tr>
+  <tr><td>Apps Script project: <em>dir-display-bridge</em></td><td>Drive browser web app &mdash; handles file listing, downloads, storage reports, Woolsy doc extraction, doc index building</td></tr>
+  <tr><td>Apps Script project: <em>building-script.gs</em> (one per building)</td><td>Per-building Sheets web app &mdash; generates reports, handles owner import, handles password reset emails</td></tr>
+  <tr><td>Google Drive (one folder set per building)</td><td>Public folder tree (IncorporationDocs, RulesDocs, Forms, etc.) and Private folder tree (Financials, etc.)</td></tr>
+  <tr><td>Google Sheets (one per building)</td><td>Owner database, car data, generates elevator/parking/resident/board reports</td></tr>
+</table>
+
+<h3>Building Websites (one per building, e.g., Namecheap Website Builder)</h3>
+<p>Each building has its own website hosted independently. SheepSite integrates via a footer script
+pasted into the site&rsquo;s &ldquo;After &lt;body&gt;&rdquo; section. The only thing that changes
+per site is <code>BUILDING_NAME</code> at the top of that script.</p>
+
+{divider()}
+
+<h2 id="gas">4. Google Apps Script Layer &mdash; Why &amp; How</h2>
+
+<h3>The Problem: PHP Cannot Call Google Drive Directly</h3>
+<p>Google Drive API requires OAuth 2.0 authentication. On shared hosting (cPanel), there is no
+practical way to run a service account or manage OAuth refresh tokens securely &mdash; private key
+files on a shared server are a security risk, and the OAuth flow is complex to maintain.</p>
+
+<h3>The Solution: Google Apps Script as a Proxy</h3>
+<p>A Google Apps Script project deployed as a web app runs <em>as Alain&rsquo;s Google account</em>.
+It has Drive and Sheets access by virtue of being owned by the account that owns those files.
+PHP calls the web app via a simple HTTPS GET request &mdash; no OAuth, no credentials, no Google SDK.</p>
+
+<pre>Building Site (browser)
+       |
+       | HTTP request
+       v
+PHP Script (sheepsite.com/Scripts/)
+       |
+       | HTTPS GET with SECRET_TOKEN
+       v
+Google Apps Script Web App (deployed .../exec)
+       |
+       | DriveApp / SpreadsheetApp / DocumentApp
+       v
+Google Drive / Sheets / Docs</pre>
+
+<p>A <code>SECRET_TOKEN</code> in both the PHP script and the GAS project authenticates requests
+so the web app endpoint is not open to the public.</p>
+
+<h3>Drive Browser Web App: dir-display-bridge.gs</h3>
+<p>Single deployed web app. Dispatches on the <code>action</code> parameter:</p>
+<table>
+  <tr><th>Action</th><th>What it does</th></tr>
+  <tr><td><code>list</code></td><td>Lists files in a public folder (for display-public-dir.php)</td></tr>
+  <tr><td><code>listPrivate</code></td><td>Lists files in a private folder (for display-private-dir.php)</td></tr>
+  <tr><td><code>download</code></td><td>Returns a temporary download URL for a file</td></tr>
+  <tr><td><code>storageReport</code></td><td>Returns storage usage breakdown by subfolder (for storage-report.php)</td></tr>
+  <tr><td><code>docCheckResult</code></td><td>Returns cached result of last doc change scan (for admin card)</td></tr>
+  <tr><td><code>docCheck</code></td><td>Runs an on-demand scan of RulesDocs/IncorporationDocs/Forms folders</td></tr>
+  <tr><td><code>listDocFiles</code></td><td>Lists all readable PDF files for Woolsy update probing</td></tr>
+  <tr><td><code>extractDocText</code></td><td>Extracts text from a PDF via Drive OCR (copy + convert to Doc + read)</td></tr>
+  <tr><td><code>stampBaseline</code></td><td>Records current Drive state as baseline after Woolsy update</td></tr>
+  <tr><td><code>buildDocIndex</code></td><td>Recursively walks the public folder tree and returns all file names</td></tr>
+</table>
+<p>A time-driven trigger runs <code>checkAllBuildings()</code> weekly to scan all buildings for
+doc changes and cache results in Script Properties. A <code>keepWarm()</code> trigger fires every
+few minutes to prevent cold starts on the web app.</p>
+
+<h3>Sheets Web App: building-script.gs (one per building)</h3>
+<p>Each building has its own Apps Script project bound to its Google Sheet. It is deployed as a
+web app and dispatches on the <code>page</code> parameter:</p>
+<table>
+  <tr><th>URL / page param</th><th>What it does</th></tr>
+  <tr><td><code>.../exec</code></td><td>Board of Directors report</td></tr>
+  <tr><td><code>?page=elevator</code></td><td>Elevator List report</td></tr>
+  <tr><td><code>?page=parking</code></td><td>Parking List report</td></tr>
+  <tr><td><code>?page=resident</code></td><td>Resident List report</td></tr>
+  <tr><td><code>?page=owners&amp;token=...</code></td><td>Owner list JSON for import into manage-users.php</td></tr>
+</table>
+<p>Two installable triggers run per building: <code>onEditHandler</code> (stamps a timestamp when
+Database or CarDB tabs are edited) and <code>runScheduledUpdate</code> (time-driven, every minute,
+runs all four generate functions after a 30-second debounce). This keeps reports fresh within ~90
+seconds of any data change with zero manual intervention.</p>
+<p>The master library <code>DatabaseSheetMaster</code> contains the shared report generation logic.
+Each building script calls the library, so improvements deploy to all buildings by publishing a
+new library version.</p>
+
+{divider()}
+
+<h2 id="files">5. File Inventory</h2>
+
+<h3>Public-Facing PHP Scripts</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>display-public-dir.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Browsable public Google Drive folder. No auth. Calls dir-display-bridge.gs to list files. Download links open via the GAS download action.</td></tr>
+  <tr><td><code>display-private-dir.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Private Drive folder browser. Session-based resident login. <code>mustChange</code> flag forces password change on first login.</td></tr>
+  <tr><td><code>protected-report.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Resident-authenticated reports (elevator, parking, resident). Reuses <code>private_auth_{{building}}</code> session. Renders report HTML from the building&rsquo;s Sheets web app.</td></tr>
+  <tr><td><code>public-report.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Unauthenticated reports (board of directors). Same structure as protected-report.php minus auth. <code>?nav=0</code> hides the back bar when embedded as an iframe.</td></tr>
+  <tr><td><code>get-doc-byname.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Looks up a file by name in Drive and redirects to a Google Docs preview URL. Used for document iframes on building sites.</td></tr>
+  <tr><td><code>change-password.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Lets a logged-in resident change their own password. Handles <code>mustChange</code> enforcement. Accepts <code>redirect</code> param to return to origin page.</td></tr>
+  <tr><td><code>forgot-password.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Self-serve password reset. Owner flow: username lookup via GAS, email temp password, update credentials. Admin flow: validates President&rsquo;s unit number before sending. <code>?setup=1</code> bootstraps first-time admin credentials.</td></tr>
+</table>
+
+<h3>Admin PHP Scripts</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{{building}}</code> session.</td></tr>
+  <tr><td><code>manage-users.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Add, remove, and reset passwords for resident accounts. Import owners from Google Sheet. Supports both building admin and master admin login.</td></tr>
+  <tr><td><code>storage-report.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Shows Google Drive storage usage for Public and Private folders, broken down by subfolder. Calls dir-display-bridge.gs storageReport action. Requires admin session.</td></tr>
+  <tr><td><code>woolsy-update.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Woolsy knowledge base setup/update UI. Probes PDFs for readability, estimates credits, calls Claude API to generate/regenerate rules.md, presents section-level delta checklist for admin review. Handles setup, update, and prompt-version-outdated rebuild modes.</td></tr>
+  <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Building-level Woolsy admin sub-page (accessible from admin.php Woolsy card).</td></tr>
+  <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>SheepSite operator dashboard (Alain only). Authenticated with <code>credentials/_master.json</code>. Session key: <code>master_admin_auth</code>. Card layout: Woolsy Management (credits table + top-up per building), future: renewals. URL: <code>master-admin.php</code> (no building param).</td></tr>
+  <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Admin file management tool for Drive folders.</td></tr>
+  <tr><td><code>tag-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Admin interface for tagging documents (search feature).</td></tr>
+  <tr><td><code>search.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Full-text search across public/private Drive trees.</td></tr>
+  <tr><td><code>setup-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>One-time tool to create <code>_master.json</code> with a bcrypt-hashed master password. Upload, visit once, delete immediately. No longer needed for per-building admins (handled by forgot-password.php).</td></tr>
+</table>
+
+<h3>Woolsy Chatbot Scripts</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>chatbot-widget.js</code> <span class="tag tag-js">JS</span></td>
+      <td>Loaded on building websites. Creates the floating 🐑 FAB button and public chat overlay. Public mode: cheeky deflections, keyword-aware, zero API cost. Resident mode: opens chatbot-page.php in a popup with <code>?q=</code> carrying the question. Requires <code>window.BUILDING_NAME</code> to be set by the footer script.</td></tr>
+  <tr><td><code>chatbot-page.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Resident chat popup UI. If not logged in: shows login form. If logged in: renders full chat interface. On load, reads <code>?q=</code> from URL via JS <code>URLSearchParams</code> and auto-sends the question. Login redirect preserves <code>?q=</code>.</td></tr>
+  <tr><td><code>chatbot.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Chat API endpoint. Receives question + history from chatbot-page.php. Checks credits, loads building rules (<code>faqs/{{building}}_rules.md</code>) and document index (<code>faqs/{{building}}_docindex.txt</code>), calls Claude Haiku API, deducts actual token cost from credits, returns answer JSON.</td></tr>
+</table>
+
+<h3>Shared / Config Files</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>buildings.php</code> <span class="tag tag-php">PHP</span></td>
+      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code> (the building&rsquo;s Sheets web app URL).</td></tr>
+  <tr><td><code>footer-for-sites.js</code> <span class="tag tag-js">JS</span></td>
+      <td>Reference document (not served directly). Contains the complete footer script to paste into each building website, plus button/iframe HTML snippets. Change only <code>BUILDING_NAME</code> per site. Includes the <code>&lt;script src=&quot;chatbot-widget.js&quot;&gt;</code> tag.</td></tr>
+</table>
+
+<h3>Google Apps Script Files</h3>
+<table>
+  <tr><th>File</th><th>Where it lives</th><th>Description</th></tr>
+  <tr><td><code>dir-display-bridge.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>Standalone project, deployed as web app</td>
+      <td>Drive proxy. All Drive/Docs access from PHP routes through here. See Section 4.</td></tr>
+  <tr><td><code>sheets/building-script.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>Per-building project, bound to the building&rsquo;s Sheet</td>
+      <td>Report generation, owner import, password reset emails. Calls DatabaseSheetMaster library.</td></tr>
+  <tr><td><code>sheets/board-list.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>Board of Directors report generator.</td></tr>
+  <tr><td><code>sheets/elevator-list.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>Elevator List report. Includes print-optimised layout.</td></tr>
+  <tr><td><code>sheets/parking-list.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>Parking List report.</td></tr>
+  <tr><td><code>sheets/resident-list.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>Resident List. Sortable by unit or last name.</td></tr>
+  <tr><td><code>sheets/owner-import.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>Returns Database tab as JSON for owner import into manage-users.php.</td></tr>
+  <tr><td><code>sheets/reset-password.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>Handles self-serve password reset email flow (owner and admin).</td></tr>
+</table>
+
+{divider()}
+
+<h2 id="auth">6. Authentication Architecture</h2>
+
+<h3>Three Separate Auth Layers</h3>
+<table>
+  <tr><th>Layer</th><th>Session Key</th><th>Credential File</th><th>Used By</th></tr>
+  <tr><td>Resident</td><td><code>private_auth_{{building}}</code></td><td><code>credentials/{{building}}.json</code></td><td>display-private-dir, protected-report, chatbot-page, change-password</td></tr>
+  <tr><td>Building Admin</td><td><code>manage_auth_{{building}}</code></td><td><code>credentials/{{building}}_admin.json</code></td><td>admin, manage-users, storage-report, woolsy-update, woolsy-admin</td></tr>
+  <tr><td>Master Admin</td><td><code>master_admin_auth</code></td><td><code>credentials/_master.json</code></td><td>master-admin; also accepted as override in manage-users + admin</td></tr>
+</table>
+
+<h3>Credential File Format</h3>
+<p>Resident file (<code>credentials/{{building}}.json</code>) &mdash; array of user objects:</p>
+<pre>[
+  {{"user": "jsmith", "pass": "$2y$10$...", "mustChange": true}},
+  {{"user": "mjones", "pass": "$2y$10$..."}}
+]</pre>
+<p>Admin and master files (<code>*_admin.json</code>, <code>_master.json</code>) &mdash; single object:</p>
+<pre>{{"user": "admin", "pass": "$2y$10$..."}}</pre>
+<p>All passwords are bcrypt-hashed. <code>password_verify()</code> is used for all checks. No plaintext passwords anywhere in the codebase.</p>
+
+<h3>mustChange Flow</h3>
+<p>When <code>mustChange: true</code> is set on a resident account (e.g., after import or admin reset),
+the resident is redirected to <code>change-password.php</code> on every page load until they set a new
+password. They cannot reuse the temporary password. After changing, they are redirected to their
+original destination. The check runs on every authenticated page, not just at login, preventing bypass
+by direct URL access.</p>
+
+<h3>Building Validation</h3>
+<p>No hardcoded <code>$buildings</code> array is used for auth validation. A building is considered
+valid if its credential file exists on disk (<code>credentials/{{building}}.json</code> or
+<code>credentials/{{building}}_admin.json</code>). This means adding a building requires only creating
+the credential file &mdash; no code changes.</p>
+
+{divider()}
+
+<h2 id="woolsy">7. Woolsy Chatbot Stack</h2>
+
+<h3>Architecture</h3>
+<pre>Building Website
+  └─ chatbot-widget.js (public floating widget, deflections only)
+       └─ window.open → chatbot-page.php?building=X&q=QUESTION (popup)
+            └─ POST → chatbot.php (API endpoint)
+                 ├─ faqs/{{building}}_rules.md (governing doc knowledge base)
+                 ├─ faqs/{{building}}_docindex.txt (document/form directory)
+                 └─ Anthropic API (Claude Haiku) → answer JSON</pre>
+
+<h3>Public Widget (chatbot-widget.js)</h3>
+<p>Runs on the building website. Zero API cost &mdash; public questions get cheeky deflections
+with keyword-aware responses (pets, parking, noise, etc.) and a &ldquo;Open Resident Chat&rdquo;
+button. The question is preserved in the popup URL (<code>?q=</code>) and auto-sent after login.</p>
+
+<h3>Resident Chat (chatbot-page.php + chatbot.php)</h3>
+<p>chatbot-page.php handles the UI and login gate. chatbot.php is the API endpoint that:</p>
+<ol>
+  <li>Checks credits (<code>faqs/woolsy_credits.json</code>) &mdash; blocks if exhausted</li>
+  <li>Loads the building&rsquo;s rules file and document index into the system prompt</li>
+  <li>Calls Claude Haiku with the question and conversation history (last 6 exchanges)</li>
+  <li>Calculates actual token cost and deducts from credits</li>
+  <li>Returns the answer as JSON</li>
+</ol>
+
+<h3>Knowledge Base Files</h3>
+<table>
+  <tr><th>File</th><th>Description</th><th>Built by</th></tr>
+  <tr><td><code>faqs/{{building}}_rules.md</code></td><td>Structured Markdown summary of governing documents. First line is a version stamp: <code>&lt;!-- woolsy_prompt_version: N --&gt;</code></td><td>woolsy-update.php (Claude API call)</td></tr>
+  <tr><td><code>faqs/{{building}}_docindex.txt</code></td><td>Flat list of all file names in the public Drive folder tree, grouped by subfolder. Tells Woolsy what documents and forms exist.</td><td>admin.php Build Index button, also auto-rebuilt after each rules save</td></tr>
+  <tr><td><code>faqs/woolsy_credits.json</code></td><td>Per-building credit balances: <code>{{"LyndhurstH": {{"allocated": 5, "used": 1.23}}}}</code></td><td>Managed by master-admin.php (top-up), decremented by chatbot.php</td></tr>
+</table>
+
+<h3>Prompt Versioning</h3>
+<p>The extraction prompt (topic categories Claude looks for when building rules.md) is versioned via
+<code>PROMPT_VERSION</code> in <code>woolsy-update.php</code> and <code>admin.php</code>. When
+<code>PROMPT_VERSION</code> is bumped, the admin card detects the mismatch and shows a
+&ldquo;Rebuild recommended&rdquo; banner. This ensures all buildings benefit from improved topic
+coverage without manual tracking.</p>
+
+<h3>Credit Model</h3>
+<ul>
+  <li>1 credit = $1 of Claude API cost (internal accounting; Alain prices credits to buildings with markup)</li>
+  <li>Default allocation: 1 credit per building (teaser &mdash; card always shows from day 1)</li>
+  <li>Hard stop at limit: Woolsy returns &ldquo;unavailable&rdquo; message to residents</li>
+  <li>Low-credit warning at 80% usage (shown in admin card)</li>
+  <li>Master admin tops up via master-admin.php Woolsy Management card</li>
+</ul>
+
+{divider()}
+
+<h2 id="data">8. Data &amp; Config Files</h2>
+
+<table>
+  <tr><th>File / Folder</th><th>Description</th><th>In git?</th></tr>
+  <tr><td><code>buildings.php</code> <span class="tag tag-data">data</span></td><td>Single config file for all buildings. Edit only this when adding a building.</td><td>Yes</td></tr>
+  <tr><td><code>credentials/{{building}}.json</code> <span class="tag tag-data">data</span></td><td>Resident accounts (bcrypt). Array of {{user, pass, mustChange?}}.</td><td>No</td></tr>
+  <tr><td><code>credentials/{{building}}_admin.json</code> <span class="tag tag-data">data</span></td><td>Building admin credentials (bcrypt). Single {{user, pass}} object.</td><td>No</td></tr>
+  <tr><td><code>credentials/_master.json</code> <span class="tag tag-data">data</span></td><td>Master admin credentials (bcrypt). Used by master-admin.php and as override in building admin pages.</td><td>No</td></tr>
+  <tr><td><code>credentials/.htaccess</code> <span class="tag tag-data">data</span></td><td>Blocks all web access to the credentials folder.</td><td>Yes</td></tr>
+  <tr><td><code>faqs/{{building}}_rules.md</code> <span class="tag tag-data">data</span></td><td>Woolsy knowledge base for one building. Versioned. Has .bak backup.</td><td>No</td></tr>
+  <tr><td><code>faqs/{{building}}_docindex.txt</code> <span class="tag tag-data">data</span></td><td>Document index for Woolsy system prompt.</td><td>No</td></tr>
+  <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings.</td><td>No</td></tr>
+</table>
+
+<div class="warn"><strong>Note:</strong> All <code>credentials/</code> and <code>faqs/</code> data files
+exist only on the live server. They are excluded from git via <code>.gitignore</code>. The
+<code>credentials/</code> folder must be writable by PHP (755). Never commit credential or credit files.</div>
+
+{divider()}
+
+<h2 id="buildings">9. Adding a Building</h2>
+
+<ol>
+  <li>Add an entry to <code>buildings.php</code>: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code></li>
+  <li>Deploy <code>buildings.php</code> to the server</li>
+  <li>Create the Google Sheet for the building, add building-script.gs bound to it, deploy as web app, install the two triggers</li>
+  <li>Set up Drive folders (Public and Private) and share them with the GAS project owner</li>
+  <li>Visit <code>forgot-password.php?building=X&role=admin&setup=1</code> to bootstrap the admin credential</li>
+  <li>Paste the footer script into the building website with <code>BUILDING_NAME</code> set, including the <code>chatbot-widget.js</code> script tag</li>
+  <li>Log into <code>admin.php?building=X</code>, import owners, build the document index, run Woolsy setup</li>
+</ol>
+
+<p>See <strong>NEW-SITE-GUIDE.html</strong> for the full step-by-step walkthrough.</p>
+
+{divider()}
+
+<h2 id="operator">10. Operator Procedures</h2>
+
+<p>This section documents recurring maintenance tasks performed by the SheepSite operator (Alain).</p>
+
+<h3>Updating the Woolsy Extraction Prompt</h3>
+
+<p>The Woolsy extraction prompt is the set of instructions sent to the Claude API when building or
+rebuilding a building's knowledge base (<code>faqs/{{building}}_rules.md</code>).
+As the system matures, the prompt may be improved to capture more topics, fix edge cases,
+or change the output format.</p>
+
+<p>There are two prompts in <code>woolsy-update.php</code>:</p>
+<ul>
+  <li><strong>Setup prompt</strong> — used when no <code>rules.md</code> exists yet (first run)</li>
+  <li><strong>Update prompt</strong> — used when <code>rules.md</code> already exists and Drive files have changed, or a rebuild is forced</li>
+</ul>
+
+<h4>When to update the prompt</h4>
+<ul>
+  <li>A topic category is missing or poorly handled (e.g. Woolsy can't answer questions about a known rule)</li>
+  <li>The output format should change (new sections, different heading style, more detail)</li>
+  <li>A bug in the extraction logic is found (e.g. section headings inconsistently named)</li>
+</ul>
+
+<h4>How to update the prompt</h4>
+<ol>
+  <li>Edit the prompt text in <code>woolsy-update.php</code> — the setup prompt and/or the update prompt, as needed</li>
+  <li>Bump <code>PROMPT_VERSION</code> in <strong>both</strong> <code>woolsy-update.php</code> and <code>admin.php</code> (they must always match)</li>
+  <li>Deploy both files to the server</li>
+</ol>
+
+<div class="tip"><strong>What happens automatically:</strong> Every building's admin card reads the version
+stamp from its local <code>rules.md</code> and compares it to <code>PROMPT_VERSION</code>. Any building
+with an outdated stamp shows an amber warning banner: <em>"Woolsy prompt updated (vN) — a rebuild is
+recommended"</em>. The building admin clicks "Rebuild now →" and the new prompt is applied. No manual
+tracking required — the version system flags every affected building automatically.</div>
+
+<h4>Version stamp mechanics</h4>
+<ul>
+  <li>Every <code>rules.md</code> file begins with an HTML comment: <code>&lt;!-- woolsy_prompt_version: N --&gt;</code></li>
+  <li>Files created before versioning was introduced have no stamp and are treated as v1</li>
+  <li>The stamp is written by <code>woolsy-update.php</code> automatically on every save</li>
+  <li><code>admin.php</code> reads the stamp with <code>getRulesVersion()</code> — a local PHP function, no AJAX</li>
+</ul>
+
+<h3>Topping Up Woolsy Credits</h3>
+
+<ol>
+  <li>Log into <code>master-admin.php</code> (requires master credentials)</li>
+  <li>Open the Woolsy Management card for the target building</li>
+  <li>Adjust the credit balance and save</li>
+</ol>
+
+<p>Credits are stored in <code>faqs/woolsy_credits.json</code>. 1 credit = $1 of Claude API cost (internal accounting).
+Buildings are billed externally at a markup. Hard stop at zero credits &mdash; Woolsy returns an unavailable
+message to residents until topped up.</p>
+
+<h3>Adding a New Topic to the Extraction Prompt</h3>
+
+<p>The prompt intentionally has <em>no predefined topic list</em>. Claude is instructed to extract
+<em>every rule, policy, right, or obligation that an owner or resident would care about</em> &mdash;
+the guiding test is "would a resident ask Woolsy about this?"</p>
+
+<p>Two areas get explicit callouts in the prompt regardless:</p>
+<ul>
+  <li><strong>Unit boundary definitions</strong> — what the owner owns vs. the corporation (doors, windows,
+  balconies, HVAC, pipes). These are often buried in legal language but are among the most common resident questions.</li>
+  <li><strong>Common element modification rules</strong> — approval process, dollar limits, what requires a
+  board vote vs. owner vote. Also frequently buried in declarations or rules.</li>
+</ul>
+
+<p>If you find that a topic is not being extracted reliably, the best fix is usually to add an explicit
+callout sentence to the prompt (e.g. <em>"Always extract rules about X even if covered only briefly"</em>),
+then bump <code>PROMPT_VERSION</code> and deploy. All buildings will be flagged for rebuild automatically.</p>
+
+<h3>Server Maintenance Notes</h3>
+<ul>
+  <li>The <code>credentials/</code> folder must remain writable by PHP (755 on the server)</li>
+  <li><code>faqs/</code> folder must also be writable (Woolsy update writes and overwrites files there)</li>
+  <li>After any PHP deploy, verify a known page loads before logging out of cPanel</li>
+  <li>The Apps Script GAS project does not need redeployment when PHP files change &mdash; only when <code>dir-display-bridge.gs</code> or <code>building-script.gs</code> changes</li>
+  <li>After any GAS master library change: Deploy → Manage deployments → New version (building scripts pick it up automatically if set to "latest version")</li>
+</ul>
+
+</body>
+</html>
+"""
+
+with open(OUTPUT, 'w', encoding='utf-8') as f:
+    f.write(html)
+
+print(f'Written to {OUTPUT}')
+print(f'File size: {os.path.getsize(OUTPUT) // 1024} KB')

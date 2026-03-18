@@ -155,6 +155,9 @@ function openDoc(subdir, filename) {
 }
 </script>
 
+<!-- Woolsy chatbot widget — floating sheep button + public deflector + resident chat popup -->
+<script src="https://sheepsite.com/Scripts/chatbot-widget.js"></script>
+
 */
 
 

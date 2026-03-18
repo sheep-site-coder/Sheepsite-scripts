@@ -17,6 +17,18 @@ define('CREDITS_FILE',         __DIR__ . '/faqs/woolsy_credits.json');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
 define('APPS_SCRIPT_URL',      'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN',    'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
+define('PROMPT_VERSION',       3);
+
+function getRulesVersion(string $file): int {
+    if (!file_exists($file)) return 0;
+    $fh   = fopen($file, 'r');
+    $line = fgets($fh);
+    fclose($fh);
+    if (preg_match('/woolsy_prompt_version:\s*(\d+)/', $line, $m)) {
+        return (int)$m[1];
+    }
+    return 1; // pre-versioning files
+}
 
 function getWoolsyCredits(string $building): array {
     if (!file_exists(CREDITS_FILE)) {
@@ -362,6 +374,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     $docIndexFile   = __DIR__ . '/faqs/' . $building . '_docindex.txt';
     $docIndexExists = file_exists($docIndexFile);
     $docIndexDate   = $docIndexExists ? date('F j, Y', filemtime($docIndexFile)) : '';
+    $rulesFile      = __DIR__ . '/faqs/' . $building . '_rules.md';
+    $rulesVersion   = getRulesVersion($rulesFile);
+    $promptOutdated = ($rulesVersion > 0 && $rulesVersion < PROMPT_VERSION);
   ?>
   <div class="woolsy-card">
     <div class="woolsy-header">
@@ -372,6 +387,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
           AI-powered assistant for residents. Answers questions about building rules,
           Florida condo law, and community policies.
         </div>
+        <?php if ($promptOutdated): ?>
+        <div class="low-credit-warn" style="margin-bottom:0.5rem;">
+          ⚠️ Woolsy prompt updated (v<?= PROMPT_VERSION ?>) — a rebuild is recommended to cover new topic categories.
+          <a href="woolsy-update.php?building=<?= urlencode($building) ?>" style="color:#92400e;font-weight:600;">Rebuild now →</a>
+        </div>
+        <?php endif; ?>
         <div class="woolsy-docstatus" id="woolsy-docstatus">
           <span class="ds-muted">Checking knowledge base status…</span>
         </div>

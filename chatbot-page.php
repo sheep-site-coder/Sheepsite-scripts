@@ -19,12 +19,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildLabel = ucwords(str_replace(['_','-'], ' ', $building));
 $sessionKey = 'private_auth_' . $building;
 
-// Carry the original question through login via session (more reliable than URL round-trip)
-$pendingQKey = 'woolsy_pending_q_' . $building;
-if (!empty($_GET['q'])) {
-    $_SESSION[$pendingQKey] = trim($_GET['q']);
-}
-$q = '';  // resolved after login check below
+$q = ''; // unused — question is passed via postMessage from the public widget
 
 // --- Login POST ---
 $loginError = '';
@@ -37,7 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
     foreach ($users as $u) {
         if ($u['user'] === $username && password_verify($password, $u['pass'])) {
             $_SESSION[$sessionKey] = ['user' => $username];
-            header('Location: ?building=' . urlencode($building));
+            $qParam = !empty($_GET['q']) ? '&q=' . urlencode(trim($_GET['q'])) : '';
+            header('Location: ?building=' . urlencode($building) . $qParam);
             exit;
         }
     }
@@ -53,11 +49,6 @@ if (isset($_GET['logout'])) {
 $loggedIn = !empty($_SESSION[$sessionKey]);
 $username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 
-// Retrieve and clear the pending question now that we know login state
-if ($loggedIn && !empty($_SESSION[$pendingQKey])) {
-    $q = $_SESSION[$pendingQKey];
-    unset($_SESSION[$pendingQKey]);
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -252,7 +243,8 @@ if ($loggedIn && !empty($_SESSION[$pendingQKey])) {
 <script>
 const BUILDING  = <?= json_encode($building) ?>;
 const USERNAME  = <?= json_encode($username) ?>;
-const INITIAL_Q = <?= json_encode($q) ?>;
+// Resolve question: sessionStorage (set before login redirect) takes priority
+// over PHP session fallback. Clear sessionStorage immediately after reading.
 let   history   = [];
 
 function addMessage(role, text) {
@@ -311,9 +303,10 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 // Greeting
 addMessage('bot', 'Hi <?= htmlspecialchars(ucfirst($username)) ?>! I\'m Woolsy, your community assistant. Ask me anything about <?= htmlspecialchars($buildLabel) ?> — rules, procedures, documents, amenities.');
 
-// Auto-send question carried over from the public widget
-if (INITIAL_Q) {
-  document.getElementById('chat-input').value = INITIAL_Q;
+// Read question directly from URL — works whether logged in already or after login redirect.
+const _urlQ = new URLSearchParams(window.location.search).get('q') || '';
+if (_urlQ) {
+  document.getElementById('chat-input').value = _urlQ;
   send();
 } else {
   document.getElementById('chat-input').focus();

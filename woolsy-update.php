@@ -20,6 +20,26 @@ define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
 define('CREDITS_FILE',      __DIR__ . '/faqs/woolsy_credits.json');
 define('RULES_DIR',         __DIR__ . '/faqs/');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
+// Increment when the extraction prompt gains new topics/guidelines.
+// Any building whose rules.md was built with an older version will be
+// flagged in the admin card and woolsy-update.php for a rebuild.
+define('PROMPT_VERSION', 3);
+
+// -------------------------------------------------------
+// Helper: read prompt version stamp from rules.md first line.
+// Files written before versioning was added return 1.
+// Files that don't exist yet return 0.
+// -------------------------------------------------------
+function getRulesVersion(string $file): int {
+    if (!file_exists($file)) return 0;
+    $fh   = fopen($file, 'r');
+    $line = fgets($fh);
+    fclose($fh);
+    if (preg_match('/woolsy_prompt_version:\s*(\d+)/', $line, $m)) {
+        return (int)$m[1];
+    }
+    return 1; // pre-versioning files
+}
 
 // -------------------------------------------------------
 // Validate building + auth
@@ -113,21 +133,42 @@ function parseSections(string $md): array {
     return $sections;
 }
 
+// Normalize a section heading for fuzzy matching.
+// Handles Claude varying dash style (hyphen vs en-dash), capitalization, etc.
+function normalizeKey(string $title): string {
+    $t = mb_strtolower(trim($title));
+    $t = preg_replace('/[\-\x{2013}\x{2014}\/]+/u', '-', $t); // unify dashes
+    $t = preg_replace('/\s+/', ' ', $t);                        // collapse spaces
+    return $t;
+}
+
 // Compute delta between old and new section maps.
+// Matches sections by normalized heading so minor Claude rephrasing (dash
+// style, capitalization) doesn't produce false NEW+REMOVED pairs.
 // Returns array of ['type'=>NEW|CHANGED|REMOVED, 'title'=>..., 'content'=>..., 'old'=>...]
 function computeDelta(array $old, array $new): array {
-    $delta = [];
+    // Build normalized-key → {original title, body} maps
+    $oldNorm = [];
+    foreach ($old as $title => $body) {
+        $oldNorm[normalizeKey($title)] = ['title' => $title, 'body' => $body];
+    }
+    $newNorm = [];
     foreach ($new as $title => $body) {
-        if (!isset($old[$title])) {
-            $delta[] = ['type' => 'NEW',     'title' => $title, 'content' => $body];
-        } elseif ($old[$title] !== $body) {
-            $delta[] = ['type' => 'CHANGED', 'title' => $title, 'content' => $body, 'old' => $old[$title]];
+        $newNorm[normalizeKey($title)] = ['title' => $title, 'body' => $body];
+    }
+
+    $delta = [];
+    foreach ($newNorm as $key => $newItem) {
+        if (!isset($oldNorm[$key])) {
+            $delta[] = ['type' => 'NEW',     'title' => $newItem['title'], 'content' => $newItem['body']];
+        } elseif ($oldNorm[$key]['body'] !== $newItem['body']) {
+            $delta[] = ['type' => 'CHANGED', 'title' => $newItem['title'], 'content' => $newItem['body'], 'old' => $oldNorm[$key]['body']];
         }
         // unchanged → omitted from delta, always kept
     }
-    foreach ($old as $title => $body) {
-        if (!isset($new[$title])) {
-            $delta[] = ['type' => 'REMOVED', 'title' => $title, 'old' => $body];
+    foreach ($oldNorm as $key => $oldItem) {
+        if (!isset($newNorm[$key])) {
+            $delta[] = ['type' => 'REMOVED', 'title' => $oldItem['title'], 'old' => $oldItem['body']];
         }
     }
     return $delta;
@@ -218,7 +259,7 @@ if ($action === 'probeFile') {
 // --- process: call Claude, compute delta, return to client ---
 if ($action === 'process' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    set_time_limit(180);
+    set_time_limit(300);
 
     if (!hasCredits($building)) {
         echo json_encode(['error' => 'Credits exhausted — contact SheepSite to top up.']);
@@ -272,7 +313,8 @@ You are updating the Woolsy knowledge base for the {$building} condominium assoc
 The current knowledge base is shown first. Below it are the current authoritative governing documents. Regenerate the COMPLETE, updated knowledge base from these documents.
 
 Guidelines:
-- Organize by topic: Pets, Guests, Rentals, Parking, Smoking, Alterations, Maintenance, Assessments, Board Structure, Common Elements, Procedures, Contacts, etc.
+- Preserve ALL existing section headings exactly as written. Do NOT rename, merge, or drop any section.
+- Add new sections for any topics covered in the documents that are not yet in the knowledge base. Use clear, descriptive headings that match the subject matter.
 - After each rule or fact, add a source attribution in parentheses: (Source: Document Name)
 - Be comprehensive but readable — this is a reference document used by an AI chatbot
 - Skip boilerplate: recitals, "WHEREAS" clauses, signature blocks, and self-explanatory legal definitions
@@ -288,10 +330,12 @@ You are building a knowledge base for Woolsy, an AI assistant for the {$building
 The following governing documents have been extracted from PDFs. Distill them into a structured Markdown reference that Woolsy will use to answer resident questions accurately.
 
 Guidelines:
-- Organize by topic: Pets, Guests, Rentals, Parking, Smoking, Alterations, Maintenance, Assessments, Board Structure, Common Elements, Procedures, Contacts, etc.
+- Extract every rule, policy, right, or obligation that an owner or resident would care about, need to follow, or might have a question about. If a resident could reasonably ask Woolsy about it, it belongs in the knowledge base.
+- Create one section (## Heading) per distinct topic. Use clear headings that reflect the subject matter (e.g. Smoking, Parking, Pets, Right of Entry, Nuisance and Conduct, Alterations, Water Damage, etc.). Do not limit yourself to any predefined list — cover whatever the documents actually address.
 - After each rule or fact, add a source attribution in parentheses: (Source: Document Name)
 - Be comprehensive but readable — this is a reference document used by an AI chatbot
-- Skip boilerplate: recitals, "WHEREAS" clauses, signature blocks, and self-explanatory legal definitions
+- Always capture unit boundary definitions and ownership/maintenance responsibility rules — even if written as legal definitions — because residents need to know what they own vs. what the association owns (e.g. doors, windows, floors, ceilings, patios, Florida rooms, pipes, wiring)
+- Skip content that is not resident-facing: internal board procedures, legal recitals, "WHEREAS" clauses, signature blocks, and definitions that explain themselves
 - Include fees, fines, deadlines, and contact information when present
 
 Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
@@ -306,8 +350,8 @@ PROMPT;
     }
 
     $payload = json_encode([
-        'model'      => 'claude-haiku-4-5-20251001',
-        'max_tokens' => 6000,
+        'model'      => 'claude-sonnet-4-6',
+        'max_tokens' => 8000,
         'system'     => $systemPrompt,
         'messages'   => [['role' => 'user', 'content' => $userContent]],
     ]);
@@ -322,7 +366,7 @@ PROMPT;
             'x-api-key: '          . $apiKey,
             'anthropic-version: 2023-06-01',
         ],
-        CURLOPT_TIMEOUT        => 120,
+        CURLOPT_TIMEOUT        => 240,
     ]);
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
@@ -347,7 +391,7 @@ PROMPT;
     // Deduct credits
     $inputTokens  = (int)($data['usage']['input_tokens']  ?? 0);
     $outputTokens = (int)($data['usage']['output_tokens'] ?? 0);
-    $creditsUsed  = round(($inputTokens * 0.0000008) + ($outputTokens * 0.000004), 6);
+    $creditsUsed  = round(($inputTokens * 0.000003) + ($outputTokens * 0.000015), 6);
     deductCredits($building, $creditsUsed);
 
     // Compute delta
@@ -391,7 +435,8 @@ if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (file_exists($rulesFile)) {
         copy($rulesFile, $rulesFile . '.bak');
     }
-    if (file_put_contents($rulesFile, $final) === false) {
+    $stamped = '<!-- woolsy_prompt_version: ' . PROMPT_VERSION . " -->\n" . $final;
+    if (file_put_contents($rulesFile, $stamped) === false) {
         echo json_encode(['error' => 'Could not save file. Check that faqs/ folder is writable.']);
         exit;
     }
@@ -433,19 +478,26 @@ if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // -------------------------------------------------------
 // Page render
 // -------------------------------------------------------
-$rulesFile    = RULES_DIR . $building . '_rules.md';
-$mode         = file_exists($rulesFile) ? 'update' : 'setup';
-$changedFiles = [];
-$lastChecked  = '';
+$rulesFile      = RULES_DIR . $building . '_rules.md';
+$rulesVersion   = getRulesVersion($rulesFile);
+$promptOutdated = ($rulesVersion > 0 && $rulesVersion < PROMPT_VERSION);
+$mode           = !file_exists($rulesFile) ? 'setup' : ($promptOutdated ? 'rebuild' : 'update');
+$changedFiles   = [];
+$lastChecked    = '';
 
-if ($mode === 'update') {
+if ($mode === 'update' || $mode === 'rebuild') {
     $checkResult  = callAppsScript(['action' => 'docCheckResult', 'building' => $building], 15);
     $changedFiles = $checkResult['changes']   ?? [];
     $lastChecked  = $checkResult['checkedAt'] ?? '';
 }
 
+$existingRulesChars = (file_exists($rulesFile)) ? strlen(file_get_contents($rulesFile)) : 0;
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
-$pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Woolsy Knowledge Base';
+$pageTitle  = match($mode) {
+    'setup'   => 'Set Up Woolsy Knowledge Base',
+    'rebuild' => 'Rebuild Woolsy Knowledge Base',
+    default   => 'Update Woolsy Knowledge Base',
+};
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -525,6 +577,11 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
   <?php if ($mode === 'setup'): ?>
     Woolsy will read the governing documents in your Public folder and build a knowledge base
     for answering resident questions. This only needs to be done once.
+  <?php elseif ($mode === 'rebuild'): ?>
+    The Woolsy extraction prompt has been updated (version <?= PROMPT_VERSION ?>) with new topic
+    categories. A full rebuild will re-read all current documents and regenerate the knowledge base
+    so Woolsy can answer questions about the newly added topics. Only changed sections will require
+    your review.
   <?php else: ?>
     Changes were detected in your governing documents. Woolsy will re-read all current documents
     and regenerate the knowledge base.
@@ -543,6 +600,7 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
         <th>Folder</th>
         <th>File</th>
         <th>Status</th>
+        <th title="Uncheck to exclude a file from the knowledge base build">Include</th>
         <?php if ($mode === 'update'): ?><th>Change</th><?php endif; ?>
       </tr>
     </thead>
@@ -556,7 +614,7 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
   <div class="estimate-box" id="estimate-box"></div>
   <div class="action-row">
     <button class="action-btn" id="process-btn" onclick="startProcess()">
-      <?= $mode === 'setup' ? 'Build Knowledge Base' : 'Update Knowledge Base' ?>
+      <?= match($mode) { 'setup' => 'Build Knowledge Base', 'rebuild' => 'Rebuild Knowledge Base', default => 'Update Knowledge Base' } ?>
     </button>
     <a href="admin.php?building=<?= urlencode($building) ?>" class="cancel-link">Cancel</a>
   </div>
@@ -566,7 +624,7 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
 <div id="step-processing" style="display:none">
   <div class="progress-msg">
     ⏳ Woolsy is reading your documents and building the knowledge base…<br>
-    <span class="muted">This may take up to a minute.</span>
+    <span class="muted">This may take 2–3 minutes. &nbsp;<span id="elapsed-timer"></span></span>
   </div>
 </div>
 
@@ -601,13 +659,40 @@ $pageTitle  = $mode === 'setup' ? 'Set Up Woolsy Knowledge Base' : 'Update Wools
 <div id="error-box" class="error-box" style="display:none"></div>
 
 <script>
-const BUILDING      = <?= json_encode($building) ?>;
-const MODE          = <?= json_encode($mode) ?>;
-const CHANGED_FILES = <?= json_encode($changedFiles) ?>;
-const BASE_URL      = 'woolsy-update.php?building=' + encodeURIComponent(BUILDING);
+const BUILDING           = <?= json_encode($building) ?>;
+const MODE               = <?= json_encode($mode === 'rebuild' ? 'update' : $mode) ?>;
+const CHANGED_FILES      = <?= json_encode($changedFiles) ?>;
+const EXISTING_RULES_CHARS = <?= json_encode($existingRulesChars) ?>;
+const BASE_URL           = 'woolsy-update.php?building=' + encodeURIComponent(BUILDING);
 
 let allFiles = [];
 let currentDelta = [];
+let _elapsedInterval = null;
+
+function startElapsedTimer() {
+  const el = document.getElementById('elapsed-timer');
+  if (!el) return;
+  let secs = 0;
+  el.textContent = '';
+  _elapsedInterval = setInterval(function() {
+    secs++;
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    el.textContent = '(' + (m > 0 ? m + 'm ' : '') + s + 's elapsed)';
+  }, 1000);
+}
+
+function stopElapsedTimer() {
+  if (_elapsedInterval) { clearInterval(_elapsedInterval); _elapsedInterval = null; }
+  const el = document.getElementById('elapsed-timer');
+  if (el) el.textContent = '';
+}
+
+function toggleFileIncluded(fileId, checked) {
+  const file = allFiles.find(f => f.id === fileId);
+  if (file) file.included = checked;
+  updateEstimate();
+}
 
 // -------------------------------------------------------
 // Boot
@@ -680,16 +765,6 @@ function showReadySummary() {
   const unreadable = allFiles.filter(f => !f.readable && f.status === 'scanned');
   const errors     = allFiles.filter(f => f.status === 'error');
 
-  const inputTokens  = readable.reduce((s, f) => s + (f.charCount / 4), 0);
-  const outputTokens = inputTokens * 0.25;
-  const estimated    = (inputTokens / 1e6 * 0.80) + (outputTokens / 1e6 * 4.00);
-  const estStr       = estimated < 0.01 ? '< 0.01' : estimated.toFixed(2);
-  const fileSummary  = readable.length + ' of ' + allFiles.length + ' file' + (allFiles.length !== 1 ? 's' : '') + ' readable';
-
-  document.getElementById('estimate-box').innerHTML =
-    '<strong>Estimated cost:</strong> ~' + estStr + ' credits' +
-    '&nbsp; <span class="muted">(' + fileSummary + ', ~' + Math.round(inputTokens).toLocaleString() + ' input tokens — approximate)</span>';
-
   const warnParts = [];
   if (unreadable.length > 0) {
     const names = unreadable.map(f => f.name).join(', ');
@@ -710,7 +785,33 @@ function showReadySummary() {
     document.getElementById('process-btn').disabled = true;
   }
 
+  updateEstimate();
   showStep('ready');
+}
+
+function updateEstimate() {
+  const included = allFiles.filter(f => f.readable && f.included !== false);
+  const excluded = allFiles.filter(f => f.readable && f.included === false);
+
+  // Input = documents + existing rules.md (sent in update/rebuild mode)
+  const docTokens    = included.reduce((s, f) => s + (f.charCount / 4), 0);
+  const rulesTokens  = EXISTING_RULES_CHARS / 4;
+  const inputTokens  = docTokens + rulesTokens;
+  // Output ratio: Sonnet generates ~50% of input for a full KB; add 10% buffer
+  const outputTokens = inputTokens * 0.55;
+  const estimated    = (inputTokens / 1e6 * 3.00) + (outputTokens / 1e6 * 15.00);
+  const estStr       = estimated < 0.01 ? '< 0.01' : estimated.toFixed(2);
+
+  let fileSummary = included.length + ' of ' + allFiles.length + ' file' + (allFiles.length !== 1 ? 's' : '') + ' included';
+  if (excluded.length > 0) {
+    fileSummary += ' <span style="color:#b45309">(' + excluded.length + ' excluded)</span>';
+  }
+
+  document.getElementById('estimate-box').innerHTML =
+    '<strong>Estimated cost:</strong> up to ~' + estStr + ' credits' +
+    '&nbsp; <span class="muted">(' + fileSummary + ', ~' + Math.round(inputTokens).toLocaleString() + ' input tokens — approximate)</span>';
+
+  document.getElementById('process-btn').disabled = (included.length === 0);
 }
 
 // -------------------------------------------------------
@@ -719,22 +820,27 @@ function showReadySummary() {
 async function startProcess() {
   showStep('processing');
   clearError();
+  startElapsedTimer();
 
-  const removedFiles = CHANGED_FILES.filter(f => f.action === 'removed');
+  const removedFiles   = CHANGED_FILES.filter(f => f.action === 'removed');
+  const includedFiles  = allFiles.filter(f => f.included !== false);
 
   let data;
   try {
     const resp = await fetch(BASE_URL + '&action=process', {
       method:  'POST',
       headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({ files: allFiles, mode: MODE, removedFiles: removedFiles })
+      body:    JSON.stringify({ files: includedFiles, mode: MODE, removedFiles: removedFiles })
     });
     data = await resp.json();
   } catch(e) {
+    stopElapsedTimer();
     showError('Request failed. Please try again.');
     showStep('probe');
     return;
   }
+
+  stopElapsedTimer();
 
   if (data.error) {
     showError(data.error);
@@ -893,10 +999,21 @@ function updateRow(file) {
     }
   }
 
+  // Include checkbox — only for readable files; preserve current state
+  let includeCell = '<td></td>';
+  if (file.status === 'readable') {
+    const checked = file.included !== false;
+    includeCell = '<td style="text-align:center"><input type="checkbox" ' +
+      (checked ? 'checked ' : '') +
+      'onchange="toggleFileIncluded(\'' + escAttr(file.id) + '\', this.checked)" ' +
+      'title="Include in knowledge base build"></td>';
+  }
+
   tr.innerHTML =
     '<td>' + escHtml(file.folder) + '</td>' +
     '<td class="file-name">' + escHtml(file.name) + '</td>' +
     '<td>' + statusHtml + '</td>' +
+    includeCell +
     (MODE === 'update' ? '<td>' + changeBadge + '</td>' : '');
 }
 

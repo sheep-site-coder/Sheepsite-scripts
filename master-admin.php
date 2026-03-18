@@ -137,6 +137,17 @@ if (empty($_SESSION[SESSION_KEY])) {
   </div>
 </a>
 
+<a href="docs/Sheepsite-Architecture.html" target="_blank" class="card">
+  <div class="card-icon">🏗️</div>
+  <div>
+    <div class="card-title">Architecture Manual</div>
+    <div class="card-desc">
+      Technical reference covering system design, file inventory, auth architecture,
+      Woolsy stack, GAS layer rationale, and operator procedures. Opens in a new tab.
+    </div>
+  </div>
+</a>
+
 <!-- Future cards go here (Building Renewals, etc.) -->
 
 </body>
