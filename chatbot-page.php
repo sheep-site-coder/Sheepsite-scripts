@@ -7,6 +7,21 @@
 
 session_start();
 
+define('LOGIN_STATS_FILE', __DIR__ . '/credentials/login_stats.json');
+
+function logLogin(string $building, string $username): void {
+    $today  = date('Y-m-d');
+    $cutoff = date('Y-m-d', strtotime('-12 months'));
+    $data   = file_exists(LOGIN_STATS_FILE)
+        ? (json_decode(file_get_contents(LOGIN_STATS_FILE), true) ?? [])
+        : [];
+    $data[$building][$username][$today] = ($data[$building][$username][$today] ?? 0) + 1;
+    foreach ($data[$building][$username] as $date => $count) {
+        if ($date < $cutoff) unset($data[$building][$username][$date]);
+    }
+    file_put_contents(LOGIN_STATS_FILE, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 
 $buildings = require __DIR__ . '/buildings.php';
@@ -31,7 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
 
     foreach ($users as $u) {
         if ($u['user'] === $username && password_verify($password, $u['pass'])) {
-            $_SESSION[$sessionKey] = ['user' => $username];
+            $_SESSION[$sessionKey] = $username;
+            logLogin($building, $username);
             $qParam = !empty($_GET['q']) ? '&q=' . urlencode(trim($_GET['q'])) : '';
             header('Location: ?building=' . urlencode($building) . $qParam);
             exit;
@@ -47,7 +63,7 @@ if (isset($_GET['logout'])) {
 }
 
 $loggedIn = !empty($_SESSION[$sessionKey]);
-$username = $loggedIn ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
+$username = $loggedIn ? $_SESSION[$sessionKey] : '';
 
 ?>
 <!DOCTYPE html>

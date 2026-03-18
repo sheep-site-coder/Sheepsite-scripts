@@ -23,7 +23,7 @@ define('CREDITS_DEFAULT_ALLOCATED', 1.0);
 // Increment when the extraction prompt gains new topics/guidelines.
 // Any building whose rules.md was built with an older version will be
 // flagged in the admin card and woolsy-update.php for a rebuild.
-define('PROMPT_VERSION', 3);
+define('PROMPT_VERSION', 4);
 
 // -------------------------------------------------------
 // Helper: read prompt version stamp from rules.md first line.
@@ -318,7 +318,8 @@ Guidelines:
 - After each rule or fact, add a source attribution in parentheses: (Source: Document Name)
 - Be comprehensive but readable — this is a reference document used by an AI chatbot
 - Skip boilerplate: recitals, "WHEREAS" clauses, signature blocks, and self-explanatory legal definitions
-- Include fees, fines, deadlines, and contact information when present{$removedNote}
+- Include fees, fines, deadlines, and contact information when present
+- Do NOT include specific board member names, unit numbers, or phone numbers — this is dynamic data that changes with elections and is maintained separately{$removedNote}
 
 Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
 PROMPT;
@@ -337,6 +338,7 @@ Guidelines:
 - Always capture unit boundary definitions and ownership/maintenance responsibility rules — even if written as legal definitions — because residents need to know what they own vs. what the association owns (e.g. doors, windows, floors, ceilings, patios, Florida rooms, pipes, wiring)
 - Skip content that is not resident-facing: internal board procedures, legal recitals, "WHEREAS" clauses, signature blocks, and definitions that explain themselves
 - Include fees, fines, deadlines, and contact information when present
+- Do NOT include specific board member names, unit numbers, or phone numbers — this is dynamic data that changes with elections and is maintained separately in the live Board of Directors report
 
 Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
 PROMPT;

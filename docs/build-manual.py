@@ -517,6 +517,35 @@ html = f"""<!DOCTYPE html>
 
 <div class="tip"><strong>Tip:</strong> You only need to update Woolsy when you add new governing documents or significantly revise existing ones. Uploading board meeting minutes or financial statements to other folders does not affect Woolsy&rsquo;s knowledge and does not require an update.</div>
 
+<h3>Editing the Building FAQ &mdash; Correcting or Supplementing Woolsy&rsquo;s Answers</h3>
+<p>The knowledge base built from your governing documents is comprehensive, but there are things it cannot do on its own:</p>
+<ul>
+  <li>Board member names and contact details change after elections &mdash; Woolsy does not pull these from your documents</li>
+  <li>Exact URLs for specific pages on your building website (such as the Board of Directors report) cannot be inferred from document text</li>
+  <li>Policies that exist in practice but are not written in any governing document (e.g. &ldquo;contact the property manager at X for maintenance requests&rdquo;)</li>
+  <li>Any answer you want Woolsy to give verbatim, without interpretation</li>
+</ul>
+<p>For all of these, use the <strong>Edit Building FAQ</strong> editor, which is built directly into the Woolsy Knowledge Base card on your Admin Dashboard.</p>
+
+<h4>How to use it</h4>
+<ol>
+  <li>Log in to the Admin Dashboard and scroll to the <strong>Woolsy Knowledge Base</strong> card</li>
+  <li>Click <strong>&#9998; Edit Building FAQ</strong> at the bottom of the card &mdash; a text editor expands inline</li>
+  <li>Type or paste your content. Use plain text, organized by topic heading, for example:
+<pre>Board of Directors
+The current Board of Directors list is available on the website&apos;s Board of Directors page at:
+https://sheepsite.com/Scripts/public-report.php?building=LyndhurstH&amp;page=board
+
+Property Manager
+For maintenance requests, contact ABC Management at 555-123-4567 or manager@abcmgmt.com.</pre>
+  </li>
+  <li>Click <strong>Save</strong> &mdash; changes take effect immediately on the next resident question. No rebuild required.</li>
+</ol>
+
+<div class="tip"><strong>How it works:</strong> The Building FAQ text is injected directly into Woolsy&rsquo;s context alongside the knowledge base on every request. When a resident asks about board members or anything you have added here, Woolsy uses your text as the authoritative answer. Because Woolsy reads this on every question, edits are live the moment you save &mdash; there is no need to rebuild or wait.</div>
+
+<div class="warn"><strong>Important &mdash; Board member information:</strong> Woolsy intentionally does not extract specific board member names, unit numbers, or phone numbers from governing documents, because this information changes with elections and would quickly become outdated. Always provide current board contact information through the Building FAQ editor instead, or direct residents to the live Board of Directors page on your website.</div>
+
 {divider()}
 
 <h2>Appendix &mdash; Sample Introduction Email</h2>

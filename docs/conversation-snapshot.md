@@ -238,6 +238,28 @@ PHP renders file browser in iframe on building website
         Skips buildings that haven't done initial setup (_initialized flag not set)
       - Scanned PDF handling: Drive's OCR converts scanned PDFs automatically on copy;
         files with < 100 extracted chars are flagged ⚠️ with user notice; skipped in processing
+- [x] Session 15 — Woolsy management page, usage/login tracking, board member fix:
+      - woolsy-manage.php: NEW — dedicated Woolsy management dashboard replacing the bloated
+        admin.php Woolsy card; sections: KB status + Check now, Document Index build/rebuild,
+        Usage Statistics (last 12 months bar chart + this month/year/all-time totals),
+        Credit Usage bar, Building FAQ editor
+      - admin.php: Woolsy card simplified to a clean link card like all others; shows
+        "X questions this month" or credit warning inline; rebuild banner still shown if outdated;
+        all Woolsy AJAX handlers + JS + CSS removed from admin.php (moved to woolsy-manage.php)
+      - chatbot.php: logUsage() added — increments faqs/woolsy_usage.json by month per building
+        after each successful API call; tracks cumulative question counts
+      - display-private-dir.php + chatbot-page.php: logLogin() added — logs per-user daily
+        login counts to credentials/login_stats.json; auto-prunes entries older than 12 months
+      - manage-users.php: user table gains "30 days" and "12 months" login count columns;
+        green when active, dash when zero; mustChange flag shown inline as "pw reset" badge
+      - woolsy-update.php: PROMPT_VERSION bumped to v4; board member names/contacts excluded
+        from extraction (dynamic data changes with elections); chatbot.php updated to redirect
+        board composition questions to live Board of Directors report instead of stale rules.md
+      - chatbot-page.php: session format bug fixed — was storing ['user'=>name] array but
+        display-private-dir.php expects plain string; users logging in via Woolsy popup can
+        now access private files without re-authenticating
+      - docs/build-manual.py: new "Editing the Building FAQ" subsection documenting the inline
+        FAQ editor, when to use it, board member caveat; admin manual rebuilt
 - [x] Session 14 — Woolsy quality improvements, Architecture Manual, UX fixes:
       - woolsy-update.php: switched extraction model from Haiku → Sonnet 4.6 (better legal doc
         comprehension); CURL timeout 120→240s; PHP set_time_limit 180→300s; processing message
@@ -290,17 +312,16 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
-- **Deploy session 14 files to server:**
-    - woolsy-update.php (Sonnet model, exclusion checkbox, timeout, estimate fix)
-    - admin.php (PROMPT_VERSION v3, rebuild banner)
-    - master-admin.php (Architecture Manual card)
-    - chatbot-page.php, chatbot-widget.js (question-lost fix)
-    - footer-for-sites.js (chatbot-widget.js script tag documented)
-    - docs/Sheepsite-Architecture.html (new architecture manual)
-- **Rebuild LyndhurstH knowledge base** with Sonnet + new prompts (after deploying woolsy-update.php)
-    - Restore LyndhurstH_rules.md from .bak on server first if needed
-    - Exclude scanned duplicate PDF using new checkbox feature
-- **Test Sonnet extraction quality** — ask Woolsy about smoking, windows/doors, unit boundaries
+- **Deploy session 15 files to server:**
+    - admin.php, woolsy-manage.php (new), chatbot.php, chatbot-page.php
+    - display-private-dir.php, manage-users.php
+    - woolsy-update.php (PROMPT_VERSION v4, board member exclusion)
+    - docs/Sheepsite-Admin-Manual.html
+- **Create credentials/login_stats.json** on server (touch the file; writable by PHP) — or it will be auto-created on first login
+- **Fill in Building FAQ** for LyndhurstH via admin → Woolsy → woolsy-manage.php FAQ editor
+    - Add current board contact URL
+    - Add property manager contact if applicable
+- **Rebuild LyndhurstH knowledge base** (v4 prompt excludes board member names)
 - **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates
 - **Upload file-manager.php** to server
 - **Merge `feature/search-and-tagging` → main**
@@ -312,5 +333,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot updated: March 18, 2026 (session 14 — Sonnet extraction, Architecture Manual, doc exclusion, question-lost fix)*
+*Snapshot updated: March 18, 2026 (session 15 — Woolsy manage page, usage/login tracking, board fix, session bug)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

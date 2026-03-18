@@ -15,25 +15,19 @@ define('CREDENTIALS_DIR',      __DIR__ . '/credentials/');
 define('USER_MANUAL_URL',      'docs/Sheepsite-Admin-Manual.html');
 define('CREDITS_FILE',         __DIR__ . '/faqs/woolsy_credits.json');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
-define('APPS_SCRIPT_URL',      'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN',    'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
-define('PROMPT_VERSION',       3);
+define('PROMPT_VERSION',       4);
 
 function getRulesVersion(string $file): int {
     if (!file_exists($file)) return 0;
     $fh   = fopen($file, 'r');
     $line = fgets($fh);
     fclose($fh);
-    if (preg_match('/woolsy_prompt_version:\s*(\d+)/', $line, $m)) {
-        return (int)$m[1];
-    }
-    return 1; // pre-versioning files
+    if (preg_match('/woolsy_prompt_version:\s*(\d+)/', $line, $m)) return (int)$m[1];
+    return 1;
 }
 
 function getWoolsyCredits(string $building): array {
-    if (!file_exists(CREDITS_FILE)) {
-        return ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
-    }
+    if (!file_exists(CREDITS_FILE)) return ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
     $all = json_decode(file_get_contents(CREDITS_FILE), true) ?? [];
     return $all[$building] ?? ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];
 }
@@ -55,58 +49,6 @@ if (!file_exists($adminCredFile)) {
 
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 $sessionKey = 'manage_auth_' . $building;
-
-// -------------------------------------------------------
-// AJAX: doc status endpoints (docStatus = cached result,
-// docCheck = on-demand scan). Returns JSON and exits.
-// -------------------------------------------------------
-if (isset($_GET['action']) && $_GET['action'] === 'buildDocIndex') {
-  header('Content-Type: application/json');
-  if (empty($_SESSION[$sessionKey])) { echo json_encode(['error' => 'Unauthorized']); exit; }
-  $buildings      = require __DIR__ . '/buildings.php';
-  $publicFolderId = $buildings[$building]['publicFolderId'] ?? '';
-  $url = APPS_SCRIPT_URL . '?' . http_build_query([
-    'action' => 'buildDocIndex', 'publicFolderId' => $publicFolderId, 'token' => APPS_SCRIPT_TOKEN
-  ]);
-  $ch = curl_init($url);
-  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
-  $resp = curl_exec($ch); curl_close($ch);
-  $data = json_decode($resp ?: '{}', true);
-  if (!empty($data['sections'])) {
-    $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
-    foreach ($data['sections'] as $section) {
-      $lines[] = $section['path'] . '/';
-      foreach ($section['files'] as $file) { $lines[] = "  \u{2022} " . $file; }
-      $lines[] = '';
-    }
-    file_put_contents(__DIR__ . '/faqs/' . $building . '_docindex.txt', implode("\n", $lines));
-    echo json_encode(['ok' => true, 'generated' => date('F j, Y'), 'sectionCount' => count($data['sections'])]);
-  } else {
-    echo json_encode(['error' => $data['error'] ?? 'Failed to build index']);
-  }
-  exit;
-}
-
-if (isset($_GET['action']) && in_array($_GET['action'], ['docStatus', 'docCheck'], true)) {
-  header('Content-Type: application/json');
-  if (empty($_SESSION[$sessionKey])) {
-    echo json_encode(['error' => 'Unauthorized']);
-    exit;
-  }
-  $buildings      = require __DIR__ . '/buildings.php';
-  $publicFolderId = $buildings[$building]['publicFolderId'] ?? '';
-  $apAction       = $_GET['action'] === 'docCheck' ? 'docCheck' : 'docCheckResult';
-  $params         = ['action' => $apAction, 'building' => $building, 'token' => APPS_SCRIPT_TOKEN];
-  if ($apAction === 'docCheck') $params['publicFolderId'] = $publicFolderId;
-
-  $url = APPS_SCRIPT_URL . '?' . http_build_query($params);
-  $ch  = curl_init($url);
-  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
-  $resp = curl_exec($ch);
-  curl_close($ch);
-  echo $resp ?: json_encode(['error' => 'Could not fetch status']);
-  exit;
-}
 
 // Load credentials
 $adminCred  = json_decode(file_get_contents($adminCredFile), true);
@@ -269,29 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     .message    { padding: 0.6rem 0.9rem; border-radius: 4px; margin-bottom: 1.5rem; font-size: 0.9rem; }
     .message.ok    { background: #e6f4ea; color: #1a7f37; }
     .message.error { background: #ffeef0; color: #c00; }
-    .woolsy-card    { padding: 1.25rem; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1rem; }
-    .woolsy-header  { display: flex; align-items: flex-start; gap: 1.25rem; }
-    .woolsy-icon    { font-size: 1.8rem; line-height: 1; flex-shrink: 0; }
-    .woolsy-title   { font-size: 1rem; font-weight: bold; margin-bottom: 0.3rem; color: #0070f3; }
-    .woolsy-desc    { font-size: 0.875rem; color: #555; line-height: 1.45; }
-    .woolsy-status  { margin-top: 0.75rem; font-size: 0.85rem; color: #555; }
-    .woolsy-status .ok   { color: #1a7f37; font-weight: bold; }
-    .woolsy-status .warn { color: #b45309; font-weight: bold; }
-    .credit-bar     { margin-top: 0.5rem; background: #eee; border-radius: 4px; height: 6px; }
-    .credit-fill    { height: 6px; border-radius: 4px; background: #0070f3; }
-    .credit-fill.warn { background: #f59e0b; }
-    .credit-fill.danger { background: #dc2626; }
-    .low-credit-warn { margin-top: 0.6rem; padding: 0.4rem 0.7rem; background: #fffbeb;
+    .low-credit-warn { padding: 0.4rem 0.7rem; background: #fffbeb;
                        border: 1px solid #f59e0b; border-radius: 4px; font-size: 0.82rem; color: #92400e; }
-    .woolsy-docstatus  { margin: 0.6rem 0 0.3rem; font-size: 0.85rem; color: #444; line-height: 1.5; }
-    .woolsy-index-row  { margin: 0.3rem 0 0.5rem; font-size: 0.85rem; color: #444; }
-    .woolsy-docstatus .ds-ok   { color: #1a7f37; font-weight: bold; }
-    .woolsy-docstatus .ds-warn { color: #b45309; font-weight: bold; }
-    .woolsy-docstatus .ds-muted { color: #888; }
-    .ds-check-btn { margin-left: 0.5rem; padding: 0.15rem 0.5rem; font-size: 0.8rem;
-                    background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 3px;
-                    cursor: pointer; color: #374151; }
-    .ds-check-btn:hover { background: #e5e7eb; }
   </style>
 </head>
 <body>
@@ -364,70 +285,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   </a>
 
   <?php
-    $wc        = getWoolsyCredits($building);
-    $wAlloc    = (float)($wc['allocated'] ?? CREDITS_DEFAULT_ALLOCATED);
-    $wUsed     = (float)($wc['used']      ?? 0);
-    $wRemain   = max(0, $wAlloc - $wUsed);
-    $wPct      = $wAlloc > 0 ? min(100, round($wUsed / $wAlloc * 100)) : 100;
-    $wLow      = $wPct >= 80;
-    $wBarClass = $wPct >= 100 ? 'danger' : ($wPct >= 80 ? 'warn' : '');
-    $docIndexFile   = __DIR__ . '/faqs/' . $building . '_docindex.txt';
-    $docIndexExists = file_exists($docIndexFile);
-    $docIndexDate   = $docIndexExists ? date('F j, Y', filemtime($docIndexFile)) : '';
-    $rulesFile      = __DIR__ . '/faqs/' . $building . '_rules.md';
-    $rulesVersion   = getRulesVersion($rulesFile);
+    $wc           = getWoolsyCredits($building);
+    $wAlloc       = (float)($wc['allocated'] ?? CREDITS_DEFAULT_ALLOCATED);
+    $wUsed        = (float)($wc['used']      ?? 0);
+    $wPct         = $wAlloc > 0 ? min(100, round($wUsed / $wAlloc * 100)) : 100;
+    $rulesFile    = __DIR__ . '/faqs/' . $building . '_rules.md';
+    $rulesVersion = getRulesVersion($rulesFile);
     $promptOutdated = ($rulesVersion > 0 && $rulesVersion < PROMPT_VERSION);
+    $usageFile    = __DIR__ . '/faqs/woolsy_usage.json';
+    $usageAll     = file_exists($usageFile) ? (json_decode(file_get_contents($usageFile), true) ?? []) : [];
+    $monthCount   = $usageAll[$building][date('Y-m')] ?? 0;
   ?>
-  <div class="woolsy-card">
-    <div class="woolsy-header">
-      <div class="woolsy-icon">🐑</div>
-      <div>
-        <div class="woolsy-title">Woolsy Knowledge Base</div>
-        <div class="woolsy-desc">
-          AI-powered assistant for residents. Answers questions about building rules,
-          Florida condo law, and community policies.
-        </div>
-        <?php if ($promptOutdated): ?>
-        <div class="low-credit-warn" style="margin-bottom:0.5rem;">
-          ⚠️ Woolsy prompt updated (v<?= PROMPT_VERSION ?>) — a rebuild is recommended to cover new topic categories.
-          <a href="woolsy-update.php?building=<?= urlencode($building) ?>" style="color:#92400e;font-weight:600;">Rebuild now →</a>
-        </div>
+  <a href="woolsy-manage.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">🐑</div>
+    <div>
+      <div class="card-title">Woolsy AI Assistant</div>
+      <div class="card-desc">
+        Knowledge base status, usage statistics, FAQ editor, and credit tracking.
+        <?php if ($wPct >= 100): ?>
+          <br><span style="color:#dc2626;font-weight:600;">⛔ Credits exhausted — Woolsy unavailable.</span>
+        <?php elseif ($wPct >= 80): ?>
+          <br><span style="color:#b45309;font-weight:600;">⚠️ Credits running low.</span>
+        <?php else: ?>
+          <br><span style="color:#888;"><?= $monthCount ?> question<?= $monthCount !== 1 ? 's' : '' ?> this month</span>
         <?php endif; ?>
-        <div class="woolsy-docstatus" id="woolsy-docstatus">
-          <span class="ds-muted">Checking knowledge base status…</span>
-        </div>
-        <div class="woolsy-index-row">
-          📄 <strong>Document Index:</strong>
-          <?php if ($docIndexExists): ?>
-            Built <?= htmlspecialchars($docIndexDate) ?>
-            &nbsp;<button class="ds-check-btn" id="build-index-btn" onclick="buildDocIndex()">Rebuild</button>
-          <?php else: ?>
-            <span class="ds-warn">Not built</span>
-            &nbsp;<button class="ds-check-btn" id="build-index-btn" onclick="buildDocIndex()">Build Index</button>
-          <?php endif; ?>
-          <span id="index-status-msg"></span>
-        </div>
-        <div class="woolsy-status">
-          Credits used: <strong><?= number_format($wUsed, 4) ?></strong>
-          of <strong><?= number_format($wAlloc, 2) ?></strong>
-          &nbsp;(<?= number_format($wRemain, 4) ?> remaining)
-          <div class="credit-bar">
-            <div class="credit-fill <?= $wBarClass ?>" style="width:<?= $wPct ?>%"></div>
-          </div>
-          <?php if ($wLow && $wPct < 100): ?>
-            <div class="low-credit-warn">
-              ⚠️ Running low on credits. Contact SheepSite to add more.
-            </div>
-          <?php elseif ($wPct >= 100): ?>
-            <div class="low-credit-warn" style="background:#fef2f2;border-color:#dc2626;color:#7f1d1d;">
-              ⛔ Credits exhausted — Woolsy is currently unavailable to residents.
-              Contact SheepSite to top up.
-            </div>
-          <?php endif; ?>
-        </div>
       </div>
     </div>
+  </a>
+  <?php if ($promptOutdated): ?>
+  <div class="low-credit-warn" style="margin-top:-0.5rem;margin-bottom:1rem;">
+    ⚠️ Woolsy prompt updated (v<?= PROMPT_VERSION ?>) — a rebuild is recommended.
+    <a href="woolsy-update.php?building=<?= urlencode($building) ?>" style="color:#92400e;font-weight:600;">Rebuild now →</a>
   </div>
+  <?php endif; ?>
 
   <hr>
 <?php endif; ?>
@@ -451,96 +341,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   <button type="submit" name="change_admin_pass" class="save-btn">Update password</button>
 </form>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  if (document.getElementById('woolsy-docstatus')) loadDocStatus();
-});
-
-function loadDocStatus() {
-  fetchAndRender('admin.php?building=<?= urlencode($building) ?>&action=docStatus');
-}
-
-function checkDocNow() {
-  var el = document.getElementById('woolsy-docstatus');
-  if (el) el.innerHTML = '<span class="ds-muted">Checking…</span>';
-  fetchAndRender('admin.php?building=<?= urlencode($building) ?>&action=docCheck');
-}
-
-function fetchAndRender(url) {
-  fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var el = document.getElementById('woolsy-docstatus');
-      if (el) el.innerHTML = buildDocStatusHtml(data);
-    })
-    .catch(function() {
-      var el = document.getElementById('woolsy-docstatus');
-      if (el) el.innerHTML = '<span class="ds-muted">Status unavailable.</span>';
-    });
-}
-
-function buildDocStatusHtml(data) {
-  var b         = '<?= urlencode($building) ?>';
-  var updateUrl = 'woolsy-update.php?building=' + b;
-
-  if (data.error || data.notInitialized) {
-    return '📋 <strong>Knowledge Base:</strong> Not set up — ' +
-      '<a href="' + updateUrl + '" style="color:#0070f3">Set Up Woolsy →</a>';
-  }
-  if (data.notCheckedYet) {
-    return '📋 <strong>Knowledge Base:</strong> Initialized — ' +
-      '<a href="' + updateUrl + '" style="color:#0070f3">Manage →</a>';
-  }
-
-  var checked = data.checkedAt ? 'Checked ' + fmtDate(data.checkedAt) : '';
-  var total   = data.fileCounts
-    ? (data.fileCounts.IncorporationDocs + data.fileCounts.RulesDocs) + ' files'
-    : '';
-
-  if (data.status === 'changes') {
-    var n = (data.changes || []).length;
-    return '📋 <strong>Knowledge Base:</strong> ' +
-      '<span class="ds-warn">⚠️ ' + n + ' file' + (n !== 1 ? 's' : '') + ' changed</span>' +
-      (checked ? ' &middot; ' + checked : '') +
-      ' &mdash; <a href="' + updateUrl + '" style="color:#0070f3">Review &amp; Update →</a>';
-  }
-  if (data.status === 'ok') {
-    return '📋 <strong>Knowledge Base:</strong> ' +
-      '<span class="ds-ok">✅ Up to date</span>' +
-      (checked ? ' &middot; ' + checked : '') +
-      (total   ? ' &middot; ' + total   : '') +
-      ' <button class="ds-check-btn" onclick="checkDocNow()">Check now</button>';
-  }
-  return '📋 <strong>Knowledge Base:</strong> <a href="' + updateUrl + '" style="color:#0070f3">Manage →</a>';
-}
-
-function buildDocIndex() {
-  var btn = document.getElementById('build-index-btn');
-  var msg = document.getElementById('index-status-msg');
-  if (btn) btn.disabled = true;
-  if (msg) { msg.style.color = '#888'; msg.textContent = ' Building…'; }
-  fetch('admin.php?building=<?= urlencode($building) ?>&action=buildDocIndex')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.ok) {
-        if (msg) { msg.style.color = '#1a7f37'; msg.textContent = ' ✅ Built ' + data.generated + ' (' + data.sectionCount + ' folder' + (data.sectionCount !== 1 ? 's' : '') + ')'; }
-        if (btn) { btn.disabled = false; btn.textContent = 'Rebuild'; }
-      } else {
-        if (msg) { msg.style.color = '#c00'; msg.textContent = ' ⚠️ ' + (data.error || 'Unknown error'); }
-        if (btn) btn.disabled = false;
-      }
-    })
-    .catch(function() {
-      if (msg) { msg.style.color = '#c00'; msg.textContent = ' ⚠️ Request failed.'; }
-      if (btn) btn.disabled = false;
-    });
-}
-
-function fmtDate(iso) {
-  try {
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch(e) { return iso; }
-}
-</script>
 </body>
 </html>

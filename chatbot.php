@@ -29,6 +29,15 @@ function saveCredits(array $credits): void {
     file_put_contents(CREDITS_FILE, json_encode($credits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 }
 
+define('USAGE_FILE', __DIR__ . '/faqs/woolsy_usage.json');
+
+function logUsage(string $building): void {
+    $month   = date('Y-m');
+    $data    = file_exists(USAGE_FILE) ? (json_decode(file_get_contents(USAGE_FILE), true) ?? []) : [];
+    $data[$building][$month] = ($data[$building][$month] ?? 0) + 1;
+    file_put_contents(USAGE_FILE, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
 function deductCost(string $building, int $inputTokens, int $outputTokens): void {
     // Haiku pricing: $0.80/MTok input, $4.00/MTok output → 1 credit = $1
     $cost = ($inputTokens * 0.0000008) + ($outputTokens * 0.000004);
@@ -106,6 +115,9 @@ Guidelines:
 - The rules content below includes source markers in the format "(Source: ...)". When answering,
   use that source naturally in your response (e.g. "According to the Declaration of Condominium,
   smoking is prohibited..." or "The Board's Welcome Guide states..."). Always include the source.
+- For questions about who is currently on the board, officer names, or board contact details,
+  do NOT use any names or contacts from the rules content — that data may be outdated. Instead,
+  direct the resident to the live Board of Directors page on the website.
 - If the question is fully answered by the rules, do NOT mention contacting the board at all.
   A complete answer stands on its own.
 - Only mention contacting the board when the question specifically requires a board decision
@@ -179,9 +191,10 @@ if (!$answer) {
     exit;
 }
 
-// Deduct credit cost using token counts from API response
+// Deduct credit cost and log usage
 if (isset($data['usage']['input_tokens'], $data['usage']['output_tokens'])) {
     deductCost($building, (int)$data['usage']['input_tokens'], (int)$data['usage']['output_tokens']);
 }
+logUsage($building);
 
 echo json_encode(['answer' => $answer]);

@@ -155,6 +155,22 @@ function isLinkedToDatabase(string $webUsername, array $owners): bool {
   return false;
 }
 
+function loadLoginStats(string $building): array {
+  $file = CREDENTIALS_DIR . 'login_stats.json';
+  if (!file_exists($file)) return [];
+  $all = json_decode(file_get_contents($file), true) ?? [];
+  return $all[$building] ?? [];
+}
+
+function loginCount(array $userStats, int $days): int {
+  $cutoff = date('Y-m-d', strtotime("-{$days} days"));
+  $total  = 0;
+  foreach ($userStats as $date => $count) {
+    if ($date >= $cutoff) $total += $count;
+  }
+  return $total;
+}
+
 function loadUsers(string $building): array {
   $file = CREDENTIALS_DIR . $building . '.json';
   if (!file_exists($file)) return [];
@@ -501,19 +517,32 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
 <div class="message ok" style="margin-bottom:1.5rem;">All web accounts are in sync with the database.</div>
 <?php endif; ?>
 
+<?php
+  $loginStats = loadLoginStats($building);
+?>
 <?php if (empty($users)): ?>
   <p class="empty">No users yet.</p>
 <?php else: ?>
   <table>
     <thead>
-      <tr><th>Username</th><th>Actions</th></tr>
+      <tr>
+        <th>Username</th>
+        <th style="text-align:center" title="Logins in the last 30 days">30 days</th>
+        <th style="text-align:center" title="Logins in the last 12 months">12 months</th>
+        <th>Actions</th>
+      </tr>
     </thead>
     <tbody>
       <?php foreach ($users as $u):
-        $uid = htmlspecialchars($u['user']);
+        $uid      = htmlspecialchars($u['user']);
+        $uStats   = $loginStats[$u['user']] ?? [];
+        $cnt30    = loginCount($uStats, 30);
+        $cnt365   = loginCount($uStats, 365);
       ?>
       <tr>
-        <td><?= htmlspecialchars($u['user']) ?></td>
+        <td><?= htmlspecialchars($u['user']) ?><?php if (!empty($u['mustChange'])): ?> <span style="font-size:0.75rem;color:#b45309;font-weight:600;">pw reset</span><?php endif; ?></td>
+        <td style="text-align:center;color:<?= $cnt30 > 0 ? '#1a7f37' : '#bbb' ?>"><?= $cnt30 ?: '—' ?></td>
+        <td style="text-align:center;color:<?= $cnt365 > 0 ? '#555' : '#bbb' ?>"><?= $cnt365 ?: '—' ?></td>
         <td>
           <button type="button" class="change-btn" onclick="togglePass('<?= $uid ?>')">Change password</button>
           <form class="action-form" method="post"
@@ -524,7 +553,7 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
         </td>
       </tr>
       <tr class="pass-row" id="pass-<?= $uid ?>">
-        <td colspan="2">
+        <td colspan="4">
           <form class="pass-inline" method="post">
             <input type="hidden" name="username" value="<?= htmlspecialchars($u['user']) ?>">
             <input type="password" name="new_password" placeholder="New password" autocomplete="new-password">

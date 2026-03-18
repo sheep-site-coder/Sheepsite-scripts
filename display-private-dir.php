@@ -8,6 +8,21 @@ session_start();
 define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
+define('LOGIN_STATS_FILE',  __DIR__ . '/credentials/login_stats.json');
+
+function logLogin(string $building, string $username): void {
+    $today = date('Y-m-d');
+    $cutoff = date('Y-m-d', strtotime('-12 months'));
+    $data = file_exists(LOGIN_STATS_FILE)
+        ? (json_decode(file_get_contents(LOGIN_STATS_FILE), true) ?? [])
+        : [];
+    $data[$building][$username][$today] = ($data[$building][$username][$today] ?? 0) + 1;
+    // Prune entries older than 12 months
+    foreach ($data[$building][$username] as $date => $count) {
+        if ($date < $cutoff) unset($data[$building][$username][$date]);
+    }
+    file_put_contents(LOGIN_STATS_FILE, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
 
 $buildings = require __DIR__ . '/buildings.php';
 
@@ -60,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
 
   if ($authenticated) {
     $_SESSION[$sessionKey] = $username;
+    logLogin($building, $username);
     $mustChange = false;
     foreach ($users as $u) {
       if ($u['user'] === $username && !empty($u['mustChange'])) {
