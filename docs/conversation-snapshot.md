@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 17, 2026 (updated)
+**Date:** March 27, 2026 (updated)
 
 ---
 
@@ -98,6 +98,15 @@ PHP renders file browser in iframe on building website
 ## Current State
 
 **Completed:**
+- [x] Session 16 — FL.txt Woolsy training update + Resident Database Admin design:
+      - faqs/states/FL.txt: updated with HB 913 (2025) virtual meeting recording requirements;
+        rewrote "Is the association required to record board meetings?" (was wrong — now correctly
+        distinguishes in-person (no) vs. video conference (mandatory); added 4 new director-context
+        Q&As: official record status of recordings, director obligation, attorney-client privilege gap,
+        prohibition on fully virtual meetings; updated official records + website requirements lists
+      - Design doc written (memory): Resident Database Admin — full in-site management of
+        Database, CarDB, and Emergency & Condo Sitter tabs; eliminates last Google Sheets dependency
+        for building admins; See design_database_admin.md in memory for full spec
 - [x] All PHP scripts for public/private browsing
 - [x] Resident login, password change, forgot password flow
 - [x] Admin user management per building
@@ -312,6 +321,17 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
+- **Implement Resident Database Admin** (design complete — see memory/design_database_admin.md):
+    - `database-admin.php` — admin CRUD for all three tabs; unit-centric; floor grouping; Copy All Emails
+    - `my-account.php` — resident hub (My Unit Info, Change Password, Ask Woolsy cards)
+    - `my-unit.php` — resident self-service for their own unit (restricted field permissions)
+    - New Apps Script endpoints in building-script.gs (listDatabase, getUnit, addDatabaseRow, etc.)
+    - Rename "Manage Users" → "Manage User Accounts" in admin.php
+    - Add "Manage Residents/Owners" as first card in admin.php
+    - Add Notes field to CarDB tab in Google Sheet
+    - Add `openMyAccount()` to footer-for-sites.js
+    - Add "My Account" menu item to building websites
+    - `config/{building}.json` for floor-grouping preference
 - **Deploy session 15 files to server:**
     - admin.php, woolsy-manage.php (new), chatbot.php, chatbot-page.php
     - display-private-dir.php, manage-users.php
@@ -333,5 +353,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot updated: March 18, 2026 (session 15 — Woolsy manage page, usage/login tracking, board fix, session bug)*
+*Snapshot updated: March 27, 2026 (session 16 — FL.txt HB 913 recording law, Resident Database Admin design)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
