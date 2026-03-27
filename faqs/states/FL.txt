@@ -1,6 +1,6 @@
 # Florida Condominium Law — Resident FAQ
 # Source: Florida Statute Chapter 718 (Condominium Act)
-# Last updated: March 2026 — reflects amendments through 2024 legislative session (HB 1021)
+# Last updated: March 2026 — reflects amendments through 2025 legislative session (HB 913, eff. July 1, 2025)
 # Note: Florida condo law has been amended every session since 2022. Verify critical details
 # with a Florida-licensed community association attorney for specific legal situations.
 
@@ -34,8 +34,19 @@ requirement by statute.
 
 ## Can board members participate by phone or video?
 Yes. Board members may participate via **telephone, real-time videoconferencing, or similar
-real-time electronic communication**. Remote participation counts toward quorum. However,
-the physical meeting location must remain accessible to unit owners who wish to attend.
+real-time electronic communication**. Remote participation counts toward quorum.
+
+**Important rules added by HB 913 (effective July 1, 2025):**
+- A **physical location must always be provided** — meetings cannot be held purely online.
+  Owners must have the option to attend in person.
+- For **regular board meetings**, all directors may participate remotely — none need to be
+  physically present, as long as the physical location is open to owners.
+- For **annual membership meetings** held via video conference, **a quorum of the board of
+  directors must be physically present** at the noticed location.
+- Meeting notices for video conference meetings must include: (1) the Zoom/video link,
+  (2) a call-in telephone number, and (3) the physical address where owners may attend.
+- If the bylaws don't specify a meeting location, the physical location must be **within
+  15 miles of the condominium** or within the same county.
 
 ## Are board meetings open to residents?
 Yes — board meetings are **open to all unit owners**. The only permitted closed-session topics are:
@@ -55,12 +66,44 @@ cannot be taken away. The Division may adopt rules about where recording equipme
 but cannot prohibit recording altogether.
 
 ## Is the association required to record board meetings?
-**No** — Florida Statute 718 does not require the association to make an audio or video recording
-of board meetings. What IS required is that **written minutes** be taken and kept for every board
-and membership meeting. Minutes must be retained for a minimum of **7 years** and made available
-on the association's password-protected website. Owners may also request copies within 10 working
-days. The right to make your own recording belongs to you as an owner — the association just isn't
-obligated to do it for you.
+**It depends on how the meeting is held** — this changed significantly as of July 1, 2025 (HB 913):
+
+**In-person meetings:** No recording required. The association must take written **minutes**, retain
+them for **7 years**, and post them on the association's password-protected website. Your right to
+make your own recording still exists regardless.
+
+**Video conference (Zoom) meetings:** **Yes — recording is mandatory.** All board meetings,
+committee meetings, and membership meetings held by video conference must be recorded. Recordings
+become **official records of the association** and must be:
+- **Posted on the association's website** within 30 days
+- **Retained for at least 1 year** after the posting date
+- Available on the website for the preceding **12 months**
+
+This applies to any meeting conducted via Zoom or any other video platform. [HB 913, s. 718.112]
+
+## Are recordings considered official association records?
+Yes — as of July 1, 2025, video recordings of meetings held by video conference are **official
+records** of the association, the same as written minutes. They must be retained for at least
+1 year after posting and are subject to the same records access rights as other official documents.
+
+## Are board directors required to record Zoom meetings?
+Yes. If the board chooses to hold a meeting via video conference, recording is not optional —
+it is a statutory obligation under HB 913 (effective July 1, 2025). The recording must be posted
+to the association's website within 30 days and kept for at least 1 year. Failing to record a
+video conference meeting, or failing to post the recording, is a violation of Chapter 718.
+
+## What if our board wants to discuss something sensitive (like legal strategy) on Zoom?
+This is an unresolved legal issue. Florida law permits boards to hold **closed sessions** with
+their attorney for pending or proposed litigation, but HB 913 contains **no express exemption**
+from the recording requirement for video conference meetings — even privileged ones. Until the
+Florida Division of Condominiums issues clarifying rules, the safest practice recommended by
+community association attorneys is: **hold attorney-client discussions in person**, not on Zoom,
+to avoid the recording obligation entirely.
+
+## Can the board hold meetings entirely online with no physical location?
+**No.** Even for video conference meetings, a **physical location must always be provided**
+where unit owners may attend in person. Fully virtual-only meetings are not permitted under
+Florida law. [HB 913, s. 718.112]
 
 ## Can I get an item added to the board meeting agenda?
 Yes. If **20% of all voting interests** sign a petition requesting that a specific item be addressed,
@@ -156,7 +199,7 @@ The association must maintain official records including:
 - Declaration, Bylaws, and Articles of Incorporation (permanently)
 - Rules and regulations
 - **Minutes of all board and membership meetings** (7 years)
-- Minutes of all board and membership meetings
+- **Video recordings of all board, committee, and membership meetings held by video conference** (at least 1 year after posting; effective July 1, 2025)
 - Current roster of all unit owners (with mailing addresses and email, if provided)
 - Insurance policies
 - All contracts for work to be performed
@@ -219,6 +262,7 @@ owners and employees. Required documents include:
 - All contracts and bids (for contracts exceeding 5% of annual budget)
 - Board and membership meeting notices and agendas
 - Minutes of all board and membership meetings (7 years)
+- Video recordings of all board, committee, and membership meetings held by video conference (preceding 12 months; effective July 1, 2025)
 - Financial reports and audits (7 years)
 - Names and contact information for all board members
 - Director certifications and conflict of interest disclosures
