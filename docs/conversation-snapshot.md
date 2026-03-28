@@ -98,6 +98,38 @@ PHP renders file browser in iframe on building website
 ## Current State
 
 **Completed:**
+- [x] Session 17 — Resident Database Admin fully implemented:
+      - `database-admin.php` (NEW): admin CRUD for Database, CarDB, and Emergency tabs;
+        unit-centric layout with inline panel expansion; floor grouping with 3-choice prompt
+        (first digit / first 2 digits / flat list) always shown on first visit regardless of
+        database state; preference saved to `config/{building}.json`
+      - "Get Email List" button (renamed from "Copy All Emails") with hover tooltip explaining
+        paste into BCC; calls Apps Script getAllEmails endpoint
+      - Account creation is email-gated: if no email provided when adding a person, only the
+        DB row is written — no web account created; if email is added later, account auto-created
+        at that point with welcome email sent
+      - "Create Person" button (was "Add & Create Login") — reflects actual behavior
+      - `directemail` parameter added to `doResetPassword` in reset-password.gs: bypasses
+        Database tab lookup to avoid timing race when email is sent right after row insert
+      - In-place panel refresh: `reloadUnitDetail()` re-renders only the open unit panel without
+        collapsing it; active tab preserved; no full DOM re-render after save
+      - Toast notification system: fixed-position, DOM-independent, 5-second auto-dismiss;
+        survives panel re-renders that would otherwise swallow inline messages
+      - `sheets/database-admin.gs` (NEW): master library file with 11 CRUD functions for all
+        three tabs; all require OWNER_IMPORT_TOKEN auth
+      - `sheets/building-script.gs` (UPDATED): 3 new GET routes (listDatabase, getUnit,
+        getAllEmails) + new doPost() routing 8 write actions to DatabaseSheetMaster
+      - `sheets/reset-password.gs` (UPDATED): directemail param bypasses DB lookup; welcome
+        email body differs from reset email ("A login account has been created for you")
+      - `my-account.php` (NEW): resident hub page — My Unit Info, Change Password, Ask Woolsy cards
+      - `my-unit.php` (NEW): resident unit editor with restricted field permissions; read-only
+        for First/Last Name, Owner/Resident checkboxes, Board role hidden; "Add/Remove Resident"
+        button opens change request popup → email sent to building contact or President
+      - `admin.php` (UPDATED): new "Manage Residents/Owners" card (first position); "Manage Users"
+        renamed to "Manage User Accounts" with updated description; inline Building Settings card
+        (contact email field saved to config/{building}.json)
+      - `footer-for-sites.js` (UPDATED): openMyAccount() helper added
+      - `config/` folder on server: per-building config JSON (floorGrouping + contactEmail)
 - [x] Session 16 — FL.txt Woolsy training update + Resident Database Admin design:
       - faqs/states/FL.txt: updated with HB 913 (2025) virtual meeting recording requirements;
         rewrote "Is the association required to record board meetings?" (was wrong — now correctly
@@ -321,17 +353,20 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
-- **Implement Resident Database Admin** (design complete — see memory/design_database_admin.md):
-    - `database-admin.php` — admin CRUD for all three tabs; unit-centric; floor grouping; Copy All Emails
-    - `my-account.php` — resident hub (My Unit Info, Change Password, Ask Woolsy cards)
-    - `my-unit.php` — resident self-service for their own unit (restricted field permissions)
-    - New Apps Script endpoints in building-script.gs (listDatabase, getUnit, addDatabaseRow, etc.)
-    - Rename "Manage Users" → "Manage User Accounts" in admin.php
-    - Add "Manage Residents/Owners" as first card in admin.php
-    - Add Notes field to CarDB tab in Google Sheet
-    - Add `openMyAccount()` to footer-for-sites.js
-    - Add "My Account" menu item to building websites
-    - `config/{building}.json` for floor-grouping preference
+- **Deploy Session 17 files to server:**
+    - `database-admin.php` (new)
+    - `my-account.php` (new)
+    - `my-unit.php` (new)
+    - `admin.php` (updated — new cards, Building Settings)
+    - `footer-for-sites.js` (updated — openMyAccount() helper)
+    - Create `config/` folder on server (writable by PHP)
+- **Redeploy Apps Script (master library new version):**
+    - `sheets/database-admin.gs` — add to master library, deploy new version
+    - `sheets/building-script.gs` — redeploy with doPost routing
+    - `sheets/reset-password.gs` — redeploy with directemail support
+    - Building scripts set to "latest version" will pick up automatically
+- **Add Notes column to CarDB tab** in each building's Google Sheet
+- **Add "My Account" menu item** to building websites using `openMyAccount()`
 - **Deploy session 15 files to server:**
     - admin.php, woolsy-manage.php (new), chatbot.php, chatbot-page.php
     - display-private-dir.php, manage-users.php
@@ -353,5 +388,5 @@ PHP renders file browser in iframe on building website
 
 ---
 
-*Snapshot updated: March 27, 2026 (session 16 — FL.txt HB 913 recording law, Resident Database Admin design)*
+*Snapshot updated: March 28, 2026 (session 17 — Resident Database Admin fully implemented)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

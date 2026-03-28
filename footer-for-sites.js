@@ -137,6 +137,13 @@ function openAdmin() {
     + '?building=' + encodeURIComponent(BUILDING_NAME);
 }
 
+// My Account — call openMyAccount() from a menu link or button onclick (resident login required)
+function openMyAccount() {
+  window.location.href = 'https://sheepsite.com/Scripts/my-account.php'
+    + '?building='  + encodeURIComponent(BUILDING_NAME)
+    + '&return='    + encodeURIComponent(window.location.href);
+}
+
 // File search — call openSearch() from a search button or link onclick
 function openSearch() {
   window.location.href = 'https://sheepsite.com/Scripts/search.php'

@@ -12,6 +12,7 @@
 session_start();
 
 define('CREDENTIALS_DIR',      __DIR__ . '/credentials/');
+define('CONFIG_DIR',           __DIR__ . '/config/');
 define('USER_MANUAL_URL',      'docs/Sheepsite-Admin-Manual.html');
 define('CREDITS_FILE',         __DIR__ . '/faqs/woolsy_credits.json');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
@@ -24,6 +25,19 @@ function getRulesVersion(string $file): int {
     fclose($fh);
     if (preg_match('/woolsy_prompt_version:\s*(\d+)/', $line, $m)) return (int)$m[1];
     return 1;
+}
+
+function loadBuildingConfig(string $building): array {
+    $file = CONFIG_DIR . $building . '.json';
+    return file_exists($file) ? json_decode(file_get_contents($file), true) ?? [] : [];
+}
+
+function saveBuildingConfig(string $building, array $config): bool {
+    if (!is_dir(CONFIG_DIR)) mkdir(CONFIG_DIR, 0755, true);
+    return file_put_contents(
+        CONFIG_DIR . $building . '.json',
+        json_encode($config, JSON_PRETTY_PRINT)
+    ) !== false;
 }
 
 function getWoolsyCredits(string $building): array {
@@ -140,6 +154,23 @@ if (empty($_SESSION[$sessionKey])) {
 }
 
 // -------------------------------------------------------
+// Building Settings — handle POST
+// -------------------------------------------------------
+$settingsMessage     = '';
+$settingsMessageType = 'ok';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_building_settings'])) {
+  $config = loadBuildingConfig($building);
+  $config['contactEmail'] = trim($_POST['contact_email'] ?? '');
+  if (saveBuildingConfig($building, $config)) {
+    $settingsMessage = 'Building settings saved.';
+  } else {
+    $settingsMessage     = 'Could not save — check that the config/ folder is writable.';
+    $settingsMessageType = 'error';
+  }
+}
+
+// -------------------------------------------------------
 // mustChange check — re-read credential file after any POST
 // -------------------------------------------------------
 $adminCred  = json_decode(file_get_contents($adminCredFile), true);
@@ -229,13 +260,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
 <?php else: ?>
   <div class="subtitle">Building administration tools</div>
 
+  <a href="database-admin.php?building=<?= urlencode($building) ?>" class="card">
+    <div class="card-icon">🏘️</div>
+    <div>
+      <div class="card-title">Manage Residents/Owners</div>
+      <div class="card-desc">
+        Add, edit, or remove residents across all units. Update contact info, vehicle details,
+        and emergency contacts. Includes Copy All Emails.
+      </div>
+    </div>
+  </a>
+
   <a href="manage-users.php?building=<?= urlencode($building) ?>" class="card">
     <div class="card-icon">👥</div>
     <div>
-      <div class="card-title">Manage Users</div>
+      <div class="card-title">Manage User Accounts</div>
       <div class="card-desc">
-        Import owners from the building's Google Sheet, add or remove individual accounts,
-        and reset owner passwords.
+        View login accounts, reset passwords, and remove accounts for residents who have moved out.
+        Login accounts are created automatically when residents are added via Manage Residents/Owners.
       </div>
     </div>
   </a>
@@ -318,6 +360,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     <a href="woolsy-update.php?building=<?= urlencode($building) ?>" style="color:#92400e;font-weight:600;">Rebuild now →</a>
   </div>
   <?php endif; ?>
+
+  <?php
+    $bldConfig    = loadBuildingConfig($building);
+    $contactEmail = htmlspecialchars($bldConfig['contactEmail'] ?? '');
+  ?>
+  <div class="card" style="flex-direction:column;gap:0.5rem;cursor:default;">
+    <div style="display:flex;gap:1.25rem;align-items:flex-start;">
+      <div class="card-icon">⚙️</div>
+      <div>
+        <div class="card-title" style="color:inherit;">Building Settings</div>
+        <div class="card-desc">Contact email for resident notifications (change requests, etc.).</div>
+      </div>
+    </div>
+    <?php if ($settingsMessage): ?>
+      <div class="message <?= $settingsMessageType ?>"><?= htmlspecialchars($settingsMessage) ?></div>
+    <?php endif; ?>
+    <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+          style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.25rem;">
+      <div style="flex:1;min-width:220px;">
+        <label for="contact_email" style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
+          Building contact email
+        </label>
+        <input type="text" id="contact_email" name="contact_email"
+               value="<?= $contactEmail ?>"
+               placeholder="board@example.com"
+               style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+      </div>
+      <button type="submit" name="save_building_settings" class="save-btn" style="white-space:nowrap;">Save</button>
+    </form>
+    <p style="font-size:0.78rem;color:#999;margin:0.1rem 0 0;">
+      If blank, resident change requests go to the President's email from the Database tab.
+    </p>
+  </div>
 
   <hr>
 <?php endif; ?>

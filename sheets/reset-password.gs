@@ -15,18 +15,45 @@
 // ---------------------------------------------------------------------------
 
 function doResetPassword(params, expectedToken) {
-  const token     = params.token     || '';
-  const username  = (params.username || '').toLowerCase().trim();
-  const tmpPw     = params.tmppw     || '';
-  const building  = params.building  || '';
-  const loginUrl  = params.loginurl  || '';
-  const secretNum = (params.secretnum || '').toString().trim();
+  const token       = params.token       || '';
+  const username    = (params.username   || '').toLowerCase().trim();
+  const tmpPw       = params.tmppw       || '';
+  const building    = params.building    || '';
+  const loginUrl    = params.loginurl    || '';
+  const secretNum   = (params.secretnum  || '').toString().trim();
+  const directEmail = (params.directemail || '').trim();  // bypass DB lookup when provided
 
   if (!token || token !== expectedToken) {
     return _rpJson({ error: 'Unauthorized' });
   }
   if (!username || !tmpPw || !building) {
     return _rpJson({ error: 'Missing required parameters' });
+  }
+
+  // If a direct email is supplied, skip the Database lookup entirely
+  if (directEmail) {
+    const ss           = SpreadsheetApp.getActiveSpreadsheet();
+    const fileName     = ss.getName();
+    const buildingName = fileName.split('Owner DB')[0].trim() || building;
+    const subject      = 'Your temporary password – ' + buildingName;
+    const body = [
+      'A login account has been created for you (' + username + ').',
+      '',
+      'Your temporary password is:',
+      '',
+      '    ' + tmpPw,
+      '',
+      'Please log in at the link below — you will be prompted to set a new password:',
+      loginUrl,
+      '',
+      'If you have any questions, please contact your building administrator.',
+    ].join('\n');
+    try {
+      MailApp.sendEmail(directEmail, subject, body);
+    } catch (e) {
+      return _rpJson({ error: 'Failed to send email: ' + e.message });
+    }
+    return _rpJson({ status: 'ok' });
   }
 
   const ss    = SpreadsheetApp.getActiveSpreadsheet();

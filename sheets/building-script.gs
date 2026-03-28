@@ -77,11 +77,38 @@ function doGet(e) {
   const page  = e && e.parameter && e.parameter.page  ? e.parameter.page  : 'board';
   const token = e && e.parameter && e.parameter.token ? e.parameter.token : '';
   switch (page) {
-    case 'parking':  return DatabaseSheetMaster.doGetParking();
-    case 'elevator': return DatabaseSheetMaster.doGetElevator();
-    case 'resident': return DatabaseSheetMaster.doGetResident();
-    case 'owners':   return DatabaseSheetMaster.doGetOwners(token, OWNER_IMPORT_TOKEN);
-    case 'resetpw':  return DatabaseSheetMaster.doResetPassword(e.parameter, OWNER_IMPORT_TOKEN);
-    default:         return DatabaseSheetMaster.doGet();
+    case 'parking':      return DatabaseSheetMaster.doGetParking();
+    case 'elevator':     return DatabaseSheetMaster.doGetElevator();
+    case 'resident':     return DatabaseSheetMaster.doGetResident();
+    case 'owners':       return DatabaseSheetMaster.doGetOwners(token, OWNER_IMPORT_TOKEN);
+    case 'resetpw':      return DatabaseSheetMaster.doResetPassword(e.parameter, OWNER_IMPORT_TOKEN);
+    case 'listDatabase': return DatabaseSheetMaster.doListDatabase(token, OWNER_IMPORT_TOKEN);
+    case 'getUnit':      return DatabaseSheetMaster.doGetUnit(e.parameter, OWNER_IMPORT_TOKEN);
+    case 'getAllEmails':  return DatabaseSheetMaster.doGetAllEmails(token, OWNER_IMPORT_TOKEN);
+    default:             return DatabaseSheetMaster.doGet();
+  }
+}
+
+function doPost(e) {
+  let data = {};
+  try {
+    data = JSON.parse(e.postData.contents);
+  } catch (_) {
+    return ContentService.createTextOutput(JSON.stringify({ error: 'Invalid JSON body' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  const action = data.action || '';
+  switch (action) {
+    case 'addDatabaseRow':    return DatabaseSheetMaster.doAddDatabaseRow(data,    OWNER_IMPORT_TOKEN);
+    case 'editDatabaseRow':   return DatabaseSheetMaster.doEditDatabaseRow(data,   OWNER_IMPORT_TOKEN);
+    case 'deleteDatabaseRow': return DatabaseSheetMaster.doDeleteDatabaseRow(data, OWNER_IMPORT_TOKEN);
+    case 'editCarRow':        return DatabaseSheetMaster.doEditCarRow(data,        OWNER_IMPORT_TOKEN);
+    case 'addEmergencyRow':   return DatabaseSheetMaster.doAddEmergencyRow(data,   OWNER_IMPORT_TOKEN);
+    case 'editEmergencyRow':  return DatabaseSheetMaster.doEditEmergencyRow(data,  OWNER_IMPORT_TOKEN);
+    case 'deleteEmergencyRow':return DatabaseSheetMaster.doDeleteEmergencyRow(data,OWNER_IMPORT_TOKEN);
+    case 'sendChangeRequest': return DatabaseSheetMaster.doSendChangeRequest(data, OWNER_IMPORT_TOKEN);
+    default:
+      return ContentService.createTextOutput(JSON.stringify({ error: 'Unknown action: ' + action }))
+        .setMimeType(ContentService.MimeType.JSON);
   }
 }
