@@ -157,11 +157,16 @@ if ($action) {
       $body         = json_decode(file_get_contents('php://input'), true) ?? [];
       $cfg          = loadBuildingConfig($building);
       $contactEmail = trim($cfg['contactEmail'] ?? '');
+      $scheme       = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+      $dir          = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+      $adminUrl     = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                    . '/database-admin.php?building=' . urlencode($building);
       echo json_encode(gasPost($webAppURL, array_merge($body, [
         'action'       => 'sendChangeRequest',
         'token'        => OWNER_IMPORT_TOKEN,
         'buildingName' => $buildLabel,
         'contactEmail' => $contactEmail,
+        'adminUrl'     => $adminUrl,
       ])));
       exit;
     }
@@ -226,6 +231,15 @@ if ($action) {
     .msg.error  { background: #ffeef0; color: #c00; }
     .msg.info   { background: #eff6ff; color: #1d4ed8; }
 
+    /* Toast */
+    #toast          { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%);
+                      background: #1a7f37; color: #fff; padding: 0.6rem 1.25rem;
+                      border-radius: 6px; font-size: 0.9rem; opacity: 0;
+                      transition: opacity 0.2s; pointer-events: none; z-index: 200;
+                      white-space: nowrap; max-width: 90vw; }
+    #toast.error    { background: #c00; }
+    #toast.visible  { opacity: 1; }
+
     /* Request popup */
     .overlay    { position: fixed; inset: 0; background: rgba(0,0,0,0.4);
                   display: flex; align-items: center; justify-content: center; z-index: 100; }
@@ -250,6 +264,7 @@ if ($action) {
   </div>
 </div>
 
+<div id="toast"></div>
 <div id="main-content"><p style="color:#888;">Loading your unit…</p></div>
 
 <!-- Change request popup -->
@@ -269,6 +284,23 @@ if ($action) {
     <input type="text" id="req-first" placeholder="Person being added / removed / corrected">
     <label>Last name</label>
     <input type="text" id="req-last">
+    <label>Email</label>
+    <input type="text" id="req-email" placeholder="optional">
+    <label>Phone #1</label>
+    <input type="text" id="req-ph1" placeholder="optional">
+    <label>Phone #2</label>
+    <input type="text" id="req-ph2" placeholder="optional">
+    <div style="display:flex;gap:1.25rem;margin-top:0.75rem;">
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:600;font-size:0.85rem;margin:0;">
+        <input type="checkbox" id="req-ft"> Full Time
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:600;font-size:0.85rem;margin:0;">
+        <input type="checkbox" id="req-res" checked> Resident
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:600;font-size:0.85rem;margin:0;">
+        <input type="checkbox" id="req-own" checked> Owner
+      </label>
+    </div>
     <label>Notes / reason (optional)</label>
     <textarea id="req-notes" placeholder="e.g. new owner, moved out, etc."></textarea>
     <div class="form-actions">
@@ -313,7 +345,7 @@ function renderPage(unit, residents, car) {
 
     <div class="section-header">
       Residents
-      <button class="btn btn-secondary btn-sm" style="margin-left:1rem;font-size:0.8rem;"
+      <button class="btn btn-primary btn-sm" style="margin-left:1rem;font-size:0.8rem;"
         onclick="openRequestPopup('${esc(unit)}')">Add/Remove Resident</button>
     </div>
     ${residents.map(r => residentCardHtml(unit, r)).join('') || '<p style="color:#888;font-size:0.9rem;">No residents on file.</p>'}
@@ -350,7 +382,7 @@ function residentCardHtml(unit, r) {
       ${fieldPair('Water Heater',  r['Water Tank'])}
     </div>
     <div class="person-actions">
-      <button class="btn btn-secondary btn-sm"
+      <button class="btn btn-primary btn-sm"
         onclick="showEditResident('${id}')">Edit my info</button>
     </div>
     <div class="edit-form" id="ef-${id}">
@@ -408,14 +440,13 @@ async function saveResident(unit, first, last, id) {
     'Full Time':   document.getElementById('ef-ft-'    + id).checked,
   });
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  showMsg(msgEl, '✓ Saved.', 'ok');
   document.getElementById('ef-' + id).style.display = 'none';
-  // Refresh
   const refresh = await apiFetch('getMyUnit');
   if (!refresh.error) {
     myResidents = refresh.residents || [];
     renderPage(myUnit, myResidents, refresh.car || {});
   }
+  toast('✓ Your info has been saved.');
 }
 
 // -------------------------------------------------------
@@ -432,7 +463,7 @@ function carSectionHtml(unit, c) {
       ${fieldPair('Notes', c['Notes'])}
     </div>
     <div class="person-actions">
-      <button class="btn btn-secondary btn-sm" onclick="showEditCar()">Edit</button>
+      <button class="btn btn-primary btn-sm" onclick="showEditCar()">Edit</button>
     </div>
     <div class="edit-form" id="car-edit-form">
       <div class="field-grid">
@@ -470,10 +501,10 @@ async function saveCar(unit) {
     'Notes':        document.getElementById('cf-notes').value.trim(),
   });
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  showMsg(msgEl, '✓ Saved.', 'ok');
   document.getElementById('car-edit-form').style.display = 'none';
   const refresh = await apiFetch('getMyUnit');
   if (!refresh.error) renderPage(myUnit, refresh.residents || [], refresh.car || {});
+  toast('✓ Vehicle info has been saved.');
 }
 
 // -------------------------------------------------------
@@ -501,12 +532,18 @@ async function submitChangeRequest() {
     reqType:       document.getElementById('req-type').value,
     firstName:     first,
     lastName:      last,
+    email:         document.getElementById('req-email').value.trim(),
+    phone1:        document.getElementById('req-ph1').value.trim(),
+    phone2:        document.getElementById('req-ph2').value.trim(),
+    fullTime:      document.getElementById('req-ft').checked,
+    resident:      document.getElementById('req-res').checked,
+    owner:         document.getElementById('req-own').checked,
     notes:         document.getElementById('req-notes').value.trim(),
   });
 
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  showMsg(msgEl, 'Your request has been sent to the board.', 'ok');
-  setTimeout(closeRequestPopup, 2500);
+  closeRequestPopup();
+  toast('✓ Your request has been sent to the board.', 'ok', 7000);
 }
 
 // -------------------------------------------------------
@@ -537,6 +574,15 @@ function esc(s) {
 function showMsg(el, text, type) {
   el.className = 'msg ' + type;
   el.textContent = text;
+}
+
+let toastTimer = null;
+function toast(text, type = 'ok', durationMs = 5000) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.className = type === 'error' ? 'error visible' : 'visible';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('visible'); }, durationMs);
 }
 
 init();

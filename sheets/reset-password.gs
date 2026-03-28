@@ -37,11 +37,10 @@ function doResetPassword(params, expectedToken) {
     const buildingName = fileName.split('Owner DB')[0].trim() || building;
     const subject      = 'Your temporary password – ' + buildingName;
     const body = [
-      'A login account has been created for you (' + username + ').',
+      'A login account has been created for you.',
       '',
-      'Your temporary password is:',
-      '',
-      '    ' + tmpPw,
+      '    username --> ' + username + '   (note: all lower case)',
+      '    password --> ' + tmpPw,
       '',
       'Please log in at the link below — you will be prompted to set a new password:',
       loginUrl,

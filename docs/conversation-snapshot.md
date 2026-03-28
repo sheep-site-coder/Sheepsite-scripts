@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 27, 2026 (updated)
+**Date:** March 28, 2026 (updated)
 
 ---
 
@@ -98,6 +98,36 @@ PHP renders file browser in iframe on building website
 ## Current State
 
 **Completed:**
+- [x] Session 18 — Resident-facing UX polish + database-admin performance:
+      - `database-admin.php`: local `unitCache` added — after first open of a unit, all
+        subsequent writes (add/edit/delete resident, vehicle, emergency) update the cache and
+        re-render instantly without a second Apps Script round trip (`refreshUnitDetail`)
+      - `database-admin.php`: delete resident now shows "Deleting…" toast + success toast;
+        uses `await` so panel refreshes before toast appears
+      - `database-admin.php`: missing `&building=` param added to welcome email URL — was
+        causing `doResetPassword` to bail before sending the email
+      - `database-admin.php`: `siteURL` from `config/{building}.json` baked into login URL
+        in welcome emails so "← Back to site" works throughout the first-login flow
+      - `admin.php`: Building Settings card gains "Building website URL" field (saves
+        `siteURL` to `config/{building}.json`); card description updated
+      - `display-private-dir.php`: mustChange redirect after fresh login (no returnURL) now
+        goes to `my-account.php` instead of private files root
+      - `my-account.php`: falls back to `siteURL` from config for "← Back to site" when no
+        `return=` param is present; "Private files" link always shown in top bar; Change
+        Password card always passes `redirect=my-account.php` so back link returns to hub
+      - `my-unit.php`: action buttons (Edit my info, Add/Remove Resident, Edit vehicle) changed
+        to `btn-primary` (blue) to look active rather than disabled; toast notification system
+        added (5s saves, 7s change request); change request popup gains email, phone 1,
+        phone 2, Full Time/Resident/Owner fields; PHP passes `adminUrl` to Apps Script so
+        admin receives a direct link to `database-admin.php` in the change request email
+      - `sheets/reset-password.gs`: welcome email body restructured — shows
+        `username --> xxx  (note: all lower case)` and `password --> xxx` on indented lines
+      - `sheets/database-admin.gs`: `doSendChangeRequest` includes email, phones, status
+        flags, and direct admin URL in the change request email body
+      - `admin.php`: "Manage Residents/Owners" card description updated — removed "Copy All
+        Emails", now reads "Includes Email List capture for easy community wide emails"
+      - `database-admin.php`: delete confirm dialog updated to say "database" not "Google Sheet"
+      - `database-admin.php`: Get Email List toast added (8s) explaining copy + BCC usage
 - [x] Session 17 — Resident Database Admin fully implemented:
       - `database-admin.php` (NEW): admin CRUD for Database, CarDB, and Emergency tabs;
         unit-centric layout with inline panel expansion; floor grouping with 3-choice prompt
@@ -353,40 +383,10 @@ PHP renders file browser in iframe on building website
 
 ## Next Steps
 
-- **Deploy Session 17 files to server:**
-    - `database-admin.php` (new)
-    - `my-account.php` (new)
-    - `my-unit.php` (new)
-    - `admin.php` (updated — new cards, Building Settings)
-    - `footer-for-sites.js` (updated — openMyAccount() helper)
-    - Create `config/` folder on server (writable by PHP)
-- **Redeploy Apps Script (master library new version):**
-    - `sheets/database-admin.gs` — add to master library, deploy new version
-    - `sheets/building-script.gs` — redeploy with doPost routing
-    - `sheets/reset-password.gs` — redeploy with directemail support
-    - Building scripts set to "latest version" will pick up automatically
-- **Add Notes column to CarDB tab** in each building's Google Sheet
-- **Add "My Account" menu item** to building websites using `openMyAccount()`
-- **Deploy session 15 files to server:**
-    - admin.php, woolsy-manage.php (new), chatbot.php, chatbot-page.php
-    - display-private-dir.php, manage-users.php
-    - woolsy-update.php (PROMPT_VERSION v4, board member exclusion)
-    - docs/Sheepsite-Admin-Manual.html
-- **Create credentials/login_stats.json** on server (touch the file; writable by PHP) — or it will be auto-created on first login
-- **Fill in Building FAQ** for LyndhurstH via admin → Woolsy → woolsy-manage.php FAQ editor
-    - Add current board contact URL
-    - Add property manager contact if applicable
-- **Rebuild LyndhurstH knowledge base** (v4 prompt excludes board member names)
-- **Fill in building FAQs** — faqs/LyndhurstH.txt and faqs/SampleSite.txt are templates
-- **Upload file-manager.php** to server
-- **Merge `feature/search-and-tagging` → main**
-- **Set up checkAllBuildings() time-driven trigger** in Apps Script (weekly)
-- **Wire up Search button** on building sites using `openSearch()`
-- **Create tags/ folder** on server (writable by PHP)
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 - **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
 
 ---
 
-*Snapshot updated: March 28, 2026 (session 17 — Resident Database Admin fully implemented)*
+*Snapshot updated: March 28, 2026 (session 18 — resident UX polish, database-admin performance, first-login flow)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

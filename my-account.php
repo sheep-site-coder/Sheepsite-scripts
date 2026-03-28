@@ -31,6 +31,13 @@ $username = is_array($_SESSION[$sessionKey]) ? ($_SESSION[$sessionKey]['user'] ?
 $buildings_config = $buildings[$building];
 $returnURL = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
+
+// Fall back to stored site URL if no return param was passed
+if (!$returnURL) {
+  $configFile = __DIR__ . '/config/' . $building . '.json';
+  $cfg = file_exists($configFile) ? (json_decode(file_get_contents($configFile), true) ?? []) : [];
+  $returnURL = $cfg['siteURL'] ?? '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -63,6 +70,7 @@ if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
     <?php if ($returnURL): ?>
       <a href="<?= htmlspecialchars($returnURL) ?>">← Back to site</a>
     <?php endif; ?>
+    <a href="display-private-dir.php?building=<?= urlencode($building) ?>">Private files</a>
     <a href="display-private-dir.php?building=<?= urlencode($building) ?>&logout=1">Log out</a>
   </div>
 </div>
@@ -78,7 +86,7 @@ if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
   </div>
 </a>
 
-<a href="change-password.php?building=<?= urlencode($building) ?><?= $returnURL ? '&redirect=' . urlencode($returnURL) : '' ?>" class="card">
+<a href="change-password.php?building=<?= urlencode($building) ?>&redirect=<?= urlencode('my-account.php?building=' . $building . ($returnURL ? '&return=' . urlencode($returnURL) : '')) ?>" class="card">
   <div class="card-icon">🔑</div>
   <div>
     <div class="card-title">Change Password</div>

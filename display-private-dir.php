@@ -84,8 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
       }
     }
     if ($mustChange) {
-      $filesRedirect = 'display-private-dir.php?building=' . urlencode($building)
-                     . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+      $filesRedirect = $returnURL
+                     ? 'display-private-dir.php?building=' . urlencode($building) . '&return=' . urlencode($returnURL)
+                     : 'my-account.php?building=' . urlencode($building);
       header('Location: change-password.php?building=' . urlencode($building)
            . '&mustchange=1'
            . '&redirect=' . urlencode($filesRedirect)
@@ -164,8 +165,9 @@ if (!isset($_GET['json']) && !isset($_GET['fileId'])) {
   $allUsers = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
   foreach ($allUsers as $u) {
     if ($u['user'] === $_SESSION[$sessionKey] && !empty($u['mustChange'])) {
-      $filesRedirect = 'display-private-dir.php?building=' . urlencode($building)
-                     . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+      $filesRedirect = $returnURL
+                     ? 'display-private-dir.php?building=' . urlencode($building) . '&return=' . urlencode($returnURL)
+                     : 'my-account.php?building=' . urlencode($building);
       header('Location: change-password.php?building=' . urlencode($building)
            . '&mustchange=1'
            . '&redirect=' . urlencode($filesRedirect)

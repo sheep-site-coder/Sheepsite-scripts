@@ -406,8 +406,15 @@ function doSendChangeRequest(data, expectedToken) {
   const reqType       = String(data.reqType       || '').trim();
   const firstName     = String(data.firstName     || '').trim();
   const lastName      = String(data.lastName      || '').trim();
+  const email         = String(data.email         || '').trim();
+  const phone1        = String(data.phone1        || '').trim();
+  const phone2        = String(data.phone2        || '').trim();
+  const fullTime      = data.fullTime ? 'Yes' : 'No';
+  const resident      = data.resident ? 'Yes' : 'No';
+  const owner         = data.owner    ? 'Yes' : 'No';
   const notes         = String(data.notes         || '').trim();
   const buildingName  = String(data.buildingName  || '').trim();
+  const adminUrl      = String(data.adminUrl      || '').trim();
   let   toEmail       = String(data.contactEmail  || '').trim();
 
   if (!toEmail) {
@@ -445,8 +452,13 @@ function doSendChangeRequest(data, expectedToken) {
     `Request type: ${reqType}`,
     `Name:         ${firstName} ${lastName}`,
   ];
+  if (email)  lines.push(`Email:        ${email}`);
+  if (phone1) lines.push(`Phone #1:     ${phone1}`);
+  if (phone2) lines.push(`Phone #2:     ${phone2}`);
+  lines.push(`Full Time:    ${fullTime}`, `Resident:     ${resident}`, `Owner:        ${owner}`);
   if (notes) lines.push(`Notes:        ${notes}`);
   lines.push('', `Please log in to the admin panel and open Manage Residents/Owners → Unit ${unit} to make the change.`);
+  if (adminUrl) lines.push('', adminUrl);
 
   MailApp.sendEmail({ to: toEmail, subject, body: lines.join('\n') });
   return jsonOut_({ ok: true });

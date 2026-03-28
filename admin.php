@@ -162,6 +162,7 @@ $settingsMessageType = 'ok';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_building_settings'])) {
   $config = loadBuildingConfig($building);
   $config['contactEmail'] = trim($_POST['contact_email'] ?? '');
+  $config['siteURL']      = rtrim(trim($_POST['site_url'] ?? ''), '/');
   if (saveBuildingConfig($building, $config)) {
     $settingsMessage = 'Building settings saved.';
   } else {
@@ -266,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
       <div class="card-title">Manage Residents/Owners</div>
       <div class="card-desc">
         Add, edit, or remove residents across all units. Update contact info, vehicle details,
-        and emergency contacts. Includes Copy All Emails.
+        and emergency contacts. Includes Email List capture for easy community wide emails.
       </div>
     </div>
   </a>
@@ -364,13 +365,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   <?php
     $bldConfig    = loadBuildingConfig($building);
     $contactEmail = htmlspecialchars($bldConfig['contactEmail'] ?? '');
+    $siteURL      = htmlspecialchars($bldConfig['siteURL']      ?? '');
   ?>
   <div class="card" style="flex-direction:column;gap:0.5rem;cursor:default;">
     <div style="display:flex;gap:1.25rem;align-items:flex-start;">
       <div class="card-icon">⚙️</div>
       <div>
         <div class="card-title" style="color:inherit;">Building Settings</div>
-        <div class="card-desc">Contact email for resident notifications (change requests, etc.).</div>
+        <div class="card-desc">Contact email and website URL for this building.</div>
       </div>
     </div>
     <?php if ($settingsMessage): ?>
@@ -387,10 +389,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
                placeholder="board@example.com"
                style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
       </div>
+      <div style="flex:1;min-width:220px;">
+        <label for="site_url" style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
+          Building website URL
+        </label>
+        <input type="text" id="site_url" name="site_url"
+               value="<?= $siteURL ?>"
+               placeholder="https://lyndhurstH.com"
+               style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+      </div>
       <button type="submit" name="save_building_settings" class="save-btn" style="white-space:nowrap;">Save</button>
     </form>
     <p style="font-size:0.78rem;color:#999;margin:0.1rem 0 0;">
-      If blank, resident change requests go to the President's email from the Database tab.
+      Website URL enables "Back to site" links in welcome emails and resident pages.
+      Contact email is used for resident change requests (falls back to President's email if blank).
     </p>
   </div>
 

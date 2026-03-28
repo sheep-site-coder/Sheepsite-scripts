@@ -182,13 +182,16 @@ if ($action) {
       // Email the temp password via Apps Script
       $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
       $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+      $siteURL  = loadConfig($building)['siteURL'] ?? '';
       $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
-                . '/display-private-dir.php?building=' . urlencode($building);
+                . '/display-private-dir.php?building=' . urlencode($building)
+                . ($siteURL ? '&return=' . urlencode($siteURL) : '');
       $resetURL = $webAppURL
                 . '?page=resetpw'
-                . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
-                . '&username=' . urlencode($username)
-                . '&tmppw='    . urlencode($tempPw)
+                . '&token='       . urlencode(OWNER_IMPORT_TOKEN)
+                . '&username='    . urlencode($username)
+                . '&building='    . urlencode($building)
+                . '&tmppw='       . urlencode($tempPw)
                 . '&loginurl='    . urlencode($loginURL)
                 . '&directemail=' . urlencode($email ?? $newEmail ?? '');
       $emailResp = @file_get_contents($resetURL);
@@ -275,8 +278,9 @@ if ($action) {
                     . '/display-private-dir.php?building=' . urlencode($building);
           $resetURL = $webAppURL
                     . '?page=resetpw'
-                    . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
-                    . '&username=' . urlencode($username)
+                    . '&token='       . urlencode(OWNER_IMPORT_TOKEN)
+                    . '&username='    . urlencode($username)
+                    . '&building='    . urlencode($building)
                     . '&tmppw='       . urlencode($tempPw)
                     . '&loginurl='    . urlencode($loginURL)
                     . '&directemail=' . urlencode($newEmail);
@@ -576,6 +580,7 @@ let allRows     = [];   // flat DB rows from listDatabase
 let unitMap     = {};   // unit# -> [{resident}, ...]  (built from allRows)
 let unitOrder   = [];   // sorted unit numbers
 let floorConfig = <?= json_encode($config) ?>;
+let unitCache   = {};   // unit# -> {unit, residents, car, emergency} — avoids re-fetching after writes
 
 // -------------------------------------------------------
 // Boot
@@ -694,6 +699,7 @@ async function toggleUnit(row, unit) {
     const res = await apiFetch('getUnit', { unit });
     if (res.error) { detail.innerHTML = `<div class="msg error">${esc(res.error)}</div>`; return; }
     detail.dataset.loaded = '1';
+    unitCache[unit] = res;
     renderUnitDetail(detail, res);
   }
 }
@@ -1079,7 +1085,8 @@ async function saveAddPerson(unit) {
     successMsg = `✓ Added to database. Login account created for <strong>${res.username}</strong> but email could not be sent — check that the email address is correct.`;
   }
   showMsg(msgEl, successMsg, 'ok');
-  await reloadUnitDetail(unit);
+  if (unitCache[unit]) unitCache[unit].residents.push({ ...payload });
+  refreshUnitDetail(unit);
   toast(successMsg);
 }
 
@@ -1123,7 +1130,13 @@ async function saveEditResident(unit, origFirst, origLast, id) {
     msg += ` Web login username changed from <strong>${res.oldUsername}</strong> to <strong>${res.newUsername}</strong> — notify the resident.`;
   }
   showMsg(msgEl, msg, 'ok');
-  await reloadUnitDetail(unit);
+  if (unitCache[unit]) {
+    const idx = unitCache[unit].residents.findIndex(r =>
+      r['First Name'] === origFirst && r['Last Name'] === origLast
+    );
+    if (idx >= 0) Object.assign(unitCache[unit].residents[idx], payload);
+  }
+  refreshUnitDetail(unit);
   toast(msg);
 }
 
@@ -1131,19 +1144,26 @@ async function saveEditResident(unit, origFirst, origLast, id) {
 // Delete resident
 // -------------------------------------------------------
 async function deleteResident(unit, first, last, displayName) {
-  if (!confirm(`Delete ${displayName} from Unit ${unit}?\n\nThis removes them from the Google Sheet and removes their web login. The parking spot is NOT affected.`)) return;
+  if (!confirm(`Delete ${displayName} from Unit ${unit}?\n\nThis removes them from the database and removes their web login. The parking spot is NOT affected.`)) return;
+  toast('Deleting…', 'ok', 30000);
   const res = await apiPost('deleteDatabaseRow', { matchUnit: unit, matchFirst: first, matchLast: last });
-  if (res.error) { alert('Error: ' + res.error); return; }
-  reloadUnitDetail(unit);
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  if (unitCache[unit]) {
+    unitCache[unit].residents = unitCache[unit].residents.filter(r =>
+      !(r['First Name'] === first && r['Last Name'] === last)
+    );
+  }
+  refreshUnitDetail(unit);
+  toast(`✓ ${displayName} removed from Unit ${unit}.`);
 }
 
 // -------------------------------------------------------
 // Save car row
 // -------------------------------------------------------
 async function saveCarRow(unit) {
-  const msgEl = document.getElementById('cf-msg-' + unit);
+  const msgEl  = document.getElementById('cf-msg-' + unit);
   showMsg(msgEl, 'Saving…', 'info');
-  const res = await apiPost('editCarRow', {
+  const carData = {
     'Unit #':       unit,
     'Parking Spot': document.getElementById('cf-spot-'  + unit).value.trim(),
     'Car Make':     document.getElementById('cf-make-'  + unit).value.trim(),
@@ -1151,11 +1171,12 @@ async function saveCarRow(unit) {
     'Car Color':    document.getElementById('cf-color-' + unit).value.trim(),
     'Lic #':        document.getElementById('cf-lic-'   + unit).value.trim(),
     'Notes':        document.getElementById('cf-notes-' + unit).value.trim(),
-  });
+  };
+  const res = await apiPost('editCarRow', carData);
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  showMsg(msgEl, '✓ Saved.', 'ok');
-  document.getElementById('car-edit-' + unit).style.display = 'none';
-  reloadUnitDetail(unit);
+  if (unitCache[unit]) unitCache[unit].car = carData;
+  refreshUnitDetail(unit);
+  toast('✓ Vehicle info saved.');
 }
 
 // -------------------------------------------------------
@@ -1167,46 +1188,88 @@ async function saveAddEmergency(unit) {
   const msgEl = document.getElementById('emn-msg-'   + unit);
   if (!first || !last) { showMsg(msgEl, 'First and last name required.', 'error'); return; }
   showMsg(msgEl, 'Saving…', 'info');
-  const res = await apiPost('addEmergencyRow', {
-    'Unit #':      unit,
-    'First Name':  first,
-    'Last Name':   last,
-    'eMail':       document.getElementById('emn-email-' + unit).value.trim(),
-    'Phone1':      document.getElementById('emn-ph1-'   + unit).value.trim(),
-    'Phone2':      document.getElementById('emn-ph2-'   + unit).value.trim(),
-    'Condo Sitter': document.getElementById('emn-cs-'   + unit).checked,
-  });
+  const emRow = {
+    'Unit #':       unit,
+    'First Name':   first,
+    'Last Name':    last,
+    'eMail':        document.getElementById('emn-email-' + unit).value.trim(),
+    'Phone1':       document.getElementById('emn-ph1-'   + unit).value.trim(),
+    'Phone2':       document.getElementById('emn-ph2-'   + unit).value.trim(),
+    'Condo Sitter': document.getElementById('emn-cs-'    + unit).checked,
+  };
+  const res = await apiPost('addEmergencyRow', emRow);
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  showMsg(msgEl, '✓ Added.', 'ok');
-  toggleAddEmergency(unit);
-  reloadUnitDetail(unit);
+  if (unitCache[unit]) unitCache[unit].emergency.push(emRow);
+  refreshUnitDetail(unit);
+  toast('✓ Emergency contact added.');
 }
 
 async function saveEditEmergency(unit, origFirst, origLast, id) {
   const msgEl = document.getElementById('emf-msg-' + id);
   showMsg(msgEl, 'Saving…', 'info');
-  const res = await apiPost('editEmergencyRow', {
-    matchUnit:     unit,
-    matchFirst:    origFirst,
-    matchLast:     origLast,
-    'Unit #':      unit,
-    'First Name':  document.getElementById('emf-first-' + id).value.trim(),
-    'Last Name':   document.getElementById('emf-last-'  + id).value.trim(),
-    'eMail':       document.getElementById('emf-email-' + id).value.trim(),
-    'Phone1':      document.getElementById('emf-ph1-'   + id).value.trim(),
-    'Phone2':      document.getElementById('emf-ph2-'   + id).value.trim(),
-    'Condo Sitter': document.getElementById('emf-cs-'   + id).checked,
-  });
+  const payload = {
+    matchUnit:      unit,
+    matchFirst:     origFirst,
+    matchLast:      origLast,
+    'Unit #':       unit,
+    'First Name':   document.getElementById('emf-first-' + id).value.trim(),
+    'Last Name':    document.getElementById('emf-last-'  + id).value.trim(),
+    'eMail':        document.getElementById('emf-email-' + id).value.trim(),
+    'Phone1':       document.getElementById('emf-ph1-'   + id).value.trim(),
+    'Phone2':       document.getElementById('emf-ph2-'   + id).value.trim(),
+    'Condo Sitter': document.getElementById('emf-cs-'    + id).checked,
+  };
+  const res = await apiPost('editEmergencyRow', payload);
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  showMsg(msgEl, '✓ Saved.', 'ok');
-  reloadUnitDetail(unit);
+  if (unitCache[unit]) {
+    const idx = unitCache[unit].emergency.findIndex(c =>
+      c['First Name'] === origFirst && c['Last Name'] === origLast
+    );
+    if (idx >= 0) Object.assign(unitCache[unit].emergency[idx], payload);
+  }
+  refreshUnitDetail(unit);
+  toast('✓ Emergency contact saved.');
 }
 
 async function deleteEmergency(unit, first, last, displayName) {
   if (!confirm(`Delete ${displayName} from Unit ${unit}'s emergency contacts?`)) return;
   const res = await apiPost('deleteEmergencyRow', { matchUnit: unit, matchFirst: first, matchLast: last });
-  if (res.error) { alert('Error: ' + res.error); return; }
-  reloadUnitDetail(unit);
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  if (unitCache[unit]) {
+    unitCache[unit].emergency = unitCache[unit].emergency.filter(c =>
+      !(c['First Name'] === first && c['Last Name'] === last)
+    );
+  }
+  refreshUnitDetail(unit);
+  toast(`✓ ${displayName} removed from emergency contacts.`);
+}
+
+// -------------------------------------------------------
+// Re-render a unit panel from local cache — no network call
+// -------------------------------------------------------
+function refreshUnitDetail(unit) {
+  const detail = document.getElementById('detail-' + unit);
+  if (!detail || !unitCache[unit]) return;
+
+  const activePanel  = detail.querySelector('.tab-panel.active');
+  const activeTabKey = activePanel
+    ? activePanel.id.replace('tab-', '').replace(new RegExp('-' + unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '')
+    : 'residents';
+
+  renderUnitDetail(detail, unitCache[unit]);
+
+  const targetId  = 'tab-' + activeTabKey + '-' + unit;
+  const targetBtn = [...detail.querySelectorAll('.tab-btn')]
+    .find(b => (b.getAttribute('onclick') || '').includes(targetId));
+  if (targetBtn) switchTab(targetBtn, targetId);
+
+  const names = (unitCache[unit].residents || []).map(p => `${p['Last Name']}, ${p['First Name']}`).join(' · ');
+  const row   = document.querySelector(`.unit-row[data-unit="${unit}"]`);
+  if (row) {
+    row.querySelector('.unit-names').innerHTML = names
+      ? esc(names)
+      : '<span style="color:#bbb;font-style:italic;">No residents</span>';
+  }
 }
 
 // -------------------------------------------------------
@@ -1258,6 +1321,7 @@ async function copyAllEmails() {
     await navigator.clipboard.writeText(text);
     btn.textContent = '✓ Copied!';
     setTimeout(() => { btn.textContent = 'Get Email List'; }, 2000);
+    toast(`${(res.emails || []).length} email addresses copied to clipboard. Open your email app, create a new message, and paste into the BCC field.`, 'ok', 8000);
   } catch (_) {
     btn.textContent = 'Get Email List';
     prompt('Copy these emails:', text);
