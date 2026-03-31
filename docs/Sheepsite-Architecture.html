@@ -44,7 +44,7 @@
 <body>
 
 <h1>🐑 SheepSite — Architecture Manual</h1>
-<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated March 2026</div>
+<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated March 2026 (session 20)</div>
 
 <nav>
 <ol class="toc">
@@ -71,8 +71,10 @@
   <li>Resident login with per-building credential management</li>
   <li>Auto-generated reports (elevator, parking, resident, board) sourced from Google Sheets</li>
   <li>Woolsy &mdash; an AI chatbot that answers resident questions from the building&rsquo;s governing documents</li>
-  <li>Admin tools for building presidents/managers (user management, storage, Woolsy knowledge base)</li>
-  <li>A master admin interface for the SheepSite operator (Alain) to manage credits and platform-wide settings</li>
+  <li>Admin tools for building presidents/managers (user management, resident database, storage, Woolsy knowledge base, file management)</li>
+  <li>A master admin interface for the SheepSite operator (Alain) to manage all associations, Woolsy credits, storage, billing, and platform-wide settings</li>
+  <li>A billing system for Woolsy credit top-ups and storage upgrades via Stripe Checkout</li>
+  <li>License agreement (ToS) management with per-building click-through acceptance and signature audit trail</li>
 </ul>
 
 <p>All server-side logic lives in PHP scripts hosted at <code>sheepsite.com/Scripts/</code>. Building websites
@@ -90,6 +92,10 @@ PHP never calls Google APIs directly (see <a href="#gas">Section 4</a> for why).
   deploys code updates, and handles escalations that building admins cannot resolve.</p>
   <p><strong>Entry point:</strong> <code>master-admin.php</code> &mdash; authenticated with
   <code>credentials/_master.json</code>. Session key: <code>master_admin_auth</code>.</p>
+  <p><strong>Dashboard:</strong> One card per building showing Woolsy credit usage, storage usage, ToS status,
+  and renewal date. System tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual.</p>
+  <p><strong>Per-building management:</strong> <code>building-detail.php?building=X</code> &mdash; Woolsy top-up,
+  storage limit, config (siteURL, contactEmail, renewalDate, hasDomain), ToS status, billing history.</p>
   <p><strong>Can also:</strong> log into any building&rsquo;s <code>manage-users.php</code> or
   <code>admin.php</code> using the master credential (shared bcrypt credentials file).</p>
 </div>
@@ -100,7 +106,8 @@ PHP never calls Google APIs directly (see <a href="#gas">Section 4</a> for why).
   handles password resets, monitors Drive storage, and manages the Woolsy knowledge base.</p>
   <p><strong>Entry point:</strong> <code>admin.php?building=X</code> &mdash; authenticated with
   <code>credentials/{building}_admin.json</code>. Session key: <code>manage_auth_{building}</code>.</p>
-  <p><strong>Sub-pages:</strong> manage-users.php, storage-report.php, woolsy-update.php, woolsy-admin.php</p>
+  <p><strong>Sub-pages:</strong> manage-users.php, database-admin.php, storage-report.php, file-manager.php, woolsy-update.php, woolsy-manage.php</p>
+  <p><strong>ToS gate:</strong> If the building is in ToS scope and the admin has not accepted the current version, <code>admin.php</code> redirects to <code>tos-accept.php</code> before showing the dashboard.</p>
 </div>
 
 <div class="role-card">
@@ -126,8 +133,9 @@ PHP never calls Google APIs directly (see <a href="#gas">Section 4</a> for why).
   <tr><th>Path</th><th>Contents</th></tr>
   <tr><td><code>/sheepsite.com/Scripts/</code></td><td>All PHP scripts, JS files, and GAS reference files</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/credentials/</code></td><td>Per-building JSON credential files (not in git, writable by PHP)</td></tr>
-  <tr><td><code>/sheepsite.com/Scripts/faqs/</code></td><td>Woolsy knowledge base files, document indexes, credit balances</td></tr>
-  <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin and resident manuals (HTML), this architecture doc</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/config/</code></td><td>Per-building config JSON, ToS config, pricing config, Stripe keys, processed payments (not in git, writable by PHP)</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/faqs/</code></td><td>Woolsy knowledge base files, document indexes, credit balances, usage logs</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin and resident manuals (HTML), this architecture doc, terms of service</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/sheets/</code></td><td>Google Apps Script source files (for reference; deployed via Google)</td></tr>
 </table>
 
@@ -182,7 +190,13 @@ so the web app endpoint is not open to the public.</p>
   <tr><th>Action</th><th>What it does</th></tr>
   <tr><td><code>list</code></td><td>Lists files in a public folder (for display-public-dir.php)</td></tr>
   <tr><td><code>listPrivate</code></td><td>Lists files in a private folder (for display-private-dir.php)</td></tr>
+  <tr><td><code>listAdmin</code></td><td>Lists files and folders with IDs for the file manager admin UI</td></tr>
   <tr><td><code>download</code></td><td>Returns a temporary download URL for a file</td></tr>
+  <tr><td><code>uploadFile</code></td><td>Receives base64-encoded file data and writes it to Drive (doPost)</td></tr>
+  <tr><td><code>deleteFile</code></td><td>Moves a file to Drive Trash</td></tr>
+  <tr><td><code>renameFile</code></td><td>Renames a file in Drive</td></tr>
+  <tr><td><code>createFolder</code></td><td>Creates a subfolder; returns the new folder ID</td></tr>
+  <tr><td><code>deleteFolder</code></td><td>Trashes a folder (must be empty — checked before trashing)</td></tr>
   <tr><td><code>storageReport</code></td><td>Returns storage usage breakdown by subfolder (for storage-report.php)</td></tr>
   <tr><td><code>docCheckResult</code></td><td>Returns cached result of last doc change scan (for admin card)</td></tr>
   <tr><td><code>docCheck</code></td><td>Runs an on-demand scan of RulesDocs/IncorporationDocs/Forms folders</td></tr>
@@ -205,6 +219,13 @@ web app and dispatches on the <code>page</code> parameter:</p>
   <tr><td><code>?page=parking</code></td><td>Parking List report</td></tr>
   <tr><td><code>?page=resident</code></td><td>Resident List report</td></tr>
   <tr><td><code>?page=owners&amp;token=...</code></td><td>Owner list JSON for import into manage-users.php</td></tr>
+  <tr><td><code>doPost: listDatabase</code></td><td>Returns all rows from the Database tab as JSON</td></tr>
+  <tr><td><code>doPost: getUnit</code></td><td>Returns one unit&rsquo;s data (Database + CarDB + Emergency rows)</td></tr>
+  <tr><td><code>doPost: getAllEmails</code></td><td>Returns all resident emails for the Email List feature</td></tr>
+  <tr><td><code>doPost: importResidents</code></td><td>Bulk-appends rows to the Database tab from CSV import (deduplicates)</td></tr>
+  <tr><td><code>doPost: addPerson, editPerson, deletePerson</code></td><td>CRUD for Database tab rows</td></tr>
+  <tr><td><code>doPost: addVehicle, editVehicle, deleteVehicle</code></td><td>CRUD for CarDB tab rows</td></tr>
+  <tr><td><code>doPost: addEmergency, editEmergency, deleteEmergency</code></td><td>CRUD for Emergency &amp; Condo Sitter tab rows</td></tr>
 </table>
 <p>Two installable triggers run per building: <code>onEditHandler</code> (stamps a timestamp when
 Database or CarDB tabs are edited) and <code>runScheduledUpdate</code> (time-driven, every minute,
@@ -241,25 +262,48 @@ new library version.</p>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{building}</code> session.</td></tr>
+      <td>Building admin dashboard. Cards: Manage Residents, Manage User Accounts, Manage Files, Manage Tags, Storage Report, Woolsy Knowledge Base, User Manual. ToS gate: redirects to tos-accept.php if current version not accepted. Requires <code>manage_auth_{building}</code> session.</td></tr>
   <tr><td><code>manage-users.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Add, remove, and reset passwords for resident accounts. Import owners from Google Sheet. Supports both building admin and master admin login.</td></tr>
+      <td>Web account management: add, remove, reset passwords for resident accounts. Sync: creates accounts for database residents without one, flags orphaned accounts for removal. Accepts both building admin and master admin login.</td></tr>
+  <tr><td><code>database-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Resident database CRUD admin. Unit-centric layout with floor grouping. Manages Database, CarDB, and Emergency &amp; Condo Sitter tabs via Apps Script. Account creation is email-gated. CSV bulk import. Send welcome email. Requires admin session.</td></tr>
   <tr><td><code>storage-report.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Shows Google Drive storage usage for Public and Private folders, broken down by subfolder. Calls dir-display-bridge.gs storageReport action. Requires admin session.</td></tr>
-  <tr><td><code>woolsy-update.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Woolsy knowledge base setup/update UI. Probes PDFs for readability, estimates credits, calls Claude API to generate/regenerate rules.md, presents section-level delta checklist for admin review. Handles setup, update, and prompt-version-outdated rebuild modes.</td></tr>
-  <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building-level Woolsy admin sub-page (accessible from admin.php Woolsy card).</td></tr>
-  <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>SheepSite operator dashboard (Alain only). Authenticated with <code>credentials/_master.json</code>. Session key: <code>master_admin_auth</code>. Card layout: Woolsy Management (credits table + top-up per building), future: renewals. URL: <code>master-admin.php</code> (no building param).</td></tr>
+      <td>Drive storage usage by subfolder (Public + Private). Also writes <code>storageUsed</code> to <code>config/{building}.json</code> on each load (storage cache update). Requires admin session.</td></tr>
   <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Admin file management tool for Drive folders.</td></tr>
+      <td>Admin file management: upload (drag &amp; drop, multi-file), delete, rename files; create and delete subfolders. App-created folders tracked in <code>config/{building}_folders.json</code> — only these get a Delete button. Enforces storage limit before upload using cached <code>storageUsed</code>; triggers billing email if limit hit. Requires admin session.</td></tr>
   <tr><td><code>tag-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Admin interface for tagging documents (search feature).</td></tr>
+      <td>Admin interface for tagging documents. Tags stored in <code>tags/{building}.json</code>.</td></tr>
+  <tr><td><code>woolsy-update.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Woolsy knowledge base setup/update UI. Probes PDFs for readability, estimates credits, calls Claude Sonnet API to generate/regenerate rules.md, presents section-level delta checklist for admin review.</td></tr>
+  <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Building-level Woolsy admin: KB status, document index, usage statistics, credit bar, FAQ editor.</td></tr>
+  <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Operator dashboard. One card per building: Woolsy bar, Storage bar, ToS badge, Renewal date. System tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual. Session key: <code>master_admin_auth</code>.</td></tr>
+  <tr><td><code>building-detail.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Per-building management page (from master-admin.php Manage → button). Sections: Overview stats, Configuration (siteURL/contactEmail/renewalDate/hasDomain), Woolsy Credits (manual top-up + reset), Storage (set limit), License Agreement (status + history), Billing. Also handles <code>?building=new</code> to generate a buildings.php snippet for a new association.</td></tr>
+  <tr><td><code>pricing-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Operator-only pricing configuration. Sets site monthly fee, domain annual fee, Woolsy credit price, default storage limit, and storage upgrade tiers (label + bytes + $/month). Saves to <code>config/pricing.json</code>.</td></tr>
+  <tr><td><code>tos-admin.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Operator ToS management. Configure scope (per-building or all), view signature status table, issue new version (archives existing signatures and forces re-acceptance). Full signature audit trail.</td></tr>
+  <tr><td><code>tos-accept.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Building admin click-through gate. Renders <code>docs/terms-of-service.html</code> in an iframe. Accept: writes <code>tosAccepted</code> to <code>config/{building}.json</code> and appends to <code>config/tos_signatures.json</code>. Decline: unsets session and shows logged-out message. Requires <code>manage_auth_{building}</code> session.</td></tr>
   <tr><td><code>search.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Full-text search across public/private Drive trees.</td></tr>
+      <td>Resident file search across public/private Drive trees. Login required.</td></tr>
   <tr><td><code>setup-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>One-time tool to create <code>_master.json</code> with a bcrypt-hashed master password. Upload, visit once, delete immediately. No longer needed for per-building admins (handled by forgot-password.php).</td></tr>
+      <td>One-time tool to create <code>_master.json</code>. Upload, visit once, delete immediately.</td></tr>
+</table>
+
+<h3>Billing PHP Scripts</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>billing-helpers.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Shared include. <code>checkWoolsyThreshold()</code> — called by chatbot.php after each credit deduction; fires a billing email at 90% usage (once per cycle, flag-gated). <code>checkStorageThreshold()</code> — called by file-manager.php when upload is blocked by limit; fires a billing email (once, flag-gated). Generates a random 64-char token stored in <code>config/{building}.json</code> with a 7-day TTL. Sends email via <code>mail()</code> to the building&rsquo;s <code>contactEmail</code>.</td></tr>
+  <tr><td><code>billing.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Customer-facing payment page. Token-validated (no session — the token IS the auth). Woolsy flow: quantity input, live total. Storage flow: tier selection with pro-rated pricing to renewal date. Creates a Stripe Checkout session via cURL and redirects to Stripe. Reads <code>config/stripe.json</code> for the secret key; shows &ldquo;Payment not configured&rdquo; notice if absent.</td></tr>
+  <tr><td><code>billing-webhook.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Stripe webhook endpoint (<code>checkout.session.completed</code>). Verifies Stripe signature (HMAC SHA-256, 5-minute replay window). Woolsy payment: adds credits to <code>faqs/woolsy_credits.json</code>, clears <code>woolsyBillingEmailSent</code> flag. Storage payment: sets <code>storageLimit</code> in building config, clears <code>storageLimitEmailSent</code> flag. Both: clears billing token. Idempotency: processed payment IDs stored in <code>config/processed_payments.json</code>.</td></tr>
+  <tr><td><code>billing-success.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Post-payment confirmation page shown by Stripe after checkout. Cosmetic only — the actual allocation update is done by the webhook.</td></tr>
 </table>
 
 <h3>Woolsy Chatbot Scripts</h3>
@@ -308,7 +352,10 @@ new library version.</p>
       <td>Returns Database tab as JSON for owner import into manage-users.php.</td></tr>
   <tr><td><code>sheets/reset-password.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Handles self-serve password reset email flow (owner and admin).</td></tr>
+      <td>Password reset and welcome email flow (owner and admin). <code>directemail</code> param bypasses DB lookup for immediate post-creation sends.</td></tr>
+  <tr><td><code>sheets/database-admin.gs</code> <span class="tag tag-gs">GAS</span></td>
+      <td>DatabaseSheetMaster library</td>
+      <td>11 CRUD functions for Database, CarDB, and Emergency tabs. All require token auth. Called via building-script.gs doPost() routing.</td></tr>
 </table>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -320,7 +367,8 @@ new library version.</p>
   <tr><th>Layer</th><th>Session Key</th><th>Credential File</th><th>Used By</th></tr>
   <tr><td>Resident</td><td><code>private_auth_{building}</code></td><td><code>credentials/{building}.json</code></td><td>display-private-dir, protected-report, chatbot-page, change-password</td></tr>
   <tr><td>Building Admin</td><td><code>manage_auth_{building}</code></td><td><code>credentials/{building}_admin.json</code></td><td>admin, manage-users, storage-report, woolsy-update, woolsy-admin</td></tr>
-  <tr><td>Master Admin</td><td><code>master_admin_auth</code></td><td><code>credentials/_master.json</code></td><td>master-admin; also accepted as override in manage-users + admin</td></tr>
+  <tr><td>Master Admin</td><td><code>master_admin_auth</code></td><td><code>credentials/_master.json</code></td><td>master-admin, building-detail, pricing-admin, tos-admin, woolsy-admin; also accepted as override in manage-users + admin</td></tr>
+  <tr><td>Billing (token)</td><td><em>n/a — no session</em></td><td><code>config/{building}.json billingToken</code></td><td>billing.php — token validated against stored value + type + expiry</td></tr>
 </table>
 
 <h3>Credential File Format</h3>
@@ -332,6 +380,13 @@ new library version.</p>
 <p>Admin and master files (<code>*_admin.json</code>, <code>_master.json</code>) &mdash; single object:</p>
 <pre>{"user": "admin", "pass": "$2y$10$..."}</pre>
 <p>All passwords are bcrypt-hashed. <code>password_verify()</code> is used for all checks. No plaintext passwords anywhere in the codebase.</p>
+
+<h3>ToS Gate (Building Admin)</h3>
+<p>After the <code>mustChange</code> check passes, <code>admin.php</code> checks whether the building is in ToS scope
+(<code>config/tos.json</code> scope field: <code>"all"</code> or an array of building keys). If in scope and the
+accepted version in <code>config/{building}.json</code> is older than the current version, the admin is redirected
+to <code>tos-accept.php</code>. The gate repeats after every new ToS version is issued. Acceptance is recorded
+in both the building config and the append-only <code>config/tos_signatures.json</code> audit file.</p>
 
 <h3>mustChange Flow</h3>
 <p>When <code>mustChange: true</code> is set on a resident account (e.g., after import or admin reset),
@@ -391,11 +446,13 @@ coverage without manual tracking.</p>
 
 <h3>Credit Model</h3>
 <ul>
-  <li>1 credit = $1 of Claude API cost (internal accounting; Alain prices credits to buildings with markup)</li>
-  <li>Default allocation: 1 credit per building (teaser &mdash; card always shows from day 1)</li>
-  <li>Hard stop at limit: Woolsy returns &ldquo;unavailable&rdquo; message to residents</li>
-  <li>Low-credit warning at 80% usage (shown in admin card)</li>
-  <li>Master admin tops up via master-admin.php Woolsy Management card</li>
+  <li>1 credit = $1 of Claude API cost (internal accounting; Alain prices credits to buildings at a markup)</li>
+  <li>Default allocation: 1 credit per building</li>
+  <li>Hard stop at 100%: Woolsy returns &ldquo;unavailable&rdquo; message to residents</li>
+  <li>Low-credit warning at 80% usage shown in admin card</li>
+  <li>At 90%: <code>chatbot.php</code> calls <code>checkWoolsyThreshold()</code> from <code>billing-helpers.php</code>. If <code>woolsyBillingEmailSent</code> is not set in the building config, a billing email is sent to <code>contactEmail</code> with a tokenized link to <code>billing.php</code>. The flag is set to prevent repeat emails.</li>
+  <li>On payment: Stripe webhook adds purchased credits to <code>woolsy_credits.json</code> and clears the flag</li>
+  <li>Master admin can also top up manually via building-detail.php</li>
 </ul>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -411,25 +468,40 @@ coverage without manual tracking.</p>
   <tr><td><code>credentials/.htaccess</code> <span class="tag tag-data">data</span></td><td>Blocks all web access to the credentials folder.</td><td>Yes</td></tr>
   <tr><td><code>faqs/{building}_rules.md</code> <span class="tag tag-data">data</span></td><td>Woolsy knowledge base for one building. Versioned. Has .bak backup.</td><td>No</td></tr>
   <tr><td><code>faqs/{building}_docindex.txt</code> <span class="tag tag-data">data</span></td><td>Document index for Woolsy system prompt.</td><td>No</td></tr>
-  <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings.</td><td>No</td></tr>
+  <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings. Decremented by chatbot.php, topped up by webhook or master admin.</td><td>No</td></tr>
+  <tr><td><code>faqs/woolsy_usage.json</code> <span class="tag tag-data">data</span></td><td>Monthly question counts per building (logged by chatbot.php after each answer).</td><td>No</td></tr>
 </table>
 
-<div class="warn"><strong>Note:</strong> All <code>credentials/</code> and <code>faqs/</code> data files
-exist only on the live server. They are excluded from git via <code>.gitignore</code>. The
-<code>credentials/</code> folder must be writable by PHP (755). Never commit credential or credit files.</div>
+<h3>config/ Files (all gitignored)</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>config/{building}.json</code></td><td>Per-building server config. Fields: <code>siteURL</code>, <code>contactEmail</code>, <code>hasDomain</code>, <code>renewalDate</code>, <code>storageUsed</code> (cached bytes), <code>storageUpdated</code> (timestamp), <code>storageLimit</code> (bytes), <code>floorGrouping</code>/<code>floorDigits</code>, <code>tosAccepted</code> {version, date, who}, <code>woolsyBillingEmailSent</code>, <code>storageLimitEmailSent</code>, <code>billingToken</code> {token, type, expires}, <code>stripeCustomerId</code>, <code>stripeSubscriptionId</code>.</td></tr>
+  <tr><td><code>config/{building}_folders.json</code></td><td>Flat array of Drive folder IDs created via file-manager.php. Only these IDs get a Delete button in the UI — pre-established site folders are never in this list.</td></tr>
+  <tr><td><code>config/pricing.json</code></td><td>All service pricing: <code>siteMonthlyPrice</code>, <code>domainAnnualPrice</code>, <code>storageDefaultLimit</code>, <code>storageOptions</code> [{label, bytes, pricePerMonth}], <code>creditPrice</code>. Edited via pricing-admin.php.</td></tr>
+  <tr><td><code>config/tos.json</code></td><td>Current ToS state: <code>version</code> (int), <code>effectiveDate</code>, <code>documentPath</code> (relative to Scripts/), <code>scope</code> ("all" or array of building keys).</td></tr>
+  <tr><td><code>config/tos_signatures.json</code></td><td>Append-only audit archive of all ToS acceptances: [{building, version, date, who}]. Never deleted — new entries added on each acceptance or version issue.</td></tr>
+  <tr><td><code>config/stripe.json</code></td><td>Stripe credentials: <code>{"secretKey": "sk_live_...", "webhookSecret": "whsec_..."}</code>. Read by billing.php and billing-webhook.php only.</td></tr>
+  <tr><td><code>config/processed_payments.json</code></td><td>Idempotency log for the Stripe webhook. Maps <code>payment_intent_id → {building, type, processed}</code>. Prevents double-application of the same payment.</td></tr>
+</table>
+
+<div class="warn"><strong>Note:</strong> All <code>credentials/</code>, <code>config/</code>, and <code>faqs/</code>
+data files exist only on the live server. They are excluded from git via <code>.gitignore</code>.
+Both <code>credentials/</code> and <code>config/</code> must be writable by PHP (755).
+Never commit credential, config, or credit files.</div>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
 
 <h2 id="buildings">9. Adding a Building</h2>
 
 <ol>
-  <li>Add an entry to <code>buildings.php</code>: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code></li>
-  <li>Deploy <code>buildings.php</code> to the server</li>
+  <li>In master-admin.php click <strong>+ Add New Building</strong> → <code>building-detail.php?building=new</code>. Fill in the form to generate a <code>buildings.php</code> snippet. Copy and paste it into <code>buildings.php</code> manually, then deploy.</li>
   <li>Create the Google Sheet for the building, add building-script.gs bound to it, deploy as web app, install the two triggers</li>
-  <li>Set up Drive folders (Public and Private) and share them with the GAS project owner</li>
-  <li>Visit <code>forgot-password.php?building=X&role=admin&setup=1</code> to bootstrap the admin credential</li>
+  <li>Set up Drive folders (Public and Private) in the SheepSite Google account</li>
+  <li>Visit <code>forgot-password.php?building=X&amp;role=admin&amp;setup=1</code> to bootstrap the admin credential</li>
+  <li>In building-detail.php, set <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code>, and <code>hasDomain</code></li>
   <li>Paste the footer script into the building website with <code>BUILDING_NAME</code> set, including the <code>chatbot-widget.js</code> script tag</li>
-  <li>Log into <code>admin.php?building=X</code>, import owners, build the document index, run Woolsy setup</li>
+  <li>Log into <code>admin.php?building=X</code>, import residents into the database, sync user accounts, build the document index, run Woolsy setup</li>
+  <li>If ToS scope includes the new building (or is set to "all"), the admin will be prompted to accept on first login</li>
 </ol>
 
 <p>See <strong>NEW-SITE-GUIDE.html</strong> for the full step-by-step walkthrough.</p>
@@ -483,15 +555,47 @@ tracking required — the version system flags every affected building automatic
 
 <h3>Topping Up Woolsy Credits</h3>
 
+<p><strong>Automatic (via billing):</strong> When a building reaches 90% usage, a billing email is sent to the building&rsquo;s <code>contactEmail</code> with a link to <code>billing.php</code>. The admin selects a credit quantity, pays via Stripe Checkout, and the webhook automatically adds the credits and clears the email-sent flag.</p>
+
+<p><strong>Manual (operator override):</strong></p>
 <ol>
-  <li>Log into <code>master-admin.php</code> (requires master credentials)</li>
-  <li>Open the Woolsy Management card for the target building</li>
-  <li>Adjust the credit balance and save</li>
+  <li>Log into <code>master-admin.php</code></li>
+  <li>Click Manage → for the building → Woolsy Credits section</li>
+  <li>Enter credits to add and click Top Up</li>
 </ol>
 
-<p>Credits are stored in <code>faqs/woolsy_credits.json</code>. 1 credit = $1 of Claude API cost (internal accounting).
-Buildings are billed externally at a markup. Hard stop at zero credits &mdash; Woolsy returns an unavailable
-message to residents until topped up.</p>
+<p>Credits are stored in <code>faqs/woolsy_credits.json</code>. 1 credit = $1 of Claude API cost.
+Buildings are billed at a markup configured in <code>config/pricing.json</code>.</p>
+
+<h3>Managing Storage Limits</h3>
+
+<p><strong>Automatic (via billing):</strong> When a file upload is blocked by the storage limit, a billing email is sent to <code>contactEmail</code>. The admin selects a storage tier on <code>billing.php</code>, pays, and the webhook sets the new <code>storageLimit</code> in the building config immediately.</p>
+
+<p><strong>Manual (operator override):</strong> In building-detail.php → Storage section → set a new limit in MB. This also clears the <code>storageLimitEmailSent</code> flag so a new alert can fire if the limit is hit again.</p>
+
+<h3>Storage Cache Freshness</h3>
+<p>The storage limit check in file-manager.php uses a cached <code>storageUsed</code> value from <code>config/{building}.json</code>.
+This cache is updated whenever storage-report.php is loaded by an admin. A daily cron job
+(<code>storage-cache-cron.php</code>) refreshes the cache for all buildings automatically. If no cache exists,
+the upload proceeds unchecked (safe default for new buildings).</p>
+
+<h3>Managing the Terms of Service</h3>
+<ol>
+  <li>Edit the ToS document at <code>docs/terms-of-service.html</code> as needed</li>
+  <li>Go to <code>tos-admin.php</code> → Issue New Version. This bumps the version number in <code>config/tos.json</code> and archives all current signatures</li>
+  <li>On next admin login, all buildings in scope will be redirected to <code>tos-accept.php</code> to accept the new version</li>
+  <li>To add or remove buildings from scope, use the enrollment checkboxes in tos-admin.php</li>
+</ol>
+
+<h3>Stripe Setup (first time)</h3>
+<ol>
+  <li>Create a Stripe account at stripe.com</li>
+  <li>Get the live secret key (<code>sk_live_...</code>) from the Stripe Dashboard</li>
+  <li>Add a webhook endpoint: URL = <code>https://sheepsite.com/Scripts/billing-webhook.php</code>, event = <code>checkout.session.completed</code></li>
+  <li>Copy the webhook signing secret (<code>whsec_...</code>) from the webhook settings</li>
+  <li>Create <code>config/stripe.json</code> on the server: <code>{"secretKey": "sk_live_...", "webhookSecret": "whsec_..."}</code></li>
+  <li>Set actual prices in <code>pricing-admin.php</code> (storage tier $/month, credit price)</li>
+</ol>
 
 <h3>Adding a New Topic to the Extraction Prompt</h3>
 
