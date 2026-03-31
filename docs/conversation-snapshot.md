@@ -385,8 +385,92 @@ PHP renders file browser in iframe on building website
 
 - Onboard additional communities as they sign up (follow NEW-SITE-GUIDE.md)
 - **Extract governing docs for LyndhurstI** — same process as LyndhurstH when docs are available
+- **Session 19 continuation — see below**
 
 ---
 
-*Snapshot updated: March 28, 2026 (session 18 — resident UX polish, database-admin performance, first-login flow)*
+## Session 19 — Work Completed
+
+- **docs/terms-of-service.html** (NEW) — click-through license agreement for new building admins.
+  Covers: service description, data collected (association financial docs vs. no personal financial data),
+  admin responsibilities, security measures, data breach limitation of liability, FL §718.111(12) compliance
+  disclaimer, Woolsy not-legal-advice disclaimer, no warranty, liability cap, indemnification, governing law
+  (Florida / Broward County). Includes explicit Administrator Risk Acknowledgment block (they affirm measures
+  are reasonable and accept residual risk). Not yet wired into the UI — needs attorney review first.
+
+- **manage-users.php** — Bulk Account Management section redesigned:
+  - Split into three sub-sections inside a single visual block: Import from CSV, Import from Sheet, Sync
+  - **Import from CSV**: drag-and-drop CSV upload; client-side parsing with flexible column detection
+    (First Name, Last Name, Unit #, Email, Phone); preview table with username previews before submit;
+    Import button disabled until valid file loaded
+  - **Import from Sheet**: same as before, updated description clarifying it's a one-time catch-up tool
+  - **Sync — Find Orphaned or Missing Accounts**: now does both directions in one pass:
+    - Orphans (yellow panel) — web accounts with no database match → admin checks to remove
+    - Missing accounts (blue panel) — database residents with no web account → admin checks to recreate;
+      system auto-generates temp password and sends welcome email (same as database-admin.php flow)
+  - Removed manual temp password entry from Sync entirely — consistent with auto-generate-and-email pattern
+  - Added `generateTempPassword()` helper
+
+---
+
+## Session 19 — Architectural Decision: Import/Sync Separation
+
+**Problem identified:** The CSV import in manage-users.php was doing the wrong thing — it was creating
+web credentials from CSV data, but the CSV should be populating the *resident database*, not the credentials file.
+
+**Agreed architecture going forward:**
+
+| Card | Responsibility |
+|------|---------------|
+| **Manage Residents/Owners (database-admin.php)** | Resident *data* — add/edit/delete, and CSV bulk import INTO the database |
+| **Manage User Accounts (manage-users.php)** | Web *access* — individual Add/Reset, and Sync (create accounts for DB residents who don't have one, remove orphans) |
+
+**Import from Sheet in manage-users.php becomes redundant** under this model — Sync alone handles
+"create accounts for everyone in the database who doesn't have one."
+
+---
+
+## Session 19 — Work To Do Next Session
+
+**PROMPT FOR NEXT SESSION:** Pick up the Import/Sync architecture cleanup. Three tasks:
+
+### Task 1 — Strip manage-users.php down to its correct scope
+- Remove **Import from CSV** section entirely from manage-users.php
+- Remove **Import from Sheet** section entirely from manage-users.php
+- Sync is now the only bulk operation in manage-users.php — it already does both directions (orphans + missing)
+- Update the section heading and any descriptions to reflect this
+
+### Task 2 — Add CSV import to database-admin.php
+- CSV import belongs in the Manage Residents/Owners card, not the accounts card
+- CSV should write resident rows into the Google Sheet Database tab via Apps Script
+- Needs a new Apps Script action in building-script.gs / database-admin.gs: `importResidents`
+  - Accepts array of {firstName, lastName, unit, email, phone} rows
+  - Inserts new rows into Database tab
+  - Skips rows where First+Last already exists (idempotent)
+  - Returns {added, skipped} counts
+- PHP side: same drag-and-drop UI as the one built in manage-users.php (reuse the JS)
+- After import, admin reviews in database-admin.php, then goes to Manage User Accounts → Sync to create logins
+
+### Task 3 — Wire up terms-of-service.html as a click-through on first admin login
+- **Prerequisite: attorney review of terms-of-service.html before activating**
+- Version-tracked: `config/tos.json` holds current version number + effective date
+- Per-building acceptance stored in `config/{building}.json` as `tosAccepted: {version, date, who}`
+- On admin.php login: compare accepted version to current → if mismatch, redirect to `tos-accept.php`
+- Accept → writes to building config + appends to `config/tos_signatures.json` (audit archive)
+- Decline → logs out
+
+### Task 4 — Master admin ToS management card (tos-admin.php)
+- New card in master-admin.php: "License Agreements" → tos-admin.php
+- Signature status table: all buildings, current vs. pending, signed-by, date, version
+- "Issue New Version" → bumps version in tos.json, archives all current signatures, forces re-acceptance
+- Full signature history / audit trail (append-only, never deleted)
+
+### Task 5 — Document ToS in user manual (Sheepsite-Admin-Manual.html)
+- Explain ToS is shown on first login and must be accepted to proceed
+- When SheepSite updates the terms, re-acceptance required on next login
+- Previous acceptances are archived
+
+---
+
+*Snapshot updated: March 30, 2026 (session 19 — ToS document, manage-users Import/Sync redesign, architectural decisions)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

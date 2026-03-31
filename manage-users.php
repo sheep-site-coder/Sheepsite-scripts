@@ -43,7 +43,7 @@ $masterCred = file_exists($masterCredFile) ? json_decode(file_get_contents($mast
 // Dismiss sync orphan panel (GET action)
 // -------------------------------------------------------
 if (isset($_GET['dismiss_sync'])) {
-  unset($_SESSION['sync_orphans_' . $building]);
+  unset($_SESSION['sync_orphans_' . $building], $_SESSION['sync_missing_' . $building]);
   header('Location: manage-users.php?building=' . urlencode($building));
   exit;
 }
@@ -131,6 +131,15 @@ if (empty($_SESSION[$sessionKey])) {
 // -------------------------------------------------------
 // Helpers
 // -------------------------------------------------------
+function generateTempPassword(int $length = 10): string {
+  $chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  $result = '';
+  for ($i = 0; $i < $length; $i++) {
+    $result .= $chars[random_int(0, strlen($chars) - 1)];
+  }
+  return $result;
+}
+
 function makeUsername(string $firstName, string $lastName): string {
   $first = strtolower(preg_replace('/[^a-zA-Z]/', '', $firstName));
   $last  = strtolower(preg_replace('/[^a-zA-Z]/', '', $lastName));
@@ -291,18 +300,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Sheet error: ' . $data['error'];
             $messageType = 'error';
           } else {
-            $users       = loadUsers($building);
-            $tempHash    = password_hash($tempPass, PASSWORD_DEFAULT);
-            $added       = 0;
-            $skipped     = 0;
+            $users    = loadUsers($building);
+            $tempHash = password_hash($tempPass, PASSWORD_DEFAULT);
+            $added    = 0;
+            $skipped  = 0;
             foreach ($data['owners'] as $owner) {
               $base     = makeUsername($owner['firstName'], $owner['lastName']);
               $existing = array_column($users, 'user');
-              // Skip if an account with this base name already exists
-              if (in_array($base, $existing)) {
-                $skipped++;
-                continue;
-              }
+              if (in_array($base, $existing)) { $skipped++; continue; }
               $username = uniqueUsername($base, $users);
               $users[]  = ['user' => $username, 'pass' => $tempHash, 'mustChange' => true];
               $added++;
@@ -327,6 +332,142 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     }
+  }
+
+  elseif (isset($_POST['import_csv'])) {
+    $tempPass = $_POST['temp_password'] ?? '';
+    $rowsJson = $_POST['csv_rows']      ?? '';
+    if (strlen($tempPass) < 8) {
+      $message = 'Temporary password must be at least 8 characters.';
+      $messageType = 'error';
+    } elseif (!$rowsJson) {
+      $message = 'No CSV data received. Please select a file first.';
+      $messageType = 'error';
+    } else {
+      $rows = json_decode($rowsJson, true);
+      if (!$rows || !is_array($rows)) {
+        $message = 'Invalid CSV data.';
+        $messageType = 'error';
+      } else {
+        $users    = loadUsers($building);
+        $tempHash = password_hash($tempPass, PASSWORD_DEFAULT);
+        $added    = 0;
+        $skipped  = 0;
+        foreach ($rows as $row) {
+          $firstName = trim($row['firstName'] ?? '');
+          $lastName  = trim($row['lastName']  ?? '');
+          if (!$firstName && !$lastName) continue;
+          $base     = makeUsername($firstName, $lastName);
+          $existing = array_column($users, 'user');
+          if (in_array($base, $existing)) { $skipped++; continue; }
+          $username = uniqueUsername($base, $users);
+          $users[]  = ['user' => $username, 'pass' => $tempHash, 'mustChange' => true];
+          $added++;
+        }
+        if (saveUsers($building, $users)) {
+          $message = "$added account(s) created from CSV, $skipped skipped (already exist). "
+                   . "Distribute the temporary password to residents — they will be required to change it on first login.";
+        } else {
+          $message = 'Could not save credentials file.';
+          $messageType = 'error';
+        }
+      }
+    }
+  }
+
+  elseif (isset($_POST['sync_only'])) {
+    $webAppURL = $buildings[$building]['webAppURL'] ?? '';
+    if (!$webAppURL) {
+      $message = 'No webAppURL configured for this building.';
+      $messageType = 'error';
+    } else {
+      $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
+      $response = @file_get_contents($url);
+      if ($response === false) {
+        $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
+        $messageType = 'error';
+      } else {
+        $data = json_decode($response, true);
+        if (!empty($data['error'])) {
+          $message = 'Sheet error: ' . $data['error'];
+          $messageType = 'error';
+        } else {
+          $users   = loadUsers($building);
+          $existing = array_column($users, 'user');
+
+          // Orphans: web accounts with no matching database record
+          $orphans = [];
+          foreach ($users as $u) {
+            if (!isLinkedToDatabase($u['user'], $data['owners'])) {
+              $orphans[] = $u['user'];
+            }
+          }
+          $_SESSION['sync_orphans_' . $building] = $orphans;
+
+          // Missing: database residents with no web account
+          $missing = [];
+          $taken   = [];
+          foreach ($data['owners'] as $owner) {
+            $firstName = $owner['firstName'] ?? '';
+            $lastName  = $owner['lastName']  ?? '';
+            if (!$lastName) continue;
+            $base = makeUsername($firstName, $lastName);
+            $taken[$base] = ($taken[$base] ?? 0) + 1;
+            $uname = $taken[$base] === 1 ? $base : $base . $taken[$base];
+            if (!in_array($uname, $existing)) {
+              $missing[] = ['user' => $uname, 'firstName' => $firstName, 'lastName' => $lastName];
+            }
+          }
+          $_SESSION['sync_missing_' . $building] = $missing;
+
+          $parts = [];
+          if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
+          if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
+          $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
+        }
+      }
+    }
+  }
+
+  elseif (isset($_POST['recreate_missing'])) {
+    $toRecreate  = array_filter($_POST['recreate_list'] ?? [], fn($u) => $u !== '');
+    $missingData = $_SESSION['sync_missing_' . $building] ?? [];
+    if ($toRecreate) {
+      $users     = loadUsers($building);
+      $webAppURL = $buildings[$building]['webAppURL'] ?? '';
+      $scheme    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+      $dir       = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+      $loginURL  = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                 . '/display-private-dir.php?building=' . urlencode($building);
+      $added     = 0;
+      $emailed   = 0;
+      foreach ($missingData as $m) {
+        if (!in_array($m['user'], $toRecreate)) continue;
+        $tmpPw    = generateTempPassword();
+        $tmpHash  = password_hash($tmpPw, PASSWORD_DEFAULT);
+        $users[]  = ['user' => $m['user'], 'pass' => $tmpHash, 'mustChange' => true];
+        $added++;
+        // Email the new temp password via Apps Script
+        if ($webAppURL) {
+          $resetURL = $webAppURL
+                    . '?page=resetpw'
+                    . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
+                    . '&username=' . urlencode($m['user'])
+                    . '&building=' . urlencode($building)
+                    . '&tmppw='    . urlencode($tmpPw)
+                    . '&loginurl=' . urlencode($loginURL);
+          $resp = @file_get_contents($resetURL);
+          if ($resp !== false && (json_decode($resp, true)['status'] ?? '') === 'ok') {
+            $emailed++;
+          }
+        }
+      }
+      saveUsers($building, $users);
+      $noEmail = $added - $emailed;
+      $message = "$added account(s) recreated; $emailed welcome email(s) sent."
+               . ($noEmail > 0 ? " $noEmail could not be emailed (no email address on file — use Add/Reset to set a password manually)." : '');
+    }
+    unset($_SESSION['sync_missing_' . $building]);
   }
 
   elseif (isset($_POST['remove_orphans'])) {
@@ -447,6 +588,25 @@ $users = loadUsers($building);
     .remove-checked-btn:hover { background: #900; }
     .keep-all-link { font-size: 0.85rem; color: #0070f3; text-decoration: none; }
     .keep-all-link:hover { text-decoration: underline; }
+    .bulk-section  { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 1.5rem; }
+    .bulk-subsec   { padding: 1rem 1.2rem; border-bottom: 1px solid #eee; }
+    .bulk-subsec:last-child { border-bottom: none; }
+    .bulk-subsec h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
+    .subsec-desc   { font-size: 0.82rem; color: #666; margin: 0 0 0.75rem; }
+    .drop-zone     { border: 2px dashed #ccc; border-radius: 6px; padding: 1rem;
+                     text-align: center; color: #888; font-size: 0.85rem; cursor: pointer;
+                     transition: border-color 0.15s, background 0.15s; margin-bottom: 0.75rem; }
+    .drop-zone:hover    { border-color: #0070f3; color: #0070f3; }
+    .drop-zone.drag-over { border-color: #0070f3; color: #0070f3; background: #f0f7ff; }
+    .drop-zone.has-file  { border-color: #1a7f37; color: #1a7f37; background: #f0fff4; }
+    .csv-preview-wrap   { margin-bottom: 0.75rem; overflow-x: auto; }
+    .csv-preview   { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .csv-preview th { background: #f5f5f5; padding: 4px 8px; border: 1px solid #ddd;
+                      font-weight: 600; white-space: nowrap; }
+    .csv-preview td { padding: 4px 8px; border: 1px solid #eee; }
+    .csv-preview tr:nth-child(even) td { background: #fafafa; }
+    .csv-error     { color: #c00; font-size: 0.85rem; margin: 0 0 0.5rem; }
+    .csv-count     { font-size: 0.82rem; color: #555; margin: 0.4rem 0 0.75rem; }
   </style>
 </head>
 <body>
@@ -476,17 +636,63 @@ $users = loadUsers($building);
 
 <hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
 
-<h2>Import / Sync from Association Database Sheet</h2>
-<p style="font-size:0.85rem;color:#666;margin-bottom:0.75rem;">
-  Creates accounts for all residents in the Database tab who don't have one yet.
-  Username = first initial + last name. All new accounts will require a password change on first login.
-  Also checks for web accounts that no longer exist in the database and prompts you to remove them.
-</p>
-<form class="add-form" method="post">
-  <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)" autocomplete="new-password" style="width:260px;">
-  <button type="submit" name="import_owners" class="add-btn"
-          onclick="return confirm('Import residents from the Google Sheet and sync accounts with this temporary password?')">Import / Sync</button>
-</form>
+<h2>Bulk Account Management</h2>
+
+<div class="bulk-section">
+
+  <div class="bulk-subsec">
+    <h3>Import from CSV</h3>
+    <p class="subsec-desc">
+      For new communities with existing resident records in any property management system.
+      Export a CSV with at minimum <strong>First Name</strong> and <strong>Last Name</strong> columns
+      (Unit #, Email, and Phone are also recognized if present). Usernames are generated automatically
+      (first initial + last name). All new accounts will require a password change on first login.
+      Existing accounts are skipped — safe to re-run.
+    </p>
+    <div id="csv-drop-zone" class="drop-zone">Drag a CSV file here, or click to browse</div>
+    <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
+    <div id="csv-preview-wrap" class="csv-preview-wrap" style="display:none"></div>
+    <form class="add-form" method="post" id="csv-import-form">
+      <input type="hidden" name="csv_rows" id="csv-rows-input">
+      <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)"
+             autocomplete="new-password" style="width:260px;">
+      <button type="submit" name="import_csv" id="csv-import-btn" class="add-btn" disabled
+              onclick="return confirm('Create accounts for all CSV residents with this temporary password?')">Import from CSV</button>
+    </form>
+  </div>
+
+  <div class="bulk-subsec">
+    <h3>Import from Association Database Sheet</h3>
+    <p class="subsec-desc">
+      Creates accounts for any residents in the Google Sheet Database tab who don't have one yet.
+      Useful when onboarding a building that already has a populated sheet, or as a one-time catch-up
+      if accounts were not auto-created. Usernames are generated from first initial + last name.
+      All new accounts will require a password change on first login. Existing accounts are skipped.
+    </p>
+    <form class="add-form" method="post">
+      <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)"
+             autocomplete="new-password" style="width:260px;">
+      <button type="submit" name="import_owners" class="add-btn"
+              onclick="return confirm('Import residents from the Google Sheet with this temporary password?')">Import from Sheet</button>
+    </form>
+  </div>
+
+  <div class="bulk-subsec">
+    <h3>Sync — Find Orphaned or Missing Accounts</h3>
+    <p class="subsec-desc">
+      Compares all web login accounts against the association database in both directions.
+      <strong>Orphans</strong> — web accounts with no matching database resident (e.g. someone moved out) — are flagged for removal.
+      <strong>Missing accounts</strong> — database residents with no web account (e.g. accidentally deleted) — are flagged for recreation.
+      <strong>Run this whenever a resident moves out</strong> and periodically as a routine check.
+      You review and confirm all changes before anything is modified.
+    </p>
+    <form class="add-form" method="post">
+      <button type="submit" name="sync_only" class="add-btn"
+              onclick="return confirm('Check for orphaned or missing accounts?')">Sync Now</button>
+    </form>
+  </div>
+
+</div>
 
 <hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
 
@@ -514,7 +720,37 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
   </form>
 </div>
 <?php elseif ($syncOrphans !== null && count($syncOrphans) === 0): ?>
-<div class="message ok" style="margin-bottom:1.5rem;">All web accounts are in sync with the database.</div>
+<div class="message ok" style="margin-bottom:1.5rem;">No orphaned accounts found.</div>
+<?php endif; ?>
+
+<?php
+$syncMissing = $_SESSION['sync_missing_' . $building] ?? null;
+if ($syncMissing !== null && count($syncMissing) > 0):
+?>
+<div class="sync-panel" style="border-color:#93c5fd;background:#eff6ff;">
+  <h2 style="color:#1e40af;">Missing Accounts — <?= count($syncMissing) ?> resident(s) in database with no web account</h2>
+  <p style="color:#1e40af;">These residents exist in the association database but have no web login. This may be due to an accidental deletion or a resident added without an email address. Check the ones you want to recreate — a temporary password will be generated automatically and a welcome email sent to each resident.</p>
+  <form method="post">
+    <ul class="sync-list" style="border-color:#bfdbfe;">
+      <?php foreach ($syncMissing as $m): ?>
+      <li style="border-color:#bfdbfe;">
+        <input type="checkbox" name="recreate_list[]" value="<?= htmlspecialchars($m['user']) ?>"
+               id="missing-<?= htmlspecialchars($m['user']) ?>" checked>
+        <label for="missing-<?= htmlspecialchars($m['user']) ?>">
+          <?= htmlspecialchars($m['user']) ?>
+          <span style="color:#64748b;font-size:0.82rem;">(<?= htmlspecialchars($m['firstName'] . ' ' . $m['lastName']) ?>)</span>
+        </label>
+      </li>
+      <?php endforeach; ?>
+    </ul>
+    <div class="sync-actions">
+      <button type="submit" name="recreate_missing" class="add-btn" style="background:#1d4ed8;">Recreate checked</button>
+      <a href="?building=<?= urlencode($building) ?>&dismiss_sync=1" class="keep-all-link">Dismiss</a>
+    </div>
+  </form>
+</div>
+<?php elseif ($syncMissing !== null && count($syncMissing) === 0): ?>
+<div class="message ok" style="margin-bottom:1.5rem;">All database residents have web accounts.</div>
 <?php endif; ?>
 
 <?php
@@ -577,6 +813,136 @@ window.addEventListener('DOMContentLoaded', function() {
   alert(<?= json_encode($alertMessage) ?>);
 });
 <?php endif; ?>
+
+// ---- CSV Import ----
+(function() {
+  var dropZone    = document.getElementById('csv-drop-zone');
+  var fileInput   = document.getElementById('csv-file-input');
+  var previewWrap = document.getElementById('csv-preview-wrap');
+  var rowsInput   = document.getElementById('csv-rows-input');
+  var importBtn   = document.getElementById('csv-import-btn');
+  if (!dropZone) return;
+
+  dropZone.addEventListener('click', function() { fileInput.click(); });
+
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', function() {
+    dropZone.classList.remove('drag-over');
+  });
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    var file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+  fileInput.addEventListener('change', function() {
+    if (fileInput.files[0]) processFile(fileInput.files[0]);
+  });
+
+  function processFile(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) { parseCSV(e.target.result); };
+    reader.readAsText(file);
+    dropZone.textContent = '\u2713 ' + file.name;
+    dropZone.classList.add('has-file');
+  }
+
+  function parseCSV(text) {
+    var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+                    .filter(function(l) { return l.trim(); });
+    if (lines.length < 2) { showError('CSV must have a header row and at least one data row.'); return; }
+
+    var headers = parseLine(lines[0]).map(function(h) { return h.toLowerCase().trim(); });
+
+    var colFirst = findCol(headers, ['first name','first','firstname','given name','given']);
+    var colLast  = findCol(headers, ['last name','last','lastname','surname','family name','family']);
+    var colUnit  = findCol(headers, ['unit','unit #','unit number','apt','apartment','suite']);
+    var colEmail = findCol(headers, ['email','e-mail','email address','emailaddress']);
+    var colPhone = findCol(headers, ['phone','phone 1','phone1','phone number','cell','mobile','telephone']);
+
+    if (colFirst === -1 || colLast === -1) {
+      showError('CSV must have "First Name" and "Last Name" columns.'); return;
+    }
+
+    var rows = [];
+    for (var i = 1; i < lines.length; i++) {
+      var cells = parseLine(lines[i]);
+      var row = {
+        firstName: cells[colFirst] || '',
+        lastName:  cells[colLast]  || '',
+        unit:      colUnit  !== -1 ? (cells[colUnit]  || '') : '',
+        email:     colEmail !== -1 ? (cells[colEmail] || '') : '',
+        phone:     colPhone !== -1 ? (cells[colPhone] || '') : ''
+      };
+      if (row.firstName || row.lastName) rows.push(row);
+    }
+    if (!rows.length) { showError('No valid rows found in CSV.'); return; }
+
+    rowsInput.value = JSON.stringify(rows);
+    renderPreview(rows);
+    importBtn.disabled = false;
+  }
+
+  function findCol(headers, names) {
+    for (var n = 0; n < names.length; n++) {
+      var idx = headers.indexOf(names[n]);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  function parseLine(line) {
+    var result = [], cur = '', inQuote = false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line[i];
+      if (c === '"') {
+        if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+        else inQuote = !inQuote;
+      } else if (c === ',' && !inQuote) {
+        result.push(cur.trim()); cur = '';
+      } else {
+        cur += c;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  }
+
+  function renderPreview(rows) {
+    var taken = {};
+    var html = '<table class="csv-preview"><thead><tr>'
+             + '<th>#</th><th>Username (preview)</th><th>First</th><th>Last</th>'
+             + '<th>Unit</th><th>Email</th></tr></thead><tbody>';
+    for (var i = 0; i < rows.length; i++) {
+      var r    = rows[i];
+      var base = (r.firstName.charAt(0) + r.lastName).toLowerCase().replace(/[^a-z]/g, '');
+      taken[base] = (taken[base] || 0) + 1;
+      var uname = taken[base] === 1 ? base : base + taken[base];
+      html += '<tr><td>' + (i+1) + '</td><td><code>' + esc(uname || '?') + '</code></td>'
+            + '<td>' + esc(r.firstName) + '</td><td>' + esc(r.lastName) + '</td>'
+            + '<td>' + esc(r.unit) + '</td><td>' + esc(r.email) + '</td></tr>';
+    }
+    html += '</tbody></table>'
+          + '<p class="csv-count">' + rows.length + ' resident(s) ready to import. '
+          + 'Existing accounts will be skipped.</p>';
+    previewWrap.innerHTML = html;
+    previewWrap.style.display = 'block';
+  }
+
+  function showError(msg) {
+    previewWrap.innerHTML = '<p class="csv-error">' + msg + '</p>';
+    previewWrap.style.display = 'block';
+    rowsInput.value = '';
+    importBtn.disabled = true;
+  }
+
+  function esc(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+})();
 </script>
 </body>
 </html>
