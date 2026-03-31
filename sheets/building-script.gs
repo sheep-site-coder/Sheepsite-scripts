@@ -99,6 +99,7 @@ function doPost(e) {
   }
   const action = data.action || '';
   switch (action) {
+    case 'importResidents':   return DatabaseSheetMaster.doImportResidents(data,   OWNER_IMPORT_TOKEN);
     case 'addDatabaseRow':    return DatabaseSheetMaster.doAddDatabaseRow(data,    OWNER_IMPORT_TOKEN);
     case 'editDatabaseRow':   return DatabaseSheetMaster.doEditDatabaseRow(data,   OWNER_IMPORT_TOKEN);
     case 'deleteDatabaseRow': return DatabaseSheetMaster.doDeleteDatabaseRow(data, OWNER_IMPORT_TOKEN);

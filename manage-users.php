@@ -42,8 +42,14 @@ $masterCred = file_exists($masterCredFile) ? json_decode(file_get_contents($mast
 // -------------------------------------------------------
 // Dismiss sync orphan panel (GET action)
 // -------------------------------------------------------
-if (isset($_GET['dismiss_sync'])) {
-  unset($_SESSION['sync_orphans_' . $building], $_SESSION['sync_missing_' . $building]);
+if (isset($_GET['dismiss_orphans'])) {
+  unset($_SESSION['sync_orphans_' . $building]);
+  header('Location: manage-users.php?building=' . urlencode($building));
+  exit;
+}
+
+if (isset($_GET['dismiss_missing'])) {
+  unset($_SESSION['sync_missing_' . $building]);
   header('Location: manage-users.php?building=' . urlencode($building));
   exit;
 }
@@ -203,7 +209,6 @@ function saveUsers(string $building, array $users): bool {
 // -------------------------------------------------------
 $message     = '';
 $messageType = 'ok';
-$alertMessage = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -256,16 +261,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if ($emailSent) {
         $users[$existingIdx]['mustChange'] = true;
         $message      = "Account set for \"$user\" — temporary password emailed to resident.";
-        $alertMessage = "Account set for \"$user\".\n\nA temporary password was emailed to the resident. They will be required to change it on next login.";
       } else {
         unset($users[$existingIdx]['mustChange']);
         $message      = "Account set for \"$user\". No email sent (not found in association database).";
-        $alertMessage = "Account set for \"$user\".\n\nNo email was sent — this person was not found in the association database.";
       }
       if (!saveUsers($building, $users)) {
         $message      = 'Could not save — check that the credentials/ folder exists on the server and is writable.';
         $messageType  = 'error';
-        $alertMessage = '';
       }
     }
   }
@@ -276,103 +278,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $users = array_filter($users, fn($u) => $u['user'] !== $user);
     saveUsers($building, $users);
     $message = "Resident \"$user\" removed.";
-  }
-
-  elseif (isset($_POST['import_owners'])) {
-    $tempPass = $_POST['temp_password'] ?? '';
-    if (strlen($tempPass) < 8) {
-      $message = 'Temporary password must be at least 8 characters.';
-      $messageType = 'error';
-    } else {
-      $webAppURL = $buildings[$building]['webAppURL'] ?? '';
-      if (!$webAppURL) {
-        $message = 'No webAppURL configured for this building.';
-        $messageType = 'error';
-      } else {
-        $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
-        $response = @file_get_contents($url);
-        if ($response === false) {
-          $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
-          $messageType = 'error';
-        } else {
-          $data = json_decode($response, true);
-          if (!empty($data['error'])) {
-            $message = 'Sheet error: ' . $data['error'];
-            $messageType = 'error';
-          } else {
-            $users    = loadUsers($building);
-            $tempHash = password_hash($tempPass, PASSWORD_DEFAULT);
-            $added    = 0;
-            $skipped  = 0;
-            foreach ($data['owners'] as $owner) {
-              $base     = makeUsername($owner['firstName'], $owner['lastName']);
-              $existing = array_column($users, 'user');
-              if (in_array($base, $existing)) { $skipped++; continue; }
-              $username = uniqueUsername($base, $users);
-              $users[]  = ['user' => $username, 'pass' => $tempHash, 'mustChange' => true];
-              $added++;
-            }
-            // Find web users not linked to any database record
-            $orphans = [];
-            foreach ($users as $u) {
-              if (!isLinkedToDatabase($u['user'], $data['owners'])) {
-                $orphans[] = $u['user'];
-              }
-            }
-            $_SESSION['sync_orphans_' . $building] = $orphans;
-
-            if (saveUsers($building, $users)) {
-              $message = "$added account(s) created, $skipped skipped (already exist). "
-                       . "Distribute the temporary password to residents — they will be required to change it on first login.";
-            } else {
-              $message = 'Could not save credentials file.';
-              $messageType = 'error';
-            }
-          }
-        }
-      }
-    }
-  }
-
-  elseif (isset($_POST['import_csv'])) {
-    $tempPass = $_POST['temp_password'] ?? '';
-    $rowsJson = $_POST['csv_rows']      ?? '';
-    if (strlen($tempPass) < 8) {
-      $message = 'Temporary password must be at least 8 characters.';
-      $messageType = 'error';
-    } elseif (!$rowsJson) {
-      $message = 'No CSV data received. Please select a file first.';
-      $messageType = 'error';
-    } else {
-      $rows = json_decode($rowsJson, true);
-      if (!$rows || !is_array($rows)) {
-        $message = 'Invalid CSV data.';
-        $messageType = 'error';
-      } else {
-        $users    = loadUsers($building);
-        $tempHash = password_hash($tempPass, PASSWORD_DEFAULT);
-        $added    = 0;
-        $skipped  = 0;
-        foreach ($rows as $row) {
-          $firstName = trim($row['firstName'] ?? '');
-          $lastName  = trim($row['lastName']  ?? '');
-          if (!$firstName && !$lastName) continue;
-          $base     = makeUsername($firstName, $lastName);
-          $existing = array_column($users, 'user');
-          if (in_array($base, $existing)) { $skipped++; continue; }
-          $username = uniqueUsername($base, $users);
-          $users[]  = ['user' => $username, 'pass' => $tempHash, 'mustChange' => true];
-          $added++;
-        }
-        if (saveUsers($building, $users)) {
-          $message = "$added account(s) created from CSV, $skipped skipped (already exist). "
-                   . "Distribute the temporary password to residents — they will be required to change it on first login.";
-        } else {
-          $message = 'Could not save credentials file.';
-          $messageType = 'error';
-        }
-      }
-    }
   }
 
   elseif (isset($_POST['sync_only'])) {
@@ -513,20 +418,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // PRG: store result in session and redirect so a browser refresh doesn't re-submit
   $_SESSION['flash_message'] = $message;
   $_SESSION['flash_type']    = $messageType;
-  $_SESSION['flash_alert']   = $alertMessage;
   header('Location: manage-users.php?building=' . urlencode($building));
   exit;
 }
 
 // Read flash message left by a POST redirect
-$message      = '';
-$messageType  = 'ok';
-$alertMessage = '';
+$message     = '';
+$messageType = 'ok';
 if (isset($_SESSION['flash_message'])) {
-  $message      = $_SESSION['flash_message'];
-  $messageType  = $_SESSION['flash_type']  ?? 'ok';
-  $alertMessage = $_SESSION['flash_alert'] ?? '';
-  unset($_SESSION['flash_message'], $_SESSION['flash_type'], $_SESSION['flash_alert']);
+  $message     = $_SESSION['flash_message'];
+  $messageType = $_SESSION['flash_type'] ?? 'ok';
+  unset($_SESSION['flash_message'], $_SESSION['flash_type']);
 }
 
 $users = loadUsers($building);
@@ -588,25 +490,22 @@ $users = loadUsers($building);
     .remove-checked-btn:hover { background: #900; }
     .keep-all-link { font-size: 0.85rem; color: #0070f3; text-decoration: none; }
     .keep-all-link:hover { text-decoration: underline; }
-    .bulk-section  { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 1.5rem; }
-    .bulk-subsec   { padding: 1rem 1.2rem; border-bottom: 1px solid #eee; }
-    .bulk-subsec:last-child { border-bottom: none; }
-    .bulk-subsec h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
-    .subsec-desc   { font-size: 0.82rem; color: #666; margin: 0 0 0.75rem; }
-    .drop-zone     { border: 2px dashed #ccc; border-radius: 6px; padding: 1rem;
-                     text-align: center; color: #888; font-size: 0.85rem; cursor: pointer;
-                     transition: border-color 0.15s, background 0.15s; margin-bottom: 0.75rem; }
-    .drop-zone:hover    { border-color: #0070f3; color: #0070f3; }
-    .drop-zone.drag-over { border-color: #0070f3; color: #0070f3; background: #f0f7ff; }
-    .drop-zone.has-file  { border-color: #1a7f37; color: #1a7f37; background: #f0fff4; }
-    .csv-preview-wrap   { margin-bottom: 0.75rem; overflow-x: auto; }
-    .csv-preview   { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .csv-preview th { background: #f5f5f5; padding: 4px 8px; border: 1px solid #ddd;
-                      font-weight: 600; white-space: nowrap; }
-    .csv-preview td { padding: 4px 8px; border: 1px solid #eee; }
-    .csv-preview tr:nth-child(even) td { background: #fafafa; }
-    .csv-error     { color: #c00; font-size: 0.85rem; margin: 0 0 0.5rem; }
-    .csv-count     { font-size: 0.82rem; color: #555; margin: 0.4rem 0 0.75rem; }
+    .sync-desc     { font-size: 0.85rem; color: #666; margin: 0 0 0.75rem; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+                     display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-box     { background: #fff; border-radius: 8px; padding: 1.5rem; max-width: 460px; width: 90%;
+                     box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+    .modal-box h3  { margin: 0 0 0.75rem; font-size: 1.05rem; }
+    .modal-box p   { font-size: 0.875rem; color: #555; margin: 0 0 0.5rem; }
+    .modal-box ul  { font-size: 0.875rem; color: #555; margin: 0 0 1.25rem; padding-left: 1.25rem; }
+    .modal-box ul li { margin-bottom: 0.3rem; }
+    .modal-actions { display: flex; gap: 0.75rem; }
+    .btn-proceed   { padding: 0.5rem 1.2rem; background: #0070f3; color: #fff; border: none;
+                     border-radius: 4px; font-size: 0.95rem; cursor: pointer; }
+    .btn-proceed:hover { background: #005bb5; }
+    .btn-cancel    { padding: 0.5rem 1.2rem; background: #fff; border: 1px solid #ccc;
+                     border-radius: 4px; font-size: 0.95rem; cursor: pointer; color: #333; }
+    .btn-cancel:hover { background: #f5f5f5; }
   </style>
 </head>
 <body>
@@ -636,62 +535,46 @@ $users = loadUsers($building);
 
 <hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
 
-<h2>Bulk Account Management</h2>
+<h2>Sync</h2>
+<p class="sync-desc">
+  Compares all web login accounts against the association database in both directions.
+  <strong>Orphans</strong> — web accounts with no matching database resident (e.g. someone moved out) — are flagged for removal.
+  <strong>Missing accounts</strong> — database residents with no web account (e.g. accidentally deleted) — are flagged for recreation.
+  <strong>Run this whenever a resident moves out</strong> and periodically as a routine check.
+  You review and confirm all changes before anything is modified.
+</p>
+<button type="button" class="add-btn" onclick="document.getElementById('sync-modal').style.display='flex'">Sync Now</button>
 
-<div class="bulk-section">
-
-  <div class="bulk-subsec">
-    <h3>Import from CSV</h3>
-    <p class="subsec-desc">
-      For new communities with existing resident records in any property management system.
-      Export a CSV with at minimum <strong>First Name</strong> and <strong>Last Name</strong> columns
-      (Unit #, Email, and Phone are also recognized if present). Usernames are generated automatically
-      (first initial + last name). All new accounts will require a password change on first login.
-      Existing accounts are skipped — safe to re-run.
-    </p>
-    <div id="csv-drop-zone" class="drop-zone">Drag a CSV file here, or click to browse</div>
-    <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
-    <div id="csv-preview-wrap" class="csv-preview-wrap" style="display:none"></div>
-    <form class="add-form" method="post" id="csv-import-form">
-      <input type="hidden" name="csv_rows" id="csv-rows-input">
-      <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)"
-             autocomplete="new-password" style="width:260px;">
-      <button type="submit" name="import_csv" id="csv-import-btn" class="add-btn" disabled
-              onclick="return confirm('Create accounts for all CSV residents with this temporary password?')">Import from CSV</button>
-    </form>
+<div id="sync-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h3>Sync Web Accounts with Database</h3>
+    <p>This will compare all web login accounts against the association database and identify:</p>
+    <ul>
+      <li><strong>Orphaned accounts</strong> — web logins with no matching resident in the database (e.g. someone who moved out)</li>
+      <li><strong>Missing accounts</strong> — database residents with no web login (e.g. imported but never activated)</li>
+    </ul>
+    <p>You will review and confirm all changes before anything is modified.</p>
+    <div class="modal-actions">
+      <form method="post">
+        <button type="submit" name="sync_only" class="btn-proceed"
+                onclick="this.disabled=true;this.textContent='Checking\u2026'">Proceed</button>
+      </form>
+      <button type="button" class="btn-cancel" onclick="document.getElementById('sync-modal').style.display='none'">Cancel</button>
+    </div>
   </div>
+</div>
 
-  <div class="bulk-subsec">
-    <h3>Import from Association Database Sheet</h3>
-    <p class="subsec-desc">
-      Creates accounts for any residents in the Google Sheet Database tab who don't have one yet.
-      Useful when onboarding a building that already has a populated sheet, or as a one-time catch-up
-      if accounts were not auto-created. Usernames are generated from first initial + last name.
-      All new accounts will require a password change on first login. Existing accounts are skipped.
-    </p>
-    <form class="add-form" method="post">
-      <input type="password" name="temp_password" placeholder="Temporary password (8+ chars)"
-             autocomplete="new-password" style="width:260px;">
-      <button type="submit" name="import_owners" class="add-btn"
-              onclick="return confirm('Import residents from the Google Sheet with this temporary password?')">Import from Sheet</button>
-    </form>
+<div id="mu-confirm-overlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h3 id="mu-confirm-title"></h3>
+    <p id="mu-confirm-body"></p>
+    <div class="modal-actions">
+      <button id="mu-confirm-proceed" class="btn-proceed" style="background:#c00;"
+              onmouseover="this.style.background='#900'" onmouseout="this.style.background='#c00'"
+              onclick="proceedMuConfirm()"></button>
+      <button class="btn-cancel" onclick="closeMuConfirm()">Cancel</button>
+    </div>
   </div>
-
-  <div class="bulk-subsec">
-    <h3>Sync — Find Orphaned or Missing Accounts</h3>
-    <p class="subsec-desc">
-      Compares all web login accounts against the association database in both directions.
-      <strong>Orphans</strong> — web accounts with no matching database resident (e.g. someone moved out) — are flagged for removal.
-      <strong>Missing accounts</strong> — database residents with no web account (e.g. accidentally deleted) — are flagged for recreation.
-      <strong>Run this whenever a resident moves out</strong> and periodically as a routine check.
-      You review and confirm all changes before anything is modified.
-    </p>
-    <form class="add-form" method="post">
-      <button type="submit" name="sync_only" class="add-btn"
-              onclick="return confirm('Check for orphaned or missing accounts?')">Sync Now</button>
-    </form>
-  </div>
-
 </div>
 
 <hr style="margin:2rem 0;border:none;border-top:1px solid #eee;">
@@ -714,8 +597,9 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
-      <button type="submit" name="remove_orphans" class="remove-checked-btn">Remove checked</button>
-      <a href="?building=<?= urlencode($building) ?>&dismiss_sync=1" class="keep-all-link">Keep all / dismiss</a>
+      <button type="submit" name="remove_orphans" class="remove-checked-btn"
+              onclick="this.disabled=true;this.textContent='Removing\u2026'">Remove checked</button>
+      <a href="?building=<?= urlencode($building) ?>&dismiss_orphans=1" class="keep-all-link">Keep all / dismiss</a>
     </div>
   </form>
 </div>
@@ -744,8 +628,9 @@ if ($syncMissing !== null && count($syncMissing) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
-      <button type="submit" name="recreate_missing" class="add-btn" style="background:#1d4ed8;">Recreate checked</button>
-      <a href="?building=<?= urlencode($building) ?>&dismiss_sync=1" class="keep-all-link">Dismiss</a>
+      <button type="submit" name="recreate_missing" class="add-btn" style="background:#1d4ed8;"
+              onclick="this.disabled=true;this.textContent='Creating accounts\u2026'">Recreate checked</button>
+      <a href="?building=<?= urlencode($building) ?>&dismiss_missing=1" class="keep-all-link">Dismiss</a>
     </div>
   </form>
 </div>
@@ -781,10 +666,13 @@ if ($syncMissing !== null && count($syncMissing) > 0):
         <td style="text-align:center;color:<?= $cnt365 > 0 ? '#555' : '#bbb' ?>"><?= $cnt365 ?: '—' ?></td>
         <td>
           <button type="button" class="change-btn" onclick="togglePass('<?= $uid ?>')">Change password</button>
-          <form class="action-form" method="post"
-                onsubmit="return confirm('Remove <?= htmlspecialchars($u['user']) ?>?')">
+          <form class="action-form" method="post" id="remove-form-<?= $uid ?>">
             <input type="hidden" name="username" value="<?= htmlspecialchars($u['user']) ?>">
-            <button type="submit" name="remove_user" class="remove-btn">Remove</button>
+            <input type="hidden" name="remove_user" value="1">
+            <button type="button" class="remove-btn"
+              data-user="<?= htmlspecialchars($u['user']) ?>"
+              data-form="remove-form-<?= $uid ?>"
+              onclick="confirmRemoveUser(this)">Remove</button>
           </form>
         </td>
       </tr>
@@ -804,145 +692,41 @@ if ($syncMissing !== null && count($syncMissing) > 0):
 <?php endif; ?>
 
 <script>
+// ---- Confirm modal ----
+var confirmCb = null;
+function showConfirm(title, bodyHtml, proceedLabel, onProceed) {
+  document.getElementById('mu-confirm-title').textContent = title;
+  document.getElementById('mu-confirm-body').innerHTML    = bodyHtml;
+  document.getElementById('mu-confirm-proceed').textContent = proceedLabel;
+  confirmCb = onProceed;
+  document.getElementById('mu-confirm-overlay').style.display = 'flex';
+}
+function closeMuConfirm() {
+  document.getElementById('mu-confirm-overlay').style.display = 'none';
+  confirmCb = null;
+}
+function proceedMuConfirm() {
+  var cb = confirmCb;
+  closeMuConfirm();
+  if (cb) cb();
+}
+
+function confirmRemoveUser(btn) {
+  var user   = btn.getAttribute('data-user');
+  var formId = btn.getAttribute('data-form');
+  showConfirm(
+    'Remove ' + user + '?',
+    'This will permanently delete the web login for <strong>' + user + '</strong>. The resident will no longer be able to log in.',
+    'Remove',
+    function() { document.getElementById(formId).submit(); }
+  );
+}
+
 function togglePass(uid) {
   var row = document.getElementById('pass-' + uid);
   row.classList.toggle('open');
 }
-<?php if ($alertMessage): ?>
-window.addEventListener('DOMContentLoaded', function() {
-  alert(<?= json_encode($alertMessage) ?>);
-});
-<?php endif; ?>
 
-// ---- CSV Import ----
-(function() {
-  var dropZone    = document.getElementById('csv-drop-zone');
-  var fileInput   = document.getElementById('csv-file-input');
-  var previewWrap = document.getElementById('csv-preview-wrap');
-  var rowsInput   = document.getElementById('csv-rows-input');
-  var importBtn   = document.getElementById('csv-import-btn');
-  if (!dropZone) return;
-
-  dropZone.addEventListener('click', function() { fileInput.click(); });
-
-  dropZone.addEventListener('dragover', function(e) {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
-  });
-  dropZone.addEventListener('dragleave', function() {
-    dropZone.classList.remove('drag-over');
-  });
-  dropZone.addEventListener('drop', function(e) {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    var file = e.dataTransfer.files[0];
-    if (file) processFile(file);
-  });
-  fileInput.addEventListener('change', function() {
-    if (fileInput.files[0]) processFile(fileInput.files[0]);
-  });
-
-  function processFile(file) {
-    var reader = new FileReader();
-    reader.onload = function(e) { parseCSV(e.target.result); };
-    reader.readAsText(file);
-    dropZone.textContent = '\u2713 ' + file.name;
-    dropZone.classList.add('has-file');
-  }
-
-  function parseCSV(text) {
-    var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
-                    .filter(function(l) { return l.trim(); });
-    if (lines.length < 2) { showError('CSV must have a header row and at least one data row.'); return; }
-
-    var headers = parseLine(lines[0]).map(function(h) { return h.toLowerCase().trim(); });
-
-    var colFirst = findCol(headers, ['first name','first','firstname','given name','given']);
-    var colLast  = findCol(headers, ['last name','last','lastname','surname','family name','family']);
-    var colUnit  = findCol(headers, ['unit','unit #','unit number','apt','apartment','suite']);
-    var colEmail = findCol(headers, ['email','e-mail','email address','emailaddress']);
-    var colPhone = findCol(headers, ['phone','phone 1','phone1','phone number','cell','mobile','telephone']);
-
-    if (colFirst === -1 || colLast === -1) {
-      showError('CSV must have "First Name" and "Last Name" columns.'); return;
-    }
-
-    var rows = [];
-    for (var i = 1; i < lines.length; i++) {
-      var cells = parseLine(lines[i]);
-      var row = {
-        firstName: cells[colFirst] || '',
-        lastName:  cells[colLast]  || '',
-        unit:      colUnit  !== -1 ? (cells[colUnit]  || '') : '',
-        email:     colEmail !== -1 ? (cells[colEmail] || '') : '',
-        phone:     colPhone !== -1 ? (cells[colPhone] || '') : ''
-      };
-      if (row.firstName || row.lastName) rows.push(row);
-    }
-    if (!rows.length) { showError('No valid rows found in CSV.'); return; }
-
-    rowsInput.value = JSON.stringify(rows);
-    renderPreview(rows);
-    importBtn.disabled = false;
-  }
-
-  function findCol(headers, names) {
-    for (var n = 0; n < names.length; n++) {
-      var idx = headers.indexOf(names[n]);
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
-  function parseLine(line) {
-    var result = [], cur = '', inQuote = false;
-    for (var i = 0; i < line.length; i++) {
-      var c = line[i];
-      if (c === '"') {
-        if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
-        else inQuote = !inQuote;
-      } else if (c === ',' && !inQuote) {
-        result.push(cur.trim()); cur = '';
-      } else {
-        cur += c;
-      }
-    }
-    result.push(cur.trim());
-    return result;
-  }
-
-  function renderPreview(rows) {
-    var taken = {};
-    var html = '<table class="csv-preview"><thead><tr>'
-             + '<th>#</th><th>Username (preview)</th><th>First</th><th>Last</th>'
-             + '<th>Unit</th><th>Email</th></tr></thead><tbody>';
-    for (var i = 0; i < rows.length; i++) {
-      var r    = rows[i];
-      var base = (r.firstName.charAt(0) + r.lastName).toLowerCase().replace(/[^a-z]/g, '');
-      taken[base] = (taken[base] || 0) + 1;
-      var uname = taken[base] === 1 ? base : base + taken[base];
-      html += '<tr><td>' + (i+1) + '</td><td><code>' + esc(uname || '?') + '</code></td>'
-            + '<td>' + esc(r.firstName) + '</td><td>' + esc(r.lastName) + '</td>'
-            + '<td>' + esc(r.unit) + '</td><td>' + esc(r.email) + '</td></tr>';
-    }
-    html += '</tbody></table>'
-          + '<p class="csv-count">' + rows.length + ' resident(s) ready to import. '
-          + 'Existing accounts will be skipped.</p>';
-    previewWrap.innerHTML = html;
-    previewWrap.style.display = 'block';
-  }
-
-  function showError(msg) {
-    previewWrap.innerHTML = '<p class="csv-error">' + msg + '</p>';
-    previewWrap.style.display = 'block';
-    rowsInput.value = '';
-    importBtn.disabled = true;
-  }
-
-  function esc(s) {
-    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-})();
 </script>
 </body>
 </html>

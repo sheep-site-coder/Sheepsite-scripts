@@ -151,11 +151,6 @@ html = f"""<!DOCTYPE html>
   </div>
 </div>
 
-<h3>How the System Works</h3>
-<p>The diagram below shows the overall architecture. Documents stored in Google Drive flow automatically to the public-facing website. The owner database feeds dynamic reports. All private content sits behind a security layer requiring individual owner logins.</p>
-
-{img_tag("image4.jpg", "System architecture diagram", "100%", "border-radius:4px; border:1px solid #ccc; margin: 0.8em 0;")}
-
 <h3>The Website</h3>
 {img_tag("image9.png", "Website home page", "100%", "border:1px solid #ccc; border-radius:4px; margin:0.5em 0;")}
 
@@ -171,6 +166,14 @@ html = f"""<!DOCTYPE html>
 
 <blockquote><strong>Forgot your password?</strong> Click the &ldquo;Forgot password?&rdquo; link on the login page. The system will email a temporary password to the President. Enter the <strong>President&rsquo;s unit number</strong> as the security verification.</blockquote>
 
+<h3>Terms of Service</h3>
+<p>The first time you log in to the admin panel, you will be presented with the SheepSite Terms of Service agreement before accessing any admin features. You must read the agreement in full and click <strong>I Accept</strong> to continue. Your acceptance is recorded with a timestamp.</p>
+<ul>
+  <li><strong>Decline &amp; Log Out</strong> &mdash; if you click Decline, you will be logged out immediately. You must accept the Terms of Service to use the admin panel.</li>
+  <li><strong>Re-acceptance</strong> &mdash; from time to time SheepSite may update its Terms of Service. When this happens, you will be prompted to review and re-accept the updated agreement on your next login. Your previous acceptance is automatically archived &mdash; it is not lost.</li>
+</ul>
+<blockquote><strong>Questions?</strong> If you have any questions about the Terms of Service, contact SheepSite before clicking Accept.</blockquote>
+
 {divider()}
 
 <h2>Section 2 &mdash; The Admin Dashboard</h2>
@@ -179,7 +182,8 @@ html = f"""<!DOCTYPE html>
 
 <table>
   <tr><th>Card</th><th>What It Does</th></tr>
-  <tr><td><strong>Manage Users</strong></td><td>Add, remove, and manage owner login accounts. Import owners from the database sheet.</td></tr>
+  <tr><td><strong>Manage Residents/Owners</strong></td><td>Add, edit, and remove residents across all units. Manage contact info, vehicles, and emergency contacts. Bulk import from CSV. Copy all resident email addresses for community-wide email.</td></tr>
+  <tr><td><strong>Manage User Accounts</strong></td><td>Add or reset individual web login accounts. Run Sync to create accounts for all database residents at once, or identify and remove orphaned accounts.</td></tr>
   <tr><td><strong>File Management</strong></td><td>Upload, organize, rename, and delete documents in the public and private folders.</td></tr>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
@@ -194,39 +198,48 @@ html = f"""<!DOCTYPE html>
 <div style="display:flex; gap:1.5em; align-items:flex-start; margin: 1em 0 1.5em 0;">
   <div style="flex:2;">
     <h3 style="margin-top:0;">Overview</h3>
-    <p>Each unit owner gets their own individual login account for the private Resource Center. Accounts are tied to a person, not a unit &mdash; when an owner moves in or out, you add or remove their account accordingly.</p>
+    <p>Each resident gets their own individual login account for the private Resource Center. Accounts are tied to a person, not a unit &mdash; when a resident moves in or out, you add or remove their account accordingly.</p>
+    <p>Web login accounts are managed separately from resident data. The recommended workflow is:</p>
+    <ol>
+      <li>Add residents to the database via <strong>Manage Residents/Owners</strong> (see Section 7)</li>
+      <li>Run <strong>Sync</strong> from <strong>Manage User Accounts</strong> to create web logins for everyone in the database</li>
+    </ol>
   </div>
   <div style="flex:1;">
     {img_tag("image7.jpg", "System", "100%", "border-radius:6px;")}
   </div>
 </div>
 
-<h3>Importing &amp; Syncing from the Database Sheet</h3>
-<p>The fastest way to set up accounts for all owners at once is the Import / Sync function.</p>
+<h3>Sync &mdash; Create or Clean Up Accounts</h3>
+<p>Sync compares all web login accounts against the resident database in both directions and shows you what needs attention. Run it after adding residents, and whenever a resident moves out.</p>
 <ol>
-  <li>From the Admin Dashboard, click <strong>Manage Users</strong></li>
-  <li>Enter a temporary password in the <strong>Import / Sync from Association Database Sheet</strong> section</li>
-  <li>Click <strong>Import / Sync</strong></li>
+  <li>From the Admin Dashboard, click <strong>Manage User Accounts</strong></li>
+  <li>Click <strong>Sync Now</strong> and confirm</li>
+  <li>The system checks both directions and displays two panels (if applicable):</li>
 </ol>
-<p>The system reads the <code>Database</code> tab from your building&rsquo;s Google Sheet and creates an account for every owner. Usernames are generated automatically as first initial + last name (e.g. Jane Smith &rarr; <code>jsmith</code>). Duplicate names get a number suffix (<code>jsmith2</code>, etc.).</p>
+<table>
+  <tr><th>Panel</th><th>What it means</th><th>What to do</th></tr>
+  <tr><td><strong>Orphaned accounts</strong> (yellow)</td><td>Web logins with no matching resident in the database &mdash; e.g. someone who moved out</td><td>Check the ones to remove, click <strong>Remove checked</strong>, or dismiss to keep them</td></tr>
+  <tr><td><strong>Missing accounts</strong> (blue)</td><td>Database residents with no web login &mdash; e.g. newly imported residents</td><td>Check the ones to activate, click <strong>Recreate checked</strong> &mdash; a temporary password is generated and emailed automatically</td></tr>
+</table>
 
-<div class="tip"><strong>Tip:</strong> Import / Sync is safe to run more than once &mdash; existing accounts are never overwritten. Only new owners (not already in the system) get accounts created. After each sync, you will be shown a list of accounts that no longer appear in the database, and given the option to remove them.</div>
+<div class="tip"><strong>Tip:</strong> Sync is safe to run at any time &mdash; nothing is modified until you review and confirm. You can dismiss either panel independently if you don&rsquo;t need to act on it right now.</div>
 
-<blockquote><strong>Important:</strong> All imported accounts are flagged as &ldquo;first login&rdquo; &mdash; owners are required to change the temporary password the first time they log in. They cannot reuse the temporary password.</blockquote>
+<blockquote><strong>Important:</strong> All new accounts created by Sync are flagged as &ldquo;first login&rdquo; &mdash; residents are required to change the temporary password the first time they log in. They cannot reuse the temporary password.</blockquote>
 
-<h3>Adding or Resetting a Single Owner</h3>
+<h3>Adding or Resetting a Single Account</h3>
 <ol>
-  <li>From Manage Users, fill in the <strong>Add / Reset Resident</strong> form</li>
+  <li>From <strong>Manage User Accounts</strong>, fill in the <strong>Add / Reset Resident</strong> form</li>
   <li>Enter the username, a temporary password, and click <strong>Add / Reset</strong></li>
   <li>If the username matches a resident in the database who has an email address, the system automatically emails them the temporary password and requires them to change it on first login</li>
   <li>If no match is found in the database, no email is sent &mdash; distribute the password manually</li>
 </ol>
 
-<h3>Removing an Owner</h3>
-<p>Find the owner in the user list and click <strong>Delete</strong>. This immediately revokes their access. Do this when an owner sells their unit.</p>
+<h3>Removing an Account</h3>
+<p>Find the resident in the account list and click <strong>Remove</strong>. This immediately revokes their access. For a resident who has moved out, also remove them from the database via <strong>Manage Residents/Owners</strong>.</p>
 
-<h3>Owners Resetting Their Own Password</h3>
-<p>Owners can reset their own password without contacting you. On the login page, they click <strong>Forgot password?</strong> The system emails them a temporary password and they are prompted to change it on login.</p>
+<h3>Residents Resetting Their Own Password</h3>
+<p>Residents can reset their own password without contacting you. On the login page, they click <strong>Forgot password?</strong> The system emails them a temporary password and they are prompted to change it on login.</p>
 
 {divider()}
 
@@ -263,11 +276,14 @@ html = f"""<!DOCTYPE html>
 
 <h4>Organizing Files</h4>
 <ul>
-  <li><strong>Create folders</strong> &mdash; keep documents organized by year, type, or topic</li>
-  <li><strong>Rename files and folders</strong> &mdash; click the rename option next to any item</li>
-  <li><strong>Delete files and folders</strong> &mdash; click the delete option; you will be asked to confirm</li>
+  <li><strong>Create folders</strong> &mdash; click <strong>+ New Folder</strong> in the toolbar to create a subfolder inside the current folder</li>
+  <li><strong>Delete folders</strong> &mdash; folders you created via the file manager show a <strong>Delete</strong> button next to their name. The folder must be empty before it can be deleted. You will be asked to confirm.</li>
+  <li><strong>Rename files</strong> &mdash; click the <strong>Rename</strong> button next to any file</li>
+  <li><strong>Delete files</strong> &mdash; click the <strong>Delete</strong> button next to any file; you will be asked to confirm</li>
 </ul>
 <p>All changes are reflected on the website immediately.</p>
+
+<blockquote><strong>System folders cannot be deleted.</strong> The top-level folders (such as <code>BoardMinutes</code>, <code>RulesDocs</code>, <code>Forms</code>, etc.) were created when your site was set up and are permanently linked to specific sections of your website. They do not show a Delete button and cannot be removed or renamed. Only folders you create yourself through the file manager can be deleted.</blockquote>
 
 <h3>Google Drive (Alternative Method)</h3>
 <p>You can also manage files directly in Google Drive. Navigate to the shared building folder under <strong>Shared with me</strong> and add, move, or delete files there.</p>
@@ -387,34 +403,52 @@ html = f"""<!DOCTYPE html>
 <h2>Section 7 &mdash; The Owner &amp; Resident Database</h2>
 
 <h3>Overview</h3>
-<p>The building&rsquo;s owner and resident data lives in a Google Sheet named <strong>&ldquo;[Building Name] Owner DB&rdquo;</strong>. This sheet feeds the website&rsquo;s resident reports and is the source used when importing owner accounts.</p>
+<p>All owner and resident data is managed from the Admin Dashboard via <strong>Manage Residents/Owners</strong>. This gives you a full in-site editor for every unit &mdash; no need to open a spreadsheet for day-to-day changes. The data is stored in your building&rsquo;s Google Sheet and feeds the website&rsquo;s resident reports automatically.</p>
 
-<blockquote><strong>Important:</strong> Never modify the structure of the sheet &mdash; do not add, remove, or rename columns. Only enter data in the existing fields.</blockquote>
-
-<p>Access the sheet from Google Drive under <strong>Shared with me &rarr; [Building] &rarr; Databases</strong>:</p>
-{img_tag("image14.png", "Databases folder in Google Drive", "100%", "border:1px solid #ccc; border-radius:4px; margin:0.5em 0;")}
-
-<h3>The Main Tab</h3>
-<p>Enter all owner and tenant information here. Each row represents one unit. This tab is the source for the Resident List report, the owner import function, the Board of Directors list, and password reset emails.</p>
-{img_tag("image17.png", "Main tab of Owner DB", "100%", "border:1px solid #ccc; border-radius:4px; margin:0.5em 0;")}
-
-<h3>The Emergency &amp; Condo Sitter Tab</h3>
-<p>Records emergency contacts, family members, and condo sitters. Select unit numbers from the dropdown menus populated from the Main tab.</p>
-{img_tag("image8.png", "Emergency and Condo Sitter tab", "100%", "border:1px solid #ccc; border-radius:4px; margin:0.5em 0;")}
-
-<h3>Automated Reports</h3>
-<p>Reports update automatically within about a minute of any data change. No action is needed.</p>
+<h3>The Unit View</h3>
+<p>Units are grouped by floor. Click any unit to expand it and see three tabs:</p>
 <table>
-  <tr><th>Report</th><th>Access</th><th>Source Tab</th></tr>
-  <tr><td>Resident List</td><td>Private (owners only)</td><td>Database</td></tr>
-  <tr><td>Elevator List</td><td>Private (owners only)</td><td>Database</td></tr>
-  <tr><td>Parking List</td><td>Private (owners only)</td><td>CarDB</td></tr>
-  <tr><td>Board of Directors</td><td>Public</td><td>Database</td></tr>
+  <tr><th>Tab</th><th>What it contains</th></tr>
+  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time), email, phones, insurance, appliance dates</td></tr>
+  <tr><td><strong>Vehicle &amp; Parking</strong></td><td>Car make/model/color, license plate, parking spot, notes</td></tr>
+  <tr><td><strong>Emergency</strong></td><td>Emergency contacts and condo sitters &mdash; name, email, phones</td></tr>
 </table>
 
-<h3>The Reports Tab</h3>
-<p>The Reports tab provides a display-only view for looking up emergency contacts and resident information directly in the sheet.</p>
-{img_tag("image5.png", "Reports tab", "100%", "border:1px solid #ccc; border-radius:4px; margin:0.5em 0;")}
+<h3>Adding a Resident</h3>
+<ol>
+  <li>Click the unit to expand it, then click <strong>+ Add Resident</strong></li>
+  <li>Fill in at minimum First Name, Last Name, and Unit # &mdash; all other fields are optional</li>
+  <li>If you provide an email address, a web login is created automatically and a welcome email with a temporary password is sent to the resident</li>
+  <li>If no email is provided, only the database record is created. You can add the email later &mdash; the login will be created at that point</li>
+</ol>
+
+<h3>Editing or Deleting a Resident</h3>
+<p>Expand the unit, click <strong>Edit</strong> on the person card to update their details, or <strong>Delete</strong> to remove them from the database and revoke their web login at the same time.</p>
+
+<h3>Bulk Import from CSV</h3>
+<p>When onboarding a new community, use the CSV import to add all residents at once rather than one at a time.</p>
+<ol>
+  <li>Export a CSV from your property management system. The file must have at minimum a <strong>First Name</strong> and <strong>Last Name</strong> column. Unit #, Email, and Phone columns are also recognized if present</li>
+  <li>From <strong>Manage Residents/Owners</strong>, click <strong>&#x2913; Import from CSV</strong> in the toolbar</li>
+  <li>Drag the CSV file onto the drop zone, or click to browse. A preview table appears showing the rows to be imported</li>
+  <li>Click <strong>Import</strong>. Rows already in the database (matched by First + Last Name) are skipped &mdash; safe to re-run</li>
+  <li>After import, go to <strong>Manage User Accounts &rarr; Sync</strong> to create web logins for all newly imported residents</li>
+</ol>
+
+<div class="tip"><strong>Tip:</strong> The CSV importer is flexible &mdash; it recognizes common column name variations from most property management systems (e.g. &ldquo;First&rdquo;, &ldquo;Given Name&rdquo;, &ldquo;Apt&rdquo;, &ldquo;Cell&rdquo;, etc.). Extra columns are ignored.</div>
+
+<h3>Copying All Resident Emails</h3>
+<p>Click <strong>Get Email List</strong> in the toolbar to copy all resident email addresses to your clipboard. Paste into the <strong>BCC</strong> field of your email client to send a community-wide message.</p>
+
+<h3>Automated Reports</h3>
+<p>The following reports are generated automatically from the resident database within about a minute of any change:</p>
+<table>
+  <tr><th>Report</th><th>Access</th></tr>
+  <tr><td>Resident List</td><td>Private (residents only)</td></tr>
+  <tr><td>Elevator List</td><td>Private (residents only)</td></tr>
+  <tr><td>Parking List</td><td>Private (residents only)</td></tr>
+  <tr><td>Board of Directors</td><td>Public</td></tr>
+</table>
 
 {divider()}
 

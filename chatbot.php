@@ -194,6 +194,16 @@ if (!$answer) {
 // Deduct credit cost and log usage
 if (isset($data['usage']['input_tokens'], $data['usage']['output_tokens'])) {
     deductCost($building, (int)$data['usage']['input_tokens'], (int)$data['usage']['output_tokens']);
+
+    // Check 90% Woolsy threshold — triggers billing email once if crossed
+    require_once __DIR__ . '/billing-helpers.php';
+    $freshCr  = loadCredits();
+    $freshBld = $freshCr[$building] ?? [];
+    checkWoolsyThreshold(
+        $building,
+        (float)($freshBld['used']      ?? 0),
+        (float)($freshBld['allocated'] ?? CREDITS_DEFAULT_ALLOCATED)
+    );
 }
 logUsage($building);
 

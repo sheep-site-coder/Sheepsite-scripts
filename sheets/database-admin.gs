@@ -164,6 +164,66 @@ function doGetAllEmails(token, expectedToken) {
 }
 
 // ---------------------------------------------------------------------------
+// importResidents — bulk insert rows into Database tab (idempotent)
+//   POST { action: 'importResidents', token, rows: [{firstName, lastName, unit, email, phone}] }
+//   Returns { ok: true, added, skipped }
+// ---------------------------------------------------------------------------
+function doImportResidents(data, expectedToken) {
+  if (data.token !== expectedToken) return jsonError_('Unauthorized');
+
+  const rows = data.rows;
+  if (!Array.isArray(rows) || !rows.length) return jsonError_('No rows provided');
+
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Database');
+  if (!sheet) return jsonError_('No "Database" tab found');
+
+  const headers  = dbHeaders_(sheet);
+  const lastRow  = sheet.getLastRow();
+
+  // Build a set of existing First+Last combos (case-insensitive) for duplicate detection
+  const existing = new Set();
+  if (lastRow >= 2) {
+    const iFirst = col_(headers, 'First Name');
+    const iLast  = col_(headers, 'Last Name');
+    const vals   = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    vals.forEach(r => {
+      existing.add((String(r[iFirst]).trim() + '|' + String(r[iLast]).trim()).toLowerCase());
+    });
+  }
+
+  let added = 0, skipped = 0;
+  const numCols = sheet.getLastColumn();
+
+  rows.forEach(row => {
+    const first = String(row.firstName || '').trim();
+    const last  = String(row.lastName  || '').trim();
+    if (!first && !last) return;
+
+    const key = (first + '|' + last).toLowerCase();
+    if (existing.has(key)) { skipped++; return; }
+
+    const newRow = new Array(numCols).fill('');
+    const mapping = {
+      'Unit #':    String(row.unit  || '').trim(),
+      'First Name': first,
+      'Last Name':  last,
+      'eMail':      String(row.email || '').trim(),
+      'Phone #1':   String(row.phone || '').trim(),
+    };
+    Object.entries(mapping).forEach(([colName, val]) => {
+      const idx = col_(headers, colName);
+      if (idx >= 0) newRow[idx] = val;
+    });
+    sheet.appendRow(newRow);
+    existing.add(key); // prevent within-batch duplicates
+    added++;
+  });
+
+  return jsonOut_({ ok: true, added, skipped });
+}
+
+// ---------------------------------------------------------------------------
 // addDatabaseRow — append a new row to Database
 // ---------------------------------------------------------------------------
 function doAddDatabaseRow(data, expectedToken) {

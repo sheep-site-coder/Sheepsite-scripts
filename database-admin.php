@@ -126,6 +126,16 @@ if ($action) {
 
   switch ($action) {
 
+    // --- Bulk import: CSV rows into Database tab ---
+    case 'importResidents': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode(gasPost($webAppURL, array_merge($body, [
+        'action' => 'importResidents',
+        'token'  => OWNER_IMPORT_TOKEN,
+      ])));
+      exit;
+    }
+
     // --- Read: unit list ---
     case 'listDatabase':
       echo json_encode(gasGet($webAppURL, [
@@ -510,6 +520,41 @@ $config = loadConfig($building);
     .floor-option-title { font-weight: 600; font-size: 0.9rem; }
     .floor-option-desc  { font-size: 0.8rem; color: #888; margin-top: 0.1rem; }
     #floor-setup-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+
+    /* Confirm modal */
+    .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+                       display: flex; align-items: center; justify-content: center; z-index: 150; }
+    .confirm-box     { background: #fff; border-radius: 8px; padding: 1.5rem; max-width: 440px; width: 90%;
+                       box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+    .confirm-box h3  { margin: 0 0 0.6rem; font-size: 1.05rem; }
+    .confirm-box p   { font-size: 0.875rem; color: #555; margin: 0 0 1.25rem; }
+    .confirm-actions { display: flex; gap: 0.75rem; }
+    .confirm-proceed { padding: 0.5rem 1.2rem; background: #dc2626; color: #fff; border: none;
+                       border-radius: 4px; font-size: 0.9rem; cursor: pointer; }
+    .confirm-proceed:hover { background: #b91c1c; }
+    .confirm-cancel  { padding: 0.5rem 1.2rem; background: #fff; border: 1px solid #ccc;
+                       border-radius: 4px; font-size: 0.9rem; cursor: pointer; color: #333; }
+    .confirm-cancel:hover { background: #f5f5f5; }
+
+    /* CSV import panel */
+    #csv-import-panel   { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem 1.2rem;
+                          margin-bottom: 1.25rem; background: #fafafa; display: none; }
+    #csv-import-panel h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
+    .csv-panel-desc     { font-size: 0.82rem; color: #666; margin: 0 0 0.75rem; }
+    .csv-drop-zone      { border: 2px dashed #ccc; border-radius: 6px; padding: 0.85rem 1rem;
+                          text-align: center; color: #888; font-size: 0.85rem; cursor: pointer;
+                          transition: border-color 0.15s, background 0.15s; margin-bottom: 0.75rem; }
+    .csv-drop-zone:hover     { border-color: #0070f3; color: #0070f3; }
+    .csv-drop-zone.drag-over { border-color: #0070f3; color: #0070f3; background: #f0f7ff; }
+    .csv-drop-zone.has-file  { border-color: #1a7f37; color: #1a7f37; background: #f0fff4; }
+    .csv-preview-wrap   { margin-bottom: 0.75rem; overflow-x: auto; }
+    .csv-preview        { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .csv-preview th     { background: #f0f0f0; padding: 4px 8px; border: 1px solid #ddd;
+                          font-weight: 600; white-space: nowrap; }
+    .csv-preview td     { padding: 4px 8px; border: 1px solid #eee; }
+    .csv-preview tr:nth-child(even) td { background: #fafafa; }
+    .csv-error          { color: #c00; font-size: 0.85rem; margin: 0 0 0.5rem; }
+    .csv-count          { font-size: 0.82rem; color: #555; margin: 0.25rem 0 0.75rem; }
   </style>
 </head>
 <body>
@@ -526,7 +571,26 @@ $config = loadConfig($building);
   <input type="search" id="unit-search" placeholder="Search units or names…" oninput="filterUnits(this.value)">
   <button class="btn btn-secondary" id="copy-emails-btn" onclick="copyAllEmails()"
     title="Copies all resident emails to the clipboard. Then simply Paste into the CC or BCC field of your email.">Get Email List</button>
+  <button class="btn btn-secondary" onclick="toggleCsvPanel()">⤓ Import from CSV</button>
   <button class="btn btn-primary" onclick="showAddUnit()">+ Add to Unit…</button>
+</div>
+
+<div id="csv-import-panel">
+  <h3>Import Residents from CSV</h3>
+  <p class="csv-panel-desc">
+    Bulk-add residents to the association database from any property management system export.
+    CSV must have at minimum <strong>First Name</strong> and <strong>Last Name</strong> columns.
+    Unit #, Email, and Phone are also recognized if present.
+    Rows with a matching First + Last Name already in the database are skipped.
+    After importing, use <strong>Manage User Accounts → Sync</strong> to create web logins for the new residents.
+  </p>
+  <div id="db-csv-drop-zone" class="csv-drop-zone">Drag a CSV file here, or click to browse</div>
+  <input type="file" id="db-csv-file-input" accept=".csv,.txt" style="display:none">
+  <div id="db-csv-preview-wrap" class="csv-preview-wrap" style="display:none"></div>
+  <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+    <button class="btn btn-primary" id="db-csv-import-btn" disabled onclick="runCsvImport()">Import</button>
+    <button class="btn btn-secondary" onclick="toggleCsvPanel()">Cancel</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -1144,7 +1208,14 @@ async function saveEditResident(unit, origFirst, origLast, id) {
 // Delete resident
 // -------------------------------------------------------
 async function deleteResident(unit, first, last, displayName) {
-  if (!confirm(`Delete ${displayName} from Unit ${unit}?\n\nThis removes them from the database and removes their web login. The parking spot is NOT affected.`)) return;
+  showConfirm(
+    `Delete ${displayName}?`,
+    `This will remove <strong>${esc(displayName)}</strong> from Unit ${esc(unit)} in the database and delete their web login. The parking spot is not affected.`,
+    () => _doDeleteResident(unit, first, last, displayName)
+  );
+}
+
+async function _doDeleteResident(unit, first, last, displayName) {
   toast('Deleting…', 'ok', 30000);
   const res = await apiPost('deleteDatabaseRow', { matchUnit: unit, matchFirst: first, matchLast: last });
   if (res.error) { toast('Error: ' + res.error, 'error'); return; }
@@ -1232,7 +1303,14 @@ async function saveEditEmergency(unit, origFirst, origLast, id) {
 }
 
 async function deleteEmergency(unit, first, last, displayName) {
-  if (!confirm(`Delete ${displayName} from Unit ${unit}'s emergency contacts?`)) return;
+  showConfirm(
+    `Delete ${displayName}?`,
+    `This will remove <strong>${esc(displayName)}</strong> from Unit ${esc(unit)}'s emergency contacts.`,
+    () => _doDeleteEmergency(unit, first, last, displayName)
+  );
+}
+
+async function _doDeleteEmergency(unit, first, last, displayName) {
   const res = await apiPost('deleteEmergencyRow', { matchUnit: unit, matchFirst: first, matchLast: last });
   if (res.error) { toast('Error: ' + res.error, 'error'); return; }
   if (unitCache[unit]) {
@@ -1390,8 +1468,192 @@ function showError(msg) {
     `<div class="msg error">${esc(msg)}</div>`;
 }
 
+// -------------------------------------------------------
+// CSV Import
+// -------------------------------------------------------
+let csvRows = [];
+
+function toggleCsvPanel() {
+  const panel = document.getElementById('csv-import-panel');
+  const open  = panel.style.display === 'none' || !panel.style.display;
+  panel.style.display = open ? 'block' : 'none';
+  if (!open) resetCsvPanel();
+}
+
+function resetCsvPanel() {
+  csvRows = [];
+  const dz = document.getElementById('db-csv-drop-zone');
+  dz.textContent = 'Drag a CSV file here, or click to browse';
+  dz.className   = 'csv-drop-zone';
+  document.getElementById('db-csv-preview-wrap').style.display = 'none';
+  document.getElementById('db-csv-preview-wrap').innerHTML = '';
+  document.getElementById('db-csv-import-btn').disabled = true;
+}
+
+(function() {
+  const dropZone  = document.getElementById('db-csv-drop-zone');
+  const fileInput = document.getElementById('db-csv-file-input');
+  if (!dropZone) return;
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) processFile(fileInput.files[0]); });
+
+  function processFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => parseCsvText(e.target.result);
+    reader.readAsText(file);
+    dropZone.textContent = '✓ ' + file.name;
+    dropZone.classList.add('has-file');
+  }
+
+  function parseCsvText(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+    if (lines.length < 2) { showCsvError('CSV must have a header row and at least one data row.'); return; }
+
+    const headers  = parseLine(lines[0]).map(h => h.toLowerCase().trim());
+    const colFirst = findCol(headers, ['first name','first','firstname','given name','given']);
+    const colLast  = findCol(headers, ['last name','last','lastname','surname','family name','family']);
+    const colUnit  = findCol(headers, ['unit','unit #','unit number','apt','apartment','suite']);
+    const colEmail = findCol(headers, ['email','e-mail','email address','emailaddress']);
+    const colPhone = findCol(headers, ['phone','phone 1','phone1','phone number','cell','mobile','telephone']);
+
+    if (colFirst === -1 || colLast === -1) {
+      showCsvError('CSV must have "First Name" and "Last Name" columns.'); return;
+    }
+
+    csvRows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseLine(lines[i]);
+      const row = {
+        firstName: cells[colFirst] || '',
+        lastName:  cells[colLast]  || '',
+        unit:      colUnit  >= 0 ? (cells[colUnit]  || '') : '',
+        email:     colEmail >= 0 ? (cells[colEmail] || '') : '',
+        phone:     colPhone >= 0 ? (cells[colPhone] || '') : '',
+      };
+      if (row.firstName && row.lastName) csvRows.push(row);
+    }
+    if (!csvRows.length) { showCsvError('No valid rows found in CSV.'); return; }
+    renderCsvPreview();
+    document.getElementById('db-csv-import-btn').disabled = false;
+  }
+
+  function findCol(hdrs, names) {
+    for (const n of names) { const i = hdrs.indexOf(n); if (i !== -1) return i; }
+    return -1;
+  }
+
+  function parseLine(line) {
+    const result = []; let cur = '', inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+        else inQuote = !inQuote;
+      } else if (c === ',' && !inQuote) {
+        result.push(cur.trim()); cur = '';
+      } else { cur += c; }
+    }
+    result.push(cur.trim());
+    return result;
+  }
+
+  function renderCsvPreview() {
+    const wrap = document.getElementById('db-csv-preview-wrap');
+    let html = '<table class="csv-preview"><thead><tr>'
+             + '<th>#</th><th>First</th><th>Last</th><th>Unit</th><th>Email</th></tr></thead><tbody>';
+    csvRows.forEach((r, i) => {
+      html += `<tr><td>${i+1}</td><td>${esc(r.firstName)}</td><td>${esc(r.lastName)}</td>`
+            + `<td>${esc(r.unit)}</td><td>${esc(r.email)}</td></tr>`;
+    });
+    html += '</tbody></table>'
+          + `<p class="csv-count">${csvRows.length} resident(s) ready to import. Existing names will be skipped.</p>`;
+    wrap.innerHTML = html;
+    wrap.style.display = 'block';
+  }
+
+  function showCsvError(msg) {
+    const wrap = document.getElementById('db-csv-preview-wrap');
+    wrap.innerHTML = `<p class="csv-error">${msg}</p>`;
+    wrap.style.display = 'block';
+    csvRows = [];
+    document.getElementById('db-csv-import-btn').disabled = true;
+  }
+})();
+
+async function runCsvImport() {
+  if (!csvRows.length) return;
+  const btn = document.getElementById('db-csv-import-btn');
+  btn.disabled  = true;
+  btn.textContent = 'Importing…';
+
+  const res = await apiPost('importResidents', { rows: csvRows });
+
+  btn.disabled    = false;
+  btn.textContent = 'Import';
+
+  if (res.error) {
+    toast('Error: ' + res.error, 'error');
+    return;
+  }
+
+  toggleCsvPanel();
+  toast(`✓ ${res.added} resident(s) added to the database, ${res.skipped} skipped (already exist). Use Manage User Accounts → Sync to create web logins.`, 'ok', 10000);
+
+  // Reload the unit list to show the newly imported residents
+  const dbRes = await apiFetch('listDatabase');
+  if (!dbRes.error) {
+    allRows   = dbRes.rows || [];
+    unitMap   = {};
+    allRows.forEach(r => { const u = String(r['Unit #']).trim(); if (u) (unitMap[u] = unitMap[u] || []).push(r); });
+    unitOrder = Object.keys(unitMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    renderUnits(unitOrder);
+  }
+}
+
+// -------------------------------------------------------
+// Confirm modal
+// -------------------------------------------------------
+let confirmCallback = null;
+
+function showConfirm(title, bodyHtml, onProceed) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-body').innerHTML    = bodyHtml;
+  confirmCallback = onProceed;
+  document.getElementById('confirm-overlay').style.display = 'flex';
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').style.display = 'none';
+  confirmCallback = null;
+}
+
+function proceedConfirm() {
+  const cb = confirmCallback;
+  closeConfirm();
+  if (cb) cb();
+}
+
 // Boot
 init();
 </script>
+
+<div id="confirm-overlay" class="confirm-overlay" style="display:none;">
+  <div class="confirm-box">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-body"></p>
+    <div class="confirm-actions">
+      <button class="confirm-proceed" onclick="proceedConfirm()">Delete</button>
+      <button class="confirm-cancel"  onclick="closeConfirm()">Cancel</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

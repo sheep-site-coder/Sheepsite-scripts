@@ -1,5 +1,6 @@
 .DS_Store
 credentials/*.json
+config/*.json
 
 # Chatbot: distilled governing docs (building-specific, generated during setup)
 faqs/*_rules.md

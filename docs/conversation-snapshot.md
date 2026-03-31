@@ -430,26 +430,28 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
+## Session 20 — Work Completed
+
+- **manage-users.php** — Import cleanup:
+  - Removed **Import from CSV** and **Import from Sheet** PHP handlers and HTML entirely
+  - "Bulk Account Management" section replaced with a clean standalone **Sync** section (h2 + description + button)
+  - Removed all `.bulk-section`, `.bulk-subsec`, `.drop-zone`, `.csv-*` CSS
+  - Removed CSV import JS IIFE entirely
+
+- **database-admin.php** — CSV import added:
+  - New `importResidents` AJAX handler (PHP) → POSTs rows to Apps Script
+  - "⤓ Import from CSV" button in toolbar toggles a collapsible import panel
+  - Panel: drag-and-drop CSV, flexible column detection (First/Last/Unit/Email/Phone), preview table, Import button
+  - On success: 10s toast with counts + prompt to use Sync for logins; unit list reloads in place
+
+- **sheets/database-admin.gs** — New `doImportResidents(data, expectedToken)`:
+  - Validates token; reads existing First+Last combos into a Set
+  - Appends new rows (Unit #, First Name, Last Name, eMail, Phone #1) for each non-duplicate
+  - Returns `{ok: true, added, skipped}`
+
+- **sheets/building-script.gs** — Added `importResidents` case to `doPost()`
+
 ## Session 19 — Work To Do Next Session
-
-**PROMPT FOR NEXT SESSION:** Pick up the Import/Sync architecture cleanup. Three tasks:
-
-### Task 1 — Strip manage-users.php down to its correct scope
-- Remove **Import from CSV** section entirely from manage-users.php
-- Remove **Import from Sheet** section entirely from manage-users.php
-- Sync is now the only bulk operation in manage-users.php — it already does both directions (orphans + missing)
-- Update the section heading and any descriptions to reflect this
-
-### Task 2 — Add CSV import to database-admin.php
-- CSV import belongs in the Manage Residents/Owners card, not the accounts card
-- CSV should write resident rows into the Google Sheet Database tab via Apps Script
-- Needs a new Apps Script action in building-script.gs / database-admin.gs: `importResidents`
-  - Accepts array of {firstName, lastName, unit, email, phone} rows
-  - Inserts new rows into Database tab
-  - Skips rows where First+Last already exists (idempotent)
-  - Returns {added, skipped} counts
-- PHP side: same drag-and-drop UI as the one built in manage-users.php (reuse the JS)
-- After import, admin reviews in database-admin.php, then goes to Manage User Accounts → Sync to create logins
 
 ### Task 3 — Wire up terms-of-service.html as a click-through on first admin login
 - **Prerequisite: attorney review of terms-of-service.html before activating**
@@ -472,5 +474,94 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: March 30, 2026 (session 19 — ToS document, manage-users Import/Sync redesign, architectural decisions)*
+## Session 20 (continued) — Master Admin + Billing System
+
+- **master-admin.php** — full redesign as per-building association dashboard:
+  - One card per building: name, site URL, Woolsy credit bar, Storage bar, ToS badge (if in scope),
+    Renewal date (red if ≤30 days), "Manage →" link
+  - Card border highlights: warn at 70%, alert at 90% or renewal ≤30 days
+  - "+ Add New Building" → building-detail.php?building=new
+  - System tools grid: Woolsy Overview, License Agreements, Pricing, Architecture Manual
+
+- **building-detail.php** (NEW) — per-building management page:
+  - `?building=new`: form that generates buildings.php snippet for copy-paste
+  - Existing buildings: Overview stats row, Configuration (siteURL/contactEmail/renewalDate/hasDomain),
+    Woolsy Credits (stats + manual top-up + reset), Storage (stats + bar + set limit),
+    License Agreement (status + archived signatures), Billing placeholder (coming soon)
+
+- **pricing-admin.php** (NEW) — master admin tool for pricing configuration:
+  - Site subscription (siteMonthlyPrice + domainAnnualPrice)
+  - Woolsy credits (creditPrice per credit)
+  - Storage tiers (label + bytes + pricePerMonth) with add/remove tier UI
+  - Saves to config/pricing.json (gitignored)
+
+- **tos-admin.php** (NEW) — master admin ToS management:
+  - Reuses master_admin_auth session
+  - Current version, scope enrollment (per-building checkboxes or all), signature status table,
+    Issue New Version (archives existing signatures), Signature History collapsible
+
+- **tos-accept.php** (NEW) — building admin ToS click-through gate:
+  - Requires manage_auth_{building} session
+  - Renders ToS iframe with version/date; Accept writes to config/{building}.json + appends to
+    config/tos_signatures.json; Decline unsets session
+
+- **admin.php** — ToS gate added: after mustChange check, if building is in ToS scope and admin
+  hasn't accepted current version → redirect to tos-accept.php
+
+- **storage-report.php** — cacheTotal POST action: writes storageUsed + storageUpdated to
+  config/{building}.json (used by master-admin.php dashboard + file upload limit enforcement)
+
+- **file-manager.php** — folder delete + modal bug fix:
+  - App-created folders tracked in config/{building}_folders.json; only those get Delete button
+  - dir-display-bridge.gs: handleDeleteFolder — checks empty, calls setTrashed(true)
+  - Modal button fix: window.closeFmConfirm and window.proceedFmConfirm assigned to window
+    (not plain function declarations) so HTML onclick can find them inside the IIFE
+
+- **config/pricing.json** (NEW, gitignored) — seed file with $0.00 prices for all fields
+
+- **config/tos.json** (NEW, gitignored) — version 1, scoped to SampleSite for testing
+
+- **billing-helpers.php** (NEW) — shared billing email trigger helpers:
+  - checkWoolsyThreshold(building, used, allocated) — fires billing email at 90%; once only (flag)
+  - checkStorageThreshold(building) — fires billing email when upload blocked; once only (flag)
+  - generateBillingToken() — stores random 64-char token in config/{building}.json (7-day TTL)
+  - sendBillingEmail() — mail() to contactEmail with tokenized billing.php link
+  - Flags: woolsyBillingEmailSent / storageLimitEmailSent in config/{building}.json
+
+- **chatbot.php** — calls checkWoolsyThreshold() after deductCost(); requires billing-helpers.php
+
+- **file-manager.php** — storage limit check in upload handler: if storageUsed cached + upload
+  would exceed limit → calls checkStorageThreshold() + returns error to UI
+
+- **billing.php** (NEW) — customer-facing Stripe Checkout payment page:
+  - Token-validated (no session needed — token IS the auth)
+  - Woolsy: quantity input, live total, Stripe Checkout for credit purchase
+  - Storage: tier selection with pro-rated pricing (to renewalDate if set, else 12 months)
+  - Reads config/stripe.json for Stripe secret key; shows "not configured" notice if absent
+  - Stripe Checkout session created via cURL (no library needed)
+  - Metadata passed: building, type, credits_to_add OR new_bytes
+
+- **billing-webhook.php** (NEW) — Stripe webhook (checkout.session.completed):
+  - Verifies Stripe signature (HMAC SHA-256, 5-min replay window)
+  - Woolsy: adds credits to woolsy_credits.json, clears woolsyBillingEmailSent flag
+  - Storage: sets storageLimit in config/{building}.json, clears storageLimitEmailSent flag
+  - Both: clears billingToken (one-time use)
+  - Idempotency: processed payment_intent IDs stored in config/processed_payments.json
+
+- **billing-success.php** (NEW) — Stripe post-payment landing page (cosmetic; update via webhook)
+
+- **docs/build-manual.py** — Section 4 folder delete documented; ToS section added in Section 1;
+  "How the System Works" heading + architecture diagram removed
+
+---
+
+**Config files (gitignored) that need to exist on server:**
+- `config/stripe.json` — `{"secretKey":"sk_live_...","webhookSecret":"whsec_..."}`
+- `config/pricing.json` — seed file committed; update via pricing-admin.php
+- `config/tos.json` — `{"version":1,"effectiveDate":"YYYY-MM-DD","documentPath":"docs/terms-of-service.html","scope":["SampleSite"]}`
+- `config/processed_payments.json` — created automatically by webhook on first payment
+
+---
+
+*Snapshot updated: March 31, 2026 (session 20 — master admin redesign, billing system steps 1-7)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

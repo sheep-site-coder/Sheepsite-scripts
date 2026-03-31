@@ -9,6 +9,7 @@
 session_start();
 
 define('CREDENTIALS_DIR',  __DIR__ . '/credentials/');
+define('CONFIG_DIR',       __DIR__ . '/config/');
 define('APPS_SCRIPT_URL',  'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
 
@@ -56,6 +57,26 @@ if (isset($_GET['json'])) {
   $response = @file_get_contents($url);
   header('Content-Type: application/json');
   echo $response !== false ? $response : json_encode(['error' => 'Could not reach Apps Script']);
+  exit;
+}
+
+// -------------------------------------------------------
+// POST: cache grand total
+// Called by JS once both public + private totals are known.
+// Writes storageUsed + storageUpdated to config/{building}.json.
+// -------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cacheTotal') {
+  $total = filter_var($_POST['total'] ?? '', FILTER_VALIDATE_INT);
+  if ($total !== false && $total >= 0) {
+    $cfgFile = CONFIG_DIR . $building . '.json';
+    $cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
+    $cfg['storageUsed']    = $total;
+    $cfg['storageUpdated'] = date('c');
+    if (!is_dir(CONFIG_DIR)) mkdir(CONFIG_DIR, 0755, true);
+    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+  }
+  header('Content-Type: application/json');
+  echo json_encode(['ok' => true]);
   exit;
 }
 ?>
@@ -145,7 +166,15 @@ function updateGrandTotal() {
     grand.textContent = '';
     return;
   }
-  grand.textContent = 'Total storage: ' + fmtSize(totals.public + totals.private);
+  var combined = totals.public + totals.private;
+  grand.textContent = 'Total storage: ' + fmtSize(combined);
+
+  // Cache grand total server-side for limit enforcement and dashboard display
+  fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'action=cacheTotal&total=' + combined
+  });
 }
 
 fetch(base + '&json=public')

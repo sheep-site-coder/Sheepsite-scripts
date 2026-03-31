@@ -19,6 +19,7 @@ function doGet(e) {
   if (action === 'deleteFile')    return handleDeleteFile(e);
   if (action === 'renameFile')    return handleRenameFile(e);
   if (action === 'createFolder')  return handleCreateFolder(e);
+  if (action === 'deleteFolder')  return handleDeleteFolder(e);
   if (action === 'docCheckResult') return handleDocCheckResult(e);
   if (action === 'docCheck')       return handleDocCheck(e);
   if (action === 'listDocFiles')   return handleListDocFiles(e);
@@ -333,6 +334,34 @@ function handleCreateFolder(e) {
 
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true, id: newFolder.getId(), name: newFolder.getName() }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Delete folder — token required
+// param: folderId (must be empty — no files or subfolders)
+// -------------------------------------------------------
+function handleDeleteFolder(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const folderId = e.parameter.folderId;
+  if (!folderId) return jsonError('No folderId provided');
+
+  const folder = DriveApp.getFolderById(folderId);
+
+  // Refuse if folder has any files
+  if (folder.getFiles().hasNext()) {
+    return jsonError('Folder is not empty — remove all files first');
+  }
+  // Refuse if folder has any subfolders
+  if (folder.getFolders().hasNext()) {
+    return jsonError('Folder is not empty — remove all subfolders first');
+  }
+
+  folder.setTrashed(true);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

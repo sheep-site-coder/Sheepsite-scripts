@@ -212,6 +212,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
     }
   }
 }
+// -------------------------------------------------------
+// ToS gate — only when logged in and no mustChange pending
+// -------------------------------------------------------
+if (!$mustChange) {
+  $tosFile = CONFIG_DIR . 'tos.json';
+  if (file_exists($tosFile)) {
+    $tos      = json_decode(file_get_contents($tosFile), true);
+    $scope    = $tos['scope'] ?? [];
+    $inScope  = $scope === 'all' || (is_array($scope) && in_array($building, $scope, true));
+    if ($inScope) {
+      $bldCfg  = loadBuildingConfig($building);
+      $accepted = (int)($bldCfg['tosAccepted']['version'] ?? 0);
+      if ($accepted < (int)($tos['version'] ?? 1)) {
+        header('Location: tos-accept.php?building=' . urlencode($building));
+        exit;
+      }
+    }
+  }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -267,7 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
       <div class="card-title">Manage Residents/Owners</div>
       <div class="card-desc">
         Add, edit, or remove residents across all units. Update contact info, vehicle details,
-        and emergency contacts. Includes Email List capture for easy community wide emails.
+        and emergency contacts. Bulk import from CSV. Includes Email List capture for community-wide emails.
       </div>
     </div>
   </a>
@@ -278,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
       <div class="card-title">Manage User Accounts</div>
       <div class="card-desc">
         View login accounts, reset passwords, and remove accounts for residents who have moved out.
-        Login accounts are created automatically when residents are added via Manage Residents/Owners.
+        Use Sync to create accounts for all database residents at once, or find and remove orphaned accounts.
       </div>
     </div>
   </a>
