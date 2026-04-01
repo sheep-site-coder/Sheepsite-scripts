@@ -60,10 +60,14 @@ function fetch_folder_bytes(string $folderId): ?int {
   return isset($d['total']) ? (int)$d['total'] : null;
 }
 
+require_once __DIR__ . '/invoice-helpers.php';
+
 // -------------------------------------------------------
 // Main loop
 // -------------------------------------------------------
 $buildings = require __DIR__ . '/buildings.php';
+$pricingFile = CONFIG_DIR . 'pricing.json';
+$pricing     = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
 
 log_line('Storage cron started — ' . count($buildings) . ' building(s)');
 
@@ -96,6 +100,24 @@ foreach ($buildings as $key => $cfg) {
   $mb = round($total / 1048576, 1);
   log_line("  $key — OK ({$mb} MB)");
   $ok++;
+
+  // 30-day invoice trigger
+  $renewalDate = $saved['renewalDate'] ?? null;
+  if ($renewalDate) {
+    $daysUntil = (int)((strtotime($renewalDate) - time()) / 86400);
+    if ($daysUntil <= 30 && $daysUntil >= 0 && !unpaidInvoiceExists($key, $renewalDate)) {
+      try {
+        $inv = generateInvoice($key, $saved, $pricing);
+        $inv['generatedBy'] = 'cron';
+        // Re-save with generatedBy updated
+        $invFile = INVOICES_DIR . $key . '/' . $inv['id'] . '.json';
+        file_put_contents($invFile, json_encode($inv, JSON_PRETTY_PRINT));
+        log_line("  $key — Invoice {$inv['id']} generated (\${$inv['total']})");
+      } catch (Exception $e) {
+        log_line("  $key — Invoice generation FAILED: " . $e->getMessage());
+      }
+    }
+  }
 }
 
 log_line("Storage cron done — {$ok} ok, {$failed} failed");

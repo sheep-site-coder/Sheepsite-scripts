@@ -170,6 +170,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     $cfg['siteURL']      = rtrim(trim($_POST['site_url']      ?? ''), '/');
     $cfg['contactEmail'] = trim($_POST['contact_email'] ?? '');
     $cfg['hasDomain']    = isset($_POST['has_domain']);
+    $discountRaw = (float)($_POST['discount_pct'] ?? 0);
+    if ($discountRaw > 0) $cfg['discountPct'] = round(min(100, $discountRaw), 2);
+    else unset($cfg['discountPct']);
     $renewalRaw = trim($_POST['renewal_date'] ?? '');
     if ($renewalRaw) {
       $cfg['renewalDate'] = $renewalRaw;
@@ -202,6 +205,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     $all[$buildingKey]['used'] = 0;
     saveCredits($all);
     $message = 'Woolsy usage counter reset to 0.';
+  }
+
+  // ---- Generate invoice ----
+  if ($action === 'generate_invoice') {
+    require_once __DIR__ . '/invoice-helpers.php';
+    $cfg     = loadBuildingConfig($buildingKey);
+    $pricing = loadPricing();
+    try {
+      $inv     = generateInvoice($buildingKey, $cfg, $pricing);
+      $message = 'Invoice ' . $inv['id'] . ' generated and emailed ($' . number_format($inv['total'], 2) . ').';
+    } catch (Exception $e) {
+      $message     = 'Invoice generation failed: ' . $e->getMessage();
+      $messageType = 'error';
+    }
+  }
+
+  // ---- Mark invoice paid ----
+  if ($action === 'mark_paid') {
+    require_once __DIR__ . '/invoice-helpers.php';
+    $invoiceId = trim($_POST['invoice_id'] ?? '');
+    if (markInvoicePaid($buildingKey, $invoiceId)) {
+      $message = 'Invoice ' . $invoiceId . ' marked as paid. Receipt sent. Renewal date advanced one year.';
+    } else {
+      $message     = 'Could not mark invoice as paid — invoice not found.';
+      $messageType = 'error';
+    }
   }
 
   // ---- Set storage limit ----
@@ -274,6 +303,10 @@ if (!$isNew) {
   $sigFile     = CONFIG_DIR . 'tos_signatures.json';
   $allSigs     = file_exists($sigFile) ? json_decode(file_get_contents($sigFile), true) ?? [] : [];
   $bldSigs     = array_values(array_filter($allSigs, fn($s) => ($s['building'] ?? '') === $buildingKey));
+
+  // Invoices
+  require_once __DIR__ . '/invoice-helpers.php';
+  $invoices = loadInvoices($buildingKey);
 }
 ?>
 <!DOCTYPE html>
@@ -807,6 +840,12 @@ function esc(s) {
         <input type="date" name="renewal_date"
                value="<?= htmlspecialchars($bldCfg['renewalDate'] ?? '') ?>">
       </div>
+      <div>
+        <label>Discount %</label>
+        <input type="number" name="discount_pct" min="0" max="100" step="0.01"
+               value="<?= htmlspecialchars((string)($bldCfg['discountPct'] ?? '')) ?>"
+               placeholder="0" style="width:90px;">
+      </div>
     </div>
     <div class="checkbox-row">
       <input type="checkbox" id="has_domain" name="has_domain" <?= !empty($bldCfg['hasDomain']) ? 'checked' : '' ?>>
@@ -966,12 +1005,94 @@ function esc(s) {
   <?php endif; ?>
 </div>
 
-<!-- Billing — placeholder -->
+<!-- Billing -->
 <div class="section">
-  <h2>💳 Billing &nbsp;<span class="future-tag">Coming soon</span></h2>
-  <p class="hint">Stripe subscription management, payment history, and invoicing will appear here once billing is configured.</p>
+  <h2>💳 Billing</h2>
+
+  <?php
+  // Calculate what the next invoice would look like
+  $pricing      = $pricing ?? loadPricing();
+  $previewItems = buildLineItems($bldCfg, $pricing);
+  $previewTotal = array_sum(array_column($previewItems, 'amount'));
+  ?>
+
+  <div style="margin-bottom:1rem;">
+    <div class="stat-label" style="margin-bottom:0.4rem;">Next invoice preview</div>
+    <table style="max-width:380px;margin-bottom:0.5rem;">
+      <?php foreach ($previewItems as $item): ?>
+      <tr>
+        <td style="padding:0.25rem 0.5rem 0.25rem 0;font-size:0.875rem;color:#555;"><?= htmlspecialchars($item['description']) ?></td>
+        <td style="padding:0.25rem 0;font-size:0.875rem;text-align:right;white-space:nowrap;">
+          <?= $item['amount'] >= 0 ? '$' . number_format($item['amount'], 2) : '-$' . number_format(abs($item['amount']), 2) ?>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+      <tr style="border-top:1px solid #ddd;">
+        <td style="padding:0.35rem 0.5rem 0 0;font-weight:bold;font-size:0.875rem;">Total</td>
+        <td style="padding:0.35rem 0 0;font-weight:bold;font-size:0.875rem;text-align:right;">$<?= number_format($previewTotal, 2) ?></td>
+      </tr>
+    </table>
+    <?php if (!$previewItems): ?>
+      <p class="hint">No pricing configured. Set site fee in <a href="pricing-admin.php" style="color:#0070f3;">Pricing</a>.</p>
+    <?php endif; ?>
+  </div>
+
+  <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>"
+        onsubmit="return confirm('Generate and email this invoice to <?= htmlspecialchars($bldCfg['contactEmail'] ?? 'the contact email') ?>?');">
+    <input type="hidden" name="action" value="generate_invoice">
+    <button type="submit" class="btn" <?= empty($bldCfg['contactEmail']) ? 'disabled title="Set a contact email first"' : '' ?>>
+      Generate &amp; Email Invoice
+    </button>
+    <?php if (empty($bldCfg['contactEmail'])): ?>
+      <span style="font-size:0.8rem;color:#c00;margin-left:0.5rem;">No contact email set</span>
+    <?php endif; ?>
+  </form>
+
+  <?php if ($invoices): ?>
+  <hr>
+  <div style="font-size:0.875rem;font-weight:bold;margin-bottom:0.5rem;">Invoice history</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Invoice</th>
+        <th>Date</th>
+        <th style="text-align:right;">Amount</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($invoices as $inv): ?>
+      <tr>
+        <td><code style="font-size:0.82rem;"><?= htmlspecialchars($inv['id']) ?></code></td>
+        <td style="white-space:nowrap;"><?= htmlspecialchars($inv['date']) ?></td>
+        <td style="text-align:right;">$<?= number_format($inv['total'], 2) ?></td>
+        <td>
+          <?php if ($inv['status'] === 'paid'): ?>
+            <span class="badge ok">✓ Paid <?= htmlspecialchars($inv['paidDate'] ?? '') ?></span>
+          <?php else: ?>
+            <span class="badge warn">Unpaid</span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if ($inv['status'] !== 'paid'): ?>
+            <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>"
+                  onsubmit="return confirm('Mark <?= htmlspecialchars($inv['id']) ?> as paid? This will advance the renewal date one year and send a receipt.');"
+                  style="margin:0;">
+              <input type="hidden" name="action" value="mark_paid">
+              <input type="hidden" name="invoice_id" value="<?= htmlspecialchars($inv['id']) ?>">
+              <button type="submit" class="btn btn-gray" style="font-size:0.8rem;padding:0.2rem 0.6rem;">Mark Paid</button>
+            </form>
+          <?php endif; ?>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php endif; ?>
+
   <?php if (!empty($bldCfg['stripeCustomerId'])): ?>
-    <p style="font-size:0.875rem;">Stripe customer ID: <code><?= htmlspecialchars($bldCfg['stripeCustomerId']) ?></code></p>
+    <p style="font-size:0.875rem;margin-top:0.75rem;">Stripe customer ID: <code><?= htmlspecialchars($bldCfg['stripeCustomerId']) ?></code></p>
   <?php endif; ?>
 </div>
 
