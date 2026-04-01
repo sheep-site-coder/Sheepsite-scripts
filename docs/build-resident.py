@@ -115,7 +115,7 @@ html = f"""<!DOCTYPE html>
     <li>Private Resources &mdash; Owners Only</li>
     <li>Finding Documents with Search</li>
     <li>Ask Woolsy &mdash; Your Building Assistant</li>
-    <li>Your Account &mdash; Changing Your Password</li>
+    <li>My Account &mdash; Unit Info, Password &amp; More</li>
     <li>Forgot Your Password?</li>
     <li>Getting Help</li>
   </ol>
@@ -187,6 +187,7 @@ html = f"""<!DOCTYPE html>
   <tr><td>Resident List</td><td>Directory of unit owners and residents</td></tr>
   <tr><td>Elevator List</td><td>Unit-by-unit elevator access information</td></tr>
   <tr><td>Parking List</td><td>Assigned parking spots by unit</td></tr>
+  <tr><td>My Account</td><td>Your personal hub &mdash; view your unit info, change your password, or open Woolsy</td></tr>
 </table>
 
 <h3>Downloading Documents</h3>
@@ -244,21 +245,40 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 7 &mdash; Changing Your Password</h2>
+<h2>Section 7 &mdash; My Account</h2>
 
-<p>You can change your password at any time once you are logged in.</p>
+<h3>Your Account Hub</h3>
+<p>When you are logged in, the <strong>My Account</strong> link in the Resource Center takes you to your personal account page. From there you can:</p>
+<ul>
+  <li><strong>My Unit Info</strong> &mdash; view what the association has on file for your unit (residents, vehicles, emergency contacts). If anything is incorrect, use the <strong>Request a Change</strong> button to notify the board &mdash; they will update the database.</li>
+  <li><strong>Change Password</strong> &mdash; update your login password at any time</li>
+  <li><strong>Ask Woolsy</strong> &mdash; open the Woolsy chat assistant directly from your account page</li>
+</ul>
+
+<h3>Changing Your Password</h3>
 <ol>
-  <li>While logged in, look for the <strong>Change Password</strong> link in the Resource Center</li>
-  <li>Enter your current password</li>
-  <li>Enter and confirm your new password</li>
+  <li>Go to <strong>My Account</strong> in the Resource Center</li>
+  <li>Click the <strong>Change Password</strong> card</li>
+  <li>Enter your current password, then your new password twice</li>
   <li>Click <strong>Save</strong></li>
 </ol>
 
 <blockquote>Choose a password you don&rsquo;t use elsewhere. Your account gives access to financial and personal information about your fellow residents &mdash; keep it secure.</blockquote>
 
+<h3>Requesting a Change to Your Unit Information</h3>
+<p>If your name, email, phone number, vehicle, or any other detail on file is incorrect:</p>
+<ol>
+  <li>Go to <strong>My Account &rarr; My Unit Info</strong></li>
+  <li>Review the information shown for your unit</li>
+  <li>Click <strong>Request a Change</strong> and describe what needs to be updated</li>
+  <li>The board will receive your request by email and update the database</li>
+</ol>
+<blockquote><strong>Note:</strong> You cannot edit your own record directly &mdash; all changes go through the board to maintain the integrity of the association database.</blockquote>
+
 {divider()}
 
 <h2>Section 8 &mdash; Forgot Your Password?</h2>
+
 
 <p>If you can&rsquo;t remember your password:</p>
 <ol>
@@ -274,6 +294,7 @@ html = f"""<!DOCTYPE html>
 {divider()}
 
 <h2>Section 9 &mdash; Getting Help</h2>
+
 
 <p>Before contacting the board, try <strong>Woolsy</strong> &mdash; the 🐑 chat assistant on the website. Many common questions about rules, procedures, and building policies can be answered instantly.</p>
 
