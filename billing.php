@@ -347,7 +347,15 @@ document.getElementById('qty').addEventListener('input', function() {
 <!-- ====== STORAGE ====== -->
 <div class="card">
   <h2>Storage Upgrade</h2>
-  <p class="hint">Choose a new storage tier. Charged <?= $renewalDate ? 'pro-rated through your renewal date' : 'for one year' ?>.</p>
+  <?php if ($renewalDate): ?>
+    <p class="hint">Choose a new storage tier. You will be charged the monthly fee for the
+    remaining months of your current billing cycle only
+    (<?= monthsUntil($renewalDate) ?> month<?= monthsUntil($renewalDate) !== 1 ? 's' : '' ?>,
+    through <?= date('M j, Y', strtotime($renewalDate)) ?>).
+    At renewal, storage is included in your annual invoice.</p>
+  <?php else: ?>
+    <p class="hint">Choose a new storage tier. You will be charged the monthly fee × 12 months.</p>
+  <?php endif; ?>
 
   <div class="stat-row">
     <div class="stat">Current limit<b><?= fmtBytes($currentLimit) ?></b></div>

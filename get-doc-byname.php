@@ -45,7 +45,19 @@ $data     = json_decode($response, true);
 // -------------------------------------------------------
 foreach ($data['files'] ?? [] as $file) {
   if ($file['name'] === $filename) {
-    header('Location: https://docs.google.com/document/d/' . urlencode($file['id']) . '/preview');
+    $id       = $file['id'];
+    $mimeType = $file['type'] ?? '';
+    if ($mimeType === 'application/vnd.google-apps.document') {
+      $previewUrl = 'https://docs.google.com/document/d/'     . urlencode($id) . '/preview';
+    } elseif ($mimeType === 'application/vnd.google-apps.spreadsheet') {
+      $previewUrl = 'https://docs.google.com/spreadsheets/d/' . urlencode($id) . '/preview';
+    } elseif ($mimeType === 'application/vnd.google-apps.presentation') {
+      $previewUrl = 'https://docs.google.com/presentation/d/' . urlencode($id) . '/preview';
+    } else {
+      // PDF, Word, or any other uploaded file
+      $previewUrl = 'https://drive.google.com/file/d/'        . urlencode($id) . '/preview';
+    }
+    header('Location: ' . $previewUrl);
     exit;
   }
 }

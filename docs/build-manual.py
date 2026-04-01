@@ -158,7 +158,6 @@ html = f"""<!DOCTYPE html>
 <ul>
   <li>A computer or tablet with a modern browser (Google Chrome recommended)</li>
   <li>Your admin username and password (provided by SheepSite during setup)</li>
-  <li>Access to the building&rsquo;s Google Drive (required for maintaining the owner and resident database)</li>
 </ul>
 
 <h3>Accessing the Admin Area</h3>
@@ -247,7 +246,7 @@ html = f"""<!DOCTYPE html>
 <h2>Section 4 &mdash; Managing Documents</h2>
 
 <h3>How Publishing Works</h3>
-<p>All documents live in Google Drive. Files in the Public and Private folders <strong>automatically appear on the website</strong> &mdash; there is no publish button or sync step required.</p>
+<p>Files uploaded through the File Management card <strong>automatically appear on the website</strong> &mdash; there is no publish button or sync step required.</p>
 <ul>
   <li><strong>Public folder</strong> &mdash; visible to anyone visiting the website, no login needed</li>
   <li><strong>Private folder</strong> &mdash; visible only to logged-in owners</li>
@@ -286,19 +285,7 @@ html = f"""<!DOCTYPE html>
 
 <blockquote><strong>System folders cannot be deleted.</strong> The top-level folders (such as <code>BoardMinutes</code>, <code>RulesDocs</code>, <code>Forms</code>, etc.) were created when your site was set up and are permanently linked to specific sections of your website. They do not show a Delete button and cannot be removed or renamed. Only folders you create yourself through the file manager can be deleted.</blockquote>
 
-<h3>Google Drive (Alternative Method)</h3>
-<p>You can also manage files directly in Google Drive. Navigate to the shared building folder under <strong>Shared with me</strong> and add, move, or delete files there.</p>
-
-<div style="display:flex; gap:1em; margin:1em 0;">
-  <div style="flex:1; text-align:center;">
-    {img_tag("image13.jpg", "Google Drive Shared with me", "100%", "border:1px solid #ccc; border-radius:4px;")}
-    <p style="font-size:0.85em; color:#555; margin-top:4px;">Find your building under Shared with me</p>
-  </div>
-  <div style="flex:1; text-align:center;">
-    {img_tag("image11.png", "Building folder in Drive", "100%", "border:1px solid #ccc; border-radius:4px;")}
-    <p style="font-size:0.85em; color:#555; margin-top:4px;">Open the building folder</p>
-  </div>
-</div>
+<blockquote><strong>System files</strong> &mdash; A small number of files are embedded directly on the building website by name (for example, the Announcement page or the Mid/End Year Report). These files show a <strong>Replace</strong> button instead of Rename and Delete. To update one, click <strong>Replace</strong> and select the new file from your computer &mdash; the system will upload it, rename it automatically to the correct name, and remove the old version. The website embed continues to work without any changes to the site.</blockquote>
 
 <h3>Document Folder Structure</h3>
 <div style="display:flex; gap:1em; margin:1em 0; align-items:flex-start;">
@@ -314,7 +301,7 @@ html = f"""<!DOCTYPE html>
 
 <h4>Public Folders (no login required)</h4>
 <table>
-  <tr><th>Website Section</th><th>Google Drive Folder</th></tr>
+  <tr><th>Website Section</th><th>Folder</th></tr>
   <tr><td>Home Page / Latest News</td><td><code>Page1Docs/Announcement</code></td></tr>
   <tr><td>Mid/End Year Report</td><td><code>Page1Docs/Mid-End_Year_Report</code></td></tr>
   <tr><td>Building Guides &amp; Rules</td><td><code>RulesDocs</code></td></tr>
@@ -325,7 +312,7 @@ html = f"""<!DOCTYPE html>
 
 <h4>Private Folders (login required)</h4>
 <table>
-  <tr><th>Website Section</th><th>Google Drive Folder</th></tr>
+  <tr><th>Website Section</th><th>Folder</th></tr>
   <tr><td>Board Minutes</td><td><code>BoardMinutes</code></td></tr>
   <tr><td>Financial Statements</td><td><code>FinancialDocs/FinanceStatements</code></td></tr>
   <tr><td>Budgets</td><td><code>FinancialDocs/Budgets</code></td></tr>
@@ -340,7 +327,7 @@ html = f"""<!DOCTYPE html>
   <li>PDFs are recommended for final documents; they display reliably across all devices</li>
 </ul>
 
-<blockquote><strong>Note:</strong> Deleting a file removes it from Google Drive as well. Make sure you have a local copy of anything you may need in the future.</blockquote>
+<blockquote><strong>Note:</strong> Deleting a file is permanent. Make sure you have a local copy of anything you may need in the future.</blockquote>
 
 {divider()}
 
@@ -525,13 +512,13 @@ html = f"""<!DOCTYPE html>
 </ul>
 
 <h3>Before You Begin &mdash; Upload Your Documents First</h3>
-<blockquote><strong>Important:</strong> All governing documents must be uploaded to the correct Drive folders <em>before</em> starting the setup process. Woolsy reads only what is in those folders at the time you run setup &mdash; documents added afterwards will not be included until you run an update.</blockquote>
+<blockquote><strong>Important:</strong> All governing documents must be uploaded to the correct folders <em>before</em> starting the setup process. Woolsy reads only what is in those folders at the time you run setup &mdash; documents added afterwards will not be included until you run an update.</blockquote>
 <p>The two folders Woolsy reads from are:</p>
 <ul>
   <li><code>IncorporationDocs</code> &mdash; Articles of Incorporation, Bylaws, Declaration of Condominium</li>
   <li><code>RulesDocs</code> &mdash; Board rules, Welcome guides, and any other governing rules documents</li>
 </ul>
-<p>Use the <strong>File Management</strong> card to upload documents to these folders if you have not already done so. Both folders are in the Public section of your Drive.</p>
+<p>Use the <strong>File Management</strong> card to upload documents to these folders if you have not already done so. Both folders are in the Public section.</p>
 
 <h3>Setting Up Woolsy for the First Time</h3>
 <ol>

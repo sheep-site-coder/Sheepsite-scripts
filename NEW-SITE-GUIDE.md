@@ -4,33 +4,28 @@ Complete these steps in order when setting up a new building site.
 
 ---
 
-## Step 1 — Create the Google Drive folders
+## Step 1 — Create Drive folders and Owner DB sheet (automated)
 
-In the SheepSite Google Drive, create this structure:
+Use the **+ Add New Building** button in the Master Admin dashboard. This will:
 
-```
-NewBuildingName/
-  WebSite/
-    Public/    ← set sharing to "Anyone with the link" (Viewer)
-    Private/   ← leave restricted (only SheepSite account has access)
-```
+- Clone the full folder structure from `Master Files/Template Folder/` into `Association Folders/NewBuildingName/`
+- Copy all template files (including system PDFs like `Announcement Page 1`)
+- Set the `Public/` folder sharing to "Anyone with the link" (Viewer)
+- Copy the template Owner DB sheet and name it `"NewBuildingName Owner DB"`
 
-Copy the folder ID from the URL for each:
-`https://drive.google.com/drive/folders/`**`THIS_PART_IS_THE_ID`**
+The Public and Private folder IDs are returned and filled into the setup checklist automatically.
+
+> **First time only:** you will need to paste the Template Folder ID, Association Folders ID, and template sheet ID into the form. Check "Save as defaults" — they will be pre-filled for every building after that.
 
 ---
 
-## Step 2 — Set up the Google Sheet
+## Step 2 — Finish the Owner DB sheet
 
-1. Create a new Google Sheet named `"<Building Name> Owner DB"` (e.g. `Lyndhurst I Owner DB`)
-2. Rename the first tab to `Database`; add a second tab named `CarDB`
-3. Ensure row 1 of each tab has the required column headers (see `sheets/README.md`)
-4. Open **Extensions → Apps Script**
-5. Delete any default code and paste the contents of `sheets/building-script.gs`
-6. Click **+** next to Libraries, enter the `DatabaseSheetMaster` Script ID, set identifier to `DatabaseSheetMaster`, select **latest version**, click Add
-   *(get the Script ID from the `DatabaseSheetMaster` Apps Script project: Project Settings → Script ID)*
-7. **Deploy → New deployment** — type: Web App, Execute as: Me, Who has access: Anyone — click Deploy and **copy the URL** (you will paste this into `buildings.php` in Step 3 as the `webAppURL`)
-8. Install auto-update triggers (**Triggers → Add Trigger**):
+The sheet has been copied and named. Open it from the checklist link, then:
+
+1. Open **Extensions → Apps Script** → find `const BUILDING_NAME = '...'` → change the value to the building key → **Save**
+2. **Deploy → New deployment** → Type: Web App → Execute as: Me → Who has access: Anyone → Deploy → **copy the Web App URL** (needed in Step 3)
+3. Install two triggers (**Triggers → Add Trigger**):
    - `onEditHandler` — From spreadsheet → On edit
    - `runScheduledUpdate` — Time-driven → Minutes timer → Every minute
 

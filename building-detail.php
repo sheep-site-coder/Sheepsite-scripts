@@ -81,10 +81,84 @@ function fmtDate(string $iso): string {
 }
 
 // -------------------------------------------------------
+// Master config (template/association folder IDs)
+// -------------------------------------------------------
+function loadMasterConfig(): array {
+  $file = CONFIG_DIR . '_master_config.json';
+  return file_exists($file) ? json_decode(file_get_contents($file), true) ?? [] : [];
+}
+function saveMasterConfig(array $cfg): void {
+  file_put_contents(CONFIG_DIR . '_master_config.json', json_encode($cfg, JSON_PRETTY_PRINT));
+}
+
+// -------------------------------------------------------
 // POST handlers
 // -------------------------------------------------------
 $message     = '';
 $messageType = 'ok';
+
+// ---- AJAX: create Drive folders for new building ----
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isNew) {
+  header('Content-Type: application/json');
+  $action = $_POST['action'] ?? '';
+
+  if ($action === 'create_folders') {
+    $buildingName      = trim($_POST['buildingName']      ?? '');
+    $templateFolderId  = trim($_POST['templateFolderId']  ?? '');
+    $parentFolderId    = trim($_POST['parentFolderId']     ?? '');
+    $templateSheetId   = trim($_POST['templateSheetId']   ?? '');
+    $saveDefaults      = !empty($_POST['saveDefaults']);
+
+    if (!$buildingName || !$templateFolderId || !$parentFolderId) {
+      echo json_encode(['ok' => false, 'error' => 'Building name, template folder ID, and association folder ID are all required.']);
+      exit;
+    }
+
+    // Optionally persist IDs as defaults
+    if ($saveDefaults) {
+      $mc = loadMasterConfig();
+      $mc['templateFolderId']    = $templateFolderId;
+      $mc['associationFolderId'] = $parentFolderId;
+      if ($templateSheetId) $mc['templateSheetId'] = $templateSheetId;
+      saveMasterConfig($mc);
+    }
+
+    $appsScriptURL = defined('APPS_SCRIPT_URL') ? APPS_SCRIPT_URL : '';
+    $appsScriptToken = defined('APPS_SCRIPT_TOKEN') ? APPS_SCRIPT_TOKEN : '';
+    // Load from file-manager constants if not defined here
+    if (!$appsScriptURL) {
+      // Read from file-manager.php is not feasible; use the same constants file
+      // Constants are defined in display-private-dir.php — load them
+      $constFile = __DIR__ . '/display-private-dir.php';
+      if (file_exists($constFile)) {
+        $src = file_get_contents($constFile);
+        if (preg_match("/define\('APPS_SCRIPT_URL',\s*'([^']+)'\)/", $src, $m)) $appsScriptURL   = $m[1];
+        if (preg_match("/define\('APPS_SCRIPT_TOKEN',\s*'([^']+)'\)/", $src, $m)) $appsScriptToken = $m[1];
+      }
+    }
+
+    $url = $appsScriptURL
+         . '?action=setupBuildingFolders'
+         . '&token='            . urlencode($appsScriptToken)
+         . '&buildingName='     . urlencode($buildingName)
+         . '&templateFolderId=' . urlencode($templateFolderId)
+         . '&parentFolderId='   . urlencode($parentFolderId)
+         . ($templateSheetId ? '&templateSheetId=' . urlencode($templateSheetId) : '');
+
+    $raw  = @file_get_contents($url);
+    $data = $raw ? json_decode($raw, true) : null;
+
+    if (!$data || !empty($data['error'])) {
+      echo json_encode(['ok' => false, 'error' => $data['error'] ?? 'No response from Apps Script. Check the URL and token.']);
+    } else {
+      echo json_encode($data);
+    }
+    exit;
+  }
+
+  echo json_encode(['ok' => false, 'error' => 'Unknown action']);
+  exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
 
@@ -154,6 +228,8 @@ if (empty($message) && isset($_GET['msg'])) {
 // -------------------------------------------------------
 // Load data
 // -------------------------------------------------------
+$masterConfig = loadMasterConfig();
+
 if (!$isNew) {
   $bldCfg      = loadBuildingConfig($buildingKey);
   $bldBuilding = $buildings[$buildingKey];
@@ -266,79 +342,392 @@ if (!$isNew) {
   <div class="message <?= htmlspecialchars($messageType) ?>"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>
 
-<?php if ($isNew): ?>
+<?php if ($isNew):
+  $savedTemplate    = $masterConfig['templateFolderId']    ?? '';
+  $savedAssociation = $masterConfig['associationFolderId'] ?? '';
+  $savedSheet       = $masterConfig['templateSheetId']     ?? '';
+?>
 <!-- ===================== NEW BUILDING SETUP ===================== -->
-<div class="section">
-  <h2>New Building Setup</h2>
-  <p class="hint">Fill in the fields below to generate the <code>buildings.php</code> entry and initial config. You will need to manually add the entry to <code>buildings.php</code> on the server.</p>
 
-  <form id="new-building-form">
-    <div class="form-row">
-      <div>
-        <label>Building key (no spaces)</label>
-        <input type="text" id="nb_key" placeholder="e.g. LyndhurstJ" style="width:200px;" oninput="updateSnippet()">
-      </div>
-      <div>
-        <label>State code</label>
-        <input type="text" id="nb_state" value="FL" style="width:60px;" oninput="updateSnippet()">
-      </div>
-      <div>
-        <label>Community</label>
-        <input type="text" id="nb_community" placeholder="e.g. CVE (optional)" style="width:160px;" oninput="updateSnippet()">
-      </div>
-    </div>
-    <div class="form-row">
-      <div style="flex:1;min-width:260px;">
-        <label>Public Folder ID</label>
-        <input type="text" id="nb_public" placeholder="Google Drive folder ID" style="width:100%;" oninput="updateSnippet()">
-      </div>
-    </div>
-    <div class="form-row">
-      <div style="flex:1;min-width:260px;">
-        <label>Private Folder ID</label>
-        <input type="text" id="nb_private" placeholder="Google Drive folder ID" style="width:100%;" oninput="updateSnippet()">
-      </div>
-    </div>
-    <div class="form-row">
-      <div style="flex:1;min-width:260px;">
-        <label>Apps Script Web App URL</label>
-        <input type="text" id="nb_webapp" placeholder="https://script.google.com/macros/s/.../exec" style="width:100%;" oninput="updateSnippet()">
-      </div>
-    </div>
-  </form>
+<style>
+  .nb-phase       { background:#fff; border:1px solid #ddd; border-radius:6px; padding:1.5rem; margin-bottom:1.5rem; }
+  .nb-phase h3    { margin:0 0 1rem; font-size:1.05rem; color:#1a3a5c; }
+  .nb-row         { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:0.9rem; align-items:flex-end; }
+  .nb-field       { display:flex; flex-direction:column; gap:0.25rem; }
+  .nb-field label { font-size:0.82rem; font-weight:600; color:#555; }
+  .nb-field input { padding:0.4rem 0.6rem; border:1px solid #ccc; border-radius:4px; font-size:0.9rem; }
+  .nb-hint        { font-size:0.8rem; color:#888; margin-top:0.15rem; }
+  .nb-create-btn  { background:#1a5a2a; color:#fff; border:none; padding:0.55rem 1.4rem;
+                    border-radius:4px; font-size:0.95rem; cursor:pointer; margin-top:0.5rem; }
+  .nb-create-btn:hover { background:#134520; }
+  .nb-create-btn:disabled { background:#999; cursor:default; }
+  .nb-success     { background:#f0faf0; border:1px solid #a0d0a0; border-radius:4px;
+                    padding:0.6rem 1rem; font-size:0.88rem; color:#1a5a1a; margin-top:0.75rem; }
+  .nb-error       { background:#fff0f0; border:1px solid #f0a0a0; border-radius:4px;
+                    padding:0.6rem 1rem; font-size:0.88rem; color:#a00; margin-top:0.75rem; }
+  /* Checklist */
+  .checklist      { list-style:none; padding:0; margin:0; }
+  .checklist li   { display:flex; gap:0.75rem; align-items:flex-start; margin-bottom:1.4rem;
+                    padding-bottom:1.4rem; border-bottom:1px solid #eee; }
+  .checklist li:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+  .cl-num         { flex-shrink:0; width:28px; height:28px; border-radius:50%;
+                    background:#1a3a5c; color:#fff; font-weight:700; font-size:0.85rem;
+                    display:flex; align-items:center; justify-content:center; margin-top:2px; }
+  .cl-num.done    { background:#22c55e; }
+  .cl-body        { flex:1; }
+  .cl-title       { font-weight:700; font-size:0.95rem; margin-bottom:0.4rem; color:#222; }
+  .cl-steps       { font-size:0.88rem; color:#444; line-height:1.6; }
+  .cl-steps ol    { margin:0.4rem 0 0.4rem 1.2rem; padding:0; }
+  .cl-steps li    { margin:0.2rem 0; }
+  .cl-code        { background:#f4f4f4; border:1px solid #ddd; border-radius:4px;
+                    padding:0.5rem 0.75rem; font-family:monospace; font-size:0.82rem;
+                    white-space:pre-wrap; word-break:break-all; margin:0.5rem 0; position:relative; }
+  .cl-copy        { position:absolute; top:0.35rem; right:0.5rem; font-size:0.75rem;
+                    background:#fff; border:1px solid #ccc; border-radius:3px;
+                    padding:0.15rem 0.5rem; cursor:pointer; color:#555; }
+  .cl-copy:hover  { background:#f0f0f0; }
+  .cl-note        { background:#fff8e8; border-left:3px solid #f0a800; padding:0.4rem 0.7rem;
+                    font-size:0.83rem; color:#555; margin-top:0.5rem; border-radius:0 3px 3px 0; }
+  .cl-check       { margin-top:0.6rem; display:flex; align-items:center; gap:0.4rem;
+                    font-size:0.82rem; color:#888; }
+  .cl-check input { cursor:pointer; width:15px; height:15px; }
+</style>
 
-  <label>buildings.php entry to add:</label>
-  <div class="code-block" id="snippet">Fill in the fields above to generate the snippet.</div>
+<div class="nb-phase">
+  <h3>Step 1 &mdash; Building Identity &amp; Drive Folders</h3>
+  <div class="nb-row">
+    <div class="nb-field">
+      <label>Building key <span style="color:red">*</span></label>
+      <input type="text" id="nb_key" placeholder="e.g. LyndhurstJ" style="width:160px;" oninput="nbUpdate()">
+      <span class="nb-hint">No spaces. Used in URLs and config.</span>
+    </div>
+    <div class="nb-field">
+      <label>Display name <span style="color:red">*</span></label>
+      <input type="text" id="nb_displayname" placeholder="e.g. Lyndhurst J" style="width:180px;" oninput="nbUpdate()">
+    </div>
+    <div class="nb-field">
+      <label>State</label>
+      <input type="text" id="nb_state" value="FL" style="width:50px;" oninput="nbUpdate()">
+    </div>
+    <div class="nb-field">
+      <label>Community</label>
+      <input type="text" id="nb_community" placeholder="e.g. CVE (optional)" style="width:150px;" oninput="nbUpdate()">
+    </div>
+  </div>
+  <div class="nb-row">
+    <div class="nb-field" style="flex:1;min-width:280px;">
+      <label>Template Folder ID <span style="color:red">*</span></label>
+      <input type="text" id="nb_template" value="<?= htmlspecialchars($savedTemplate) ?>" placeholder="ID of Master Files/Template Folder in Drive" style="width:100%;" oninput="nbUpdate()">
+      <span class="nb-hint">From Drive URL of the template folder inside Master Files.</span>
+    </div>
+  </div>
+  <div class="nb-row">
+    <div class="nb-field" style="flex:1;min-width:280px;">
+      <label>Association Folders ID <span style="color:red">*</span></label>
+      <input type="text" id="nb_assoc" value="<?= htmlspecialchars($savedAssociation) ?>" placeholder="ID of Association Folders in Drive" style="width:100%;" oninput="nbUpdate()">
+      <span class="nb-hint">New building folder is created inside this folder.</span>
+    </div>
+  </div>
+  <div class="nb-row">
+    <div class="nb-field" style="flex:1;min-width:280px;">
+      <label>Template Owner DB Sheet ID</label>
+      <input type="text" id="nb_sheet" value="<?= htmlspecialchars($savedSheet) ?>" placeholder="ID of template Google Sheet (optional)" style="width:100%;">
+      <span class="nb-hint">If provided, a copy named &ldquo;BuildingName Owner DB&rdquo; is created automatically.</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <button class="nb-create-btn" id="nb_create_btn" onclick="createFolders()" disabled>Create Drive Folders</button>
+    <label style="font-size:0.82rem;color:#666;display:flex;align-items:center;gap:0.4rem;">
+      <input type="checkbox" id="nb_savedefaults" checked>
+      Save folder IDs as defaults
+    </label>
+  </div>
+  <div id="nb_result"></div>
+</div>
 
-  <p style="font-size:0.85rem;color:#555;margin-top:0.5rem;">
-    Copy and paste this entry into <code>buildings.php</code> on the server, then upload the file.
-    Once added, the building will appear on the master admin dashboard.
-  </p>
+<div class="nb-phase" id="nb_checklist" style="display:none;">
+  <h3>Setup Checklist</h3>
+  <p style="font-size:0.88rem;color:#555;margin:0 0 1.25rem;">Work through these steps in order. Check each one off as you complete it.</p>
+  <ul class="checklist">
+
+    <!-- Step 1: Drive folders (auto-done) -->
+    <li>
+      <div class="cl-num done" id="cl_num_1">&#10003;</div>
+      <div class="cl-body">
+        <div class="cl-title">Drive Folders Created</div>
+        <div class="cl-steps">
+          Folder structure and template files (including system documents) cloned from template. Public folder set to &ldquo;Anyone with the link&rdquo;.<br>
+          <strong>Public folder ID:</strong> <code id="cl_public_id">&mdash;</code><br>
+          <strong>Private folder ID:</strong> <code id="cl_private_id">&mdash;</code>
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 2: Google Sheet -->
+    <li>
+      <div class="cl-num" id="cl_num_2">2</div>
+      <div class="cl-body">
+        <div class="cl-title">Finish Setting Up the Owner DB Sheet</div>
+        <div class="cl-steps" id="cl_sheet_section">
+          <div id="cl_sheet_copied" style="display:none">
+            The sheet <strong id="cl_sheet_name">&mdash;</strong> has been created automatically.
+            <span id="cl_sheet_link_wrap"></span>
+            <br><br>
+            Complete these 3 steps inside the sheet:
+          </div>
+          <div id="cl_sheet_manual">
+            No template sheet was provided &mdash; create the sheet manually first:
+            create a Google Sheet named <strong id="cl_sheet_name2">&mdash;</strong>, rename Sheet1 to
+            <code>Database</code>, add a second tab named <code>CarDB</code>, add column headers
+            (see <code>sheets/README.md</code>), then open Extensions &rarr; Apps Script and paste
+            <code>sheets/building-script.gs</code>. Add the <code>DatabaseSheetMaster</code> library,
+            then continue with the steps below.
+          </div>
+          <ol>
+            <li>Open <strong>Extensions &rarr; Apps Script</strong> &rarr; find the line
+              <code>const BUILDING_NAME = '...'</code> &rarr; change the value to
+              <code id="cl_building_key_sheet">'BuildingKey'</code> &rarr; <strong>Save</strong></li>
+            <li><strong>Deploy &rarr; New deployment</strong> &rarr; Type: Web App &rarr;
+              Execute as: Me &rarr; Who has access: Anyone &rarr; Deploy &rarr;
+              <strong>copy the Web App URL</strong> (needed in Step 3)</li>
+            <li>Install two triggers &mdash; <strong>Triggers &rarr; Add Trigger</strong>:
+              <ol>
+                <li><code>onEditHandler</code> &mdash; From spreadsheet &rarr; On edit</li>
+                <li><code>runScheduledUpdate</code> &mdash; Time-driven &rarr; Minutes timer &rarr; Every minute</li>
+              </ol>
+            </li>
+          </ol>
+        </div>
+        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,2)"> Done</label>
+      </div>
+    </li>
+
+    <!-- Step 3: buildings.php + credentials -->
+    <li>
+      <div class="cl-num">3</div>
+      <div class="cl-body">
+        <div class="cl-title">Add Building to Server Config</div>
+        <div class="cl-steps">
+          <strong>a)</strong> Open <code>buildings.php</code> on the server and add this entry (paste the Web App URL from Step 2):
+          <div class="cl-code" id="cl_snippet">Fill in building details above to generate snippet.<button class="cl-copy" onclick="copyCode('cl_snippet')">Copy</button></div>
+          Upload the updated <code>buildings.php</code> to the server.<br><br>
+          <strong>b)</strong> Create a new empty credentials file on the server at:
+          <div class="cl-code" id="cl_creds_path">credentials/BuildingKey.json<button class="cl-copy" onclick="copyCode('cl_creds_path')">Copy</button></div>
+          Contents must be exactly: <code>[]</code>
+        </div>
+        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,3)"> Done</label>
+      </div>
+    </li>
+
+    <!-- Step 4: Admin account -->
+    <li>
+      <div class="cl-num">4</div>
+      <div class="cl-body">
+        <div class="cl-title">Set Up the Admin Account</div>
+        <div class="cl-steps">
+          Visit the admin page for the new building &mdash; it will redirect automatically to the password reset flow:
+          <div class="cl-code" id="cl_admin_url">https://sheepsite.com/Scripts/admin.php?building=BuildingKey<button class="cl-copy" onclick="copyCode('cl_admin_url')">Copy</button></div>
+          <ol>
+            <li>Enter the <strong>President&rsquo;s unit number</strong> as the secret verification</li>
+            <li>A temporary password is emailed to the President (whoever has <em>President</em> in the Board column of the Database tab)</li>
+            <li>Log in with the temporary password &mdash; you will be prompted to set a permanent one immediately</li>
+          </ol>
+          <div class="cl-note"><strong>Note:</strong> The Database tab must exist and have a President row before this step will work. If the sheet is empty, create the President row first or use the master password as a fallback.</div>
+        </div>
+        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,4)"> Done</label>
+      </div>
+    </li>
+
+    <!-- Step 5: Import owners -->
+    <li>
+      <div class="cl-num">5</div>
+      <div class="cl-body">
+        <div class="cl-title">Import Owners</div>
+        <div class="cl-steps">
+          <ol>
+            <li>Log in to the Admin Dashboard for the new building</li>
+            <li>Click <strong>Manage Users</strong> &rarr; <strong>Import from Association Database Sheet</strong></li>
+            <li>Enter a temporary password that you will distribute to owners &rarr; click <strong>Import</strong></li>
+            <li>All imported accounts have <em>must change password</em> set &mdash; owners will be forced to set their own password on first login</li>
+            <li>Distribute the temporary password to owners (email, letter, etc.)</li>
+          </ol>
+        </div>
+        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,5)"> Done</label>
+      </div>
+    </li>
+
+    <!-- Step 6: Website footer script -->
+    <li>
+      <div class="cl-num">6</div>
+      <div class="cl-body">
+        <div class="cl-title">Configure the Building Website</div>
+        <div class="cl-steps">
+          In Namecheap Website Builder: <strong>Settings &rarr; Pages &rarr; Default &rarr; After &lt;body&gt;</strong><br>
+          Paste the footer script below. The only value that changes per building is the first line.
+          <div class="cl-code" id="cl_footer_script">Fill in building key above to generate script.<button class="cl-copy" onclick="copyCode('cl_footer_script')">Copy</button></div>
+        </div>
+        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,6)"> Done</label>
+      </div>
+    </li>
+
+  </ul>
 </div>
 
 <script>
-function updateSnippet() {
-  var key       = document.getElementById('nb_key').value.trim();
-  var state     = document.getElementById('nb_state').value.trim() || 'FL';
-  var community = document.getElementById('nb_community').value.trim();
-  var pub       = document.getElementById('nb_public').value.trim();
-  var priv      = document.getElementById('nb_private').value.trim();
-  var webapp    = document.getElementById('nb_webapp').value.trim();
+var nbPublicId  = '';
+var nbPrivateId = '';
+var nbSheetUrl  = '';
 
-  if (!key) { document.getElementById('snippet').textContent = 'Fill in the fields above to generate the snippet.'; return; }
-
-  var lines = [
-    "  '" + key + "' => [",
-    "    'state'           => '" + state + "',",
-  ];
-  if (community) lines.push("    'community'       => '" + community + "',");
-  lines.push("    'publicFolderId'  => '" + pub + "',");
-  lines.push("    'privateFolderId' => '" + priv + "',");
-  lines.push("    'webAppURL'       => '" + webapp + "',");
-  lines.push("  ],");
-
-  document.getElementById('snippet').textContent = lines.join('\n');
+function nbUpdate() {
+  var key = document.getElementById('nb_key').value.trim();
+  var tpl = document.getElementById('nb_template').value.trim();
+  var asc = document.getElementById('nb_assoc').value.trim();
+  document.getElementById('nb_create_btn').disabled = !(key && tpl && asc);
+  if (nbPublicId) updateChecklist();
 }
+
+function createFolders() {
+  var key      = document.getElementById('nb_key').value.trim();
+  var dispname = document.getElementById('nb_displayname').value.trim();
+  var tpl      = document.getElementById('nb_template').value.trim();
+  var asc      = document.getElementById('nb_assoc').value.trim();
+  var sheet    = document.getElementById('nb_sheet').value.trim();
+  var savedef  = document.getElementById('nb_savedefaults').checked;
+
+  if (!key || !tpl || !asc) return;
+
+  var btn = document.getElementById('nb_create_btn');
+  btn.disabled    = true;
+  btn.textContent = 'Creating\u2026';
+
+  var fd = new FormData();
+  fd.append('action',           'create_folders');
+  fd.append('buildingName',     key);
+  fd.append('templateFolderId', tpl);
+  fd.append('parentFolderId',   asc);
+  if (sheet)  fd.append('templateSheetId', sheet);
+  if (savedef) fd.append('saveDefaults', '1');
+
+  fetch('building-detail.php?building=new', { method: 'POST', body: fd })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      btn.textContent = 'Create Drive Folders';
+      var res = document.getElementById('nb_result');
+      if (!d.ok) {
+        res.innerHTML = '<div class="nb-error">&#10007; ' + esc(d.error || 'Unknown error') + '</div>';
+        btn.disabled = false;
+        return;
+      }
+      nbPublicId  = d.publicFolderId  || '';
+      nbPrivateId = d.privateFolderId || '';
+      nbSheetUrl  = d.sheetUrl        || '';
+      var sheetNote = nbSheetUrl ? ' Owner DB sheet copied.' : '';
+      res.innerHTML = '<div class="nb-success">&#10003; Drive folders created.' + sheetNote + '</div>';
+      updateChecklist();
+      document.getElementById('nb_checklist').style.display = '';
+      document.getElementById('nb_checklist').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })
+    .catch(function (err) {
+      document.getElementById('nb_result').innerHTML = '<div class="nb-error">&#10007; Network error: ' + esc(String(err)) + '</div>';
+      btn.disabled    = false;
+      btn.textContent = 'Create Drive Folders';
+    });
+}
+
+function updateChecklist() {
+  var key      = document.getElementById('nb_key').value.trim();
+  var dispname = document.getElementById('nb_displayname').value.trim() || key;
+  var state    = document.getElementById('nb_state').value.trim() || 'FL';
+  var community= document.getElementById('nb_community').value.trim();
+
+  // Step 1 IDs
+  document.getElementById('cl_public_id').textContent  = nbPublicId  || '\u2014';
+  document.getElementById('cl_private_id').textContent = nbPrivateId || '\u2014';
+
+  // Step 2 sheet
+  var sheetDisplayName = (dispname || key || 'Building') + ' Owner DB';
+  ['cl_sheet_name','cl_sheet_name2'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = sheetDisplayName;
+  });
+  var bkEl = document.getElementById('cl_building_key_sheet');
+  if (bkEl) bkEl.textContent = "'" + (key || 'BuildingKey') + "'";
+  if (nbSheetUrl) {
+    document.getElementById('cl_sheet_copied').style.display = '';
+    document.getElementById('cl_sheet_manual').style.display = 'none';
+    var linkWrap = document.getElementById('cl_sheet_link_wrap');
+    if (linkWrap) linkWrap.innerHTML = '<a href="' + nbSheetUrl + '" target="_blank" rel="noopener" style="margin-left:0.5rem;font-weight:600;">Open Sheet &rarr;</a>';
+  } else {
+    document.getElementById('cl_sheet_copied').style.display = 'none';
+    document.getElementById('cl_sheet_manual').style.display = '';
+  }
+
+  // Step 3 snippet
+  if (key) {
+    var lines = ["  '" + key + "' => [",
+                 "    'state'           => '" + state + "',"];
+    if (community) lines.push("    'community'       => '" + community + "',");
+    lines.push("    'publicFolderId'  => '" + (nbPublicId  || 'PASTE_PUBLIC_FOLDER_ID')  + "',");
+    lines.push("    'privateFolderId' => '" + (nbPrivateId || 'PASTE_PRIVATE_FOLDER_ID') + "',");
+    lines.push("    'webAppURL'       => 'PASTE_WEB_APP_URL_FROM_STEP_2',");
+    lines.push("  ],");
+    var snip = document.getElementById('cl_snippet');
+    var btn  = snip.querySelector('.cl-copy');
+    snip.textContent = lines.join('\n');
+    snip.appendChild(btn);
+  }
+
+  // Step 3 credentials path
+  var cp = document.getElementById('cl_creds_path');
+  var cpBtn = cp.querySelector('.cl-copy');
+  cp.textContent = key ? 'credentials/' + key + '.json' : 'credentials/BuildingKey.json';
+  cp.appendChild(cpBtn);
+
+  // Step 4 admin URL
+  var au = document.getElementById('cl_admin_url');
+  var auBtn = au.querySelector('.cl-copy');
+  au.textContent = key ? 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(key) : 'https://sheepsite.com/Scripts/admin.php?building=BuildingKey';
+  au.appendChild(auBtn);
+
+  // Step 6 footer script
+  var fs = document.getElementById('cl_footer_script');
+  var fsBtn = fs.querySelector('.cl-copy');
+  fs.textContent = key ? generateFooterScript(key) : 'Fill in building key above to generate script.';
+  fs.appendChild(fsBtn);
+}
+
+function generateFooterScript(key) {
+  return "<script>\nconst BUILDING_NAME = '" + key + "';\n\ndocument.addEventListener('DOMContentLoaded', function () {\n  const PUBLIC_URL  = 'https://sheepsite.com/Scripts/display-public-dir.php';\n  const PRIVATE_URL = 'https://sheepsite.com/Scripts/display-private-dir.php';\n\n  document.querySelectorAll('.gdrive-link').forEach(function (btn) {\n    var url = PUBLIC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);\n    var subdir = btn.getAttribute('data-subdir');\n    if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n    url += '&return=' + encodeURIComponent(window.location.href);\n    btn.href = url;\n  });\n\n  document.querySelectorAll('iframe[data-script=\"protected-report\"]').forEach(function (iframe) {\n    var url = 'https://sheepsite.com/Scripts/protected-report.php?building=' + encodeURIComponent(BUILDING_NAME);\n    var page = iframe.getAttribute('data-page');\n    if (page) url += '&page=' + encodeURIComponent(page);\n    iframe.onload = function () { var l = document.getElementById('doc-loader'); if (l) l.style.display='none'; };\n    iframe.src = url;\n  });\n\n  document.querySelectorAll('iframe[data-script=\"public-report\"]').forEach(function (iframe) {\n    var url = 'https://sheepsite.com/Scripts/public-report.php?building=' + encodeURIComponent(BUILDING_NAME);\n    var page = iframe.getAttribute('data-page');\n    if (page) url += '&page=' + encodeURIComponent(page);\n    url += '&nav=0';\n    iframe.onload = function () { var l = document.getElementById('doc-loader'); if (l) l.style.display='none'; };\n    iframe.src = url;\n  });\n\n  document.querySelectorAll('iframe[data-script=\"get-doc-byname\"]').forEach(function (iframe) {\n    var url = 'https://sheepsite.com/Scripts/get-doc-byname.php?building=' + encodeURIComponent(BUILDING_NAME);\n    var subdir = iframe.getAttribute('data-subdir');\n    var filename = iframe.getAttribute('data-filename');\n    if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n    if (filename) url += '&filename=' + encodeURIComponent(filename);\n    iframe.style.display = 'none';\n    iframe.onload = function () { iframe.style.display='block'; var l=document.getElementById('doc-loader'); if(l) l.style.display='none'; };\n    iframe.src = url;\n  });\n\n  document.querySelectorAll('a[href*=\"admin.php\"]').forEach(function (link) {\n    link.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);\n  });\n});\n\nfunction openFolder(subdir) {\n  var url = 'https://sheepsite.com/Scripts/display-public-dir.php?building=' + encodeURIComponent(BUILDING_NAME) + '&return=' + encodeURIComponent(window.location.href);\n  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n  window.location.href = url;\n}\nfunction openPrivateFolder(subdir) {\n  var url = 'https://sheepsite.com/Scripts/display-private-dir.php?building=' + encodeURIComponent(BUILDING_NAME) + '&return=' + encodeURIComponent(window.location.href);\n  if (subdir) url += '&path=' + encodeURIComponent(subdir);\n  window.location.href = url;\n}\nfunction openReport(page) {\n  window.location.href = 'https://sheepsite.com/Scripts/protected-report.php?building=' + encodeURIComponent(BUILDING_NAME) + '&page=' + encodeURIComponent(page) + '&return=' + encodeURIComponent(window.location.href);\n}\nfunction openPublicReport(page) {\n  window.location.href = 'https://sheepsite.com/Scripts/public-report.php?building=' + encodeURIComponent(BUILDING_NAME) + '&page=' + encodeURIComponent(page);\n}\nfunction openAdmin() {\n  window.location.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);\n}\nfunction openDoc(subdir, filename) {\n  var url = 'https://sheepsite.com/Scripts/get-doc-byname.php?building=' + encodeURIComponent(BUILDING_NAME) + '&filename=' + encodeURIComponent(filename);\n  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n  window.open(url, '_blank');\n}\n<\/script>";
+}
+
+function clCheck(cb, num) {
+  var el = document.querySelector('.checklist li:nth-child(' + num + ') .cl-num');
+  if (el) {
+    el.classList.toggle('done', cb.checked);
+    el.textContent = cb.checked ? '\u2713' : num;
+  }
+}
+
+function copyCode(id) {
+  var el  = document.getElementById(id);
+  var btn = el.querySelector('.cl-copy');
+  var txt = el.textContent.replace(btn ? btn.textContent : '', '').trim();
+  navigator.clipboard.writeText(txt).then(function () {
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function () { btn.textContent = orig; }, 1500);
+  });
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Trigger checklist updates on input changes (before folders are created)
+['nb_key','nb_displayname','nb_state','nb_community'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('input', function() { if (nbPublicId) updateChecklist(); });
+});
 </script>
 
 <?php else: ?>

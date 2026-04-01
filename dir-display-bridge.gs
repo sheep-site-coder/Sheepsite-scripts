@@ -24,8 +24,9 @@ function doGet(e) {
   if (action === 'docCheck')       return handleDocCheck(e);
   if (action === 'listDocFiles')   return handleListDocFiles(e);
   if (action === 'extractDocText') return handleExtractDocText(e);
-  if (action === 'stampBaseline')  return handleStampBaseline(e);
-  if (action === 'buildDocIndex')  return handleBuildDocIndex(e);
+  if (action === 'stampBaseline')         return handleStampBaseline(e);
+  if (action === 'buildDocIndex')         return handleBuildDocIndex(e);
+  if (action === 'setupBuildingFolders')  return handleSetupBuildingFolders(e);
 
   return jsonError('Unknown action');
 }
@@ -362,6 +363,89 @@ function handleDeleteFolder(e) {
 
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// Setup building folders — token required
+// Recursively clones folder structure (no files) from a
+// template folder into a new named folder under the parent.
+// Sets the Public subfolder sharing to Anyone-with-link.
+// params: templateFolderId, parentFolderId, buildingName, templateSheetId (optional)
+// returns: { ok, buildingFolderId, publicFolderId, privateFolderId, sheetId, sheetUrl }
+// -------------------------------------------------------
+function handleSetupBuildingFolders(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+
+  const templateFolderId = e.parameter.templateFolderId;
+  const parentFolderId   = e.parameter.parentFolderId;
+  const buildingName     = e.parameter.buildingName;
+  const templateSheetId  = e.parameter.templateSheetId || '';
+
+  if (!templateFolderId || !parentFolderId || !buildingName) {
+    return jsonError('Missing required parameters');
+  }
+
+  const templateFolder = DriveApp.getFolderById(templateFolderId);
+  const parentFolder   = DriveApp.getFolderById(parentFolderId);
+
+  // Create the top-level building folder
+  const buildingFolder = parentFolder.createFolder(buildingName);
+
+  // Recursively clone folder structure and files from template
+  function cloneFolderStructure(source, dest) {
+    // Copy files
+    const fileIter = source.getFiles();
+    while (fileIter.hasNext()) {
+      fileIter.next().makeCopy(dest);
+    }
+    // Copy subfolders recursively
+    const folderIter = source.getFolders();
+    while (folderIter.hasNext()) {
+      const sub    = folderIter.next();
+      const newSub = dest.createFolder(sub.getName());
+      cloneFolderStructure(sub, newSub);
+    }
+  }
+  cloneFolderStructure(templateFolder, buildingFolder);
+
+  // Find the Public and Private subfolders by name
+  function findSubfolder(parent, name) {
+    const iter = parent.getFolders();
+    while (iter.hasNext()) {
+      const f = iter.next();
+      if (f.getName() === name) return f;
+    }
+    return null;
+  }
+
+  const publicFolder  = findSubfolder(buildingFolder, 'Public');
+  const privateFolder = findSubfolder(buildingFolder, 'Private');
+
+  // Set Public folder to "Anyone with the link can view"
+  if (publicFolder) {
+    publicFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  }
+
+  // Copy the template Owner DB sheet into the building folder (if provided)
+  var sheetId  = null;
+  var sheetUrl = null;
+  if (templateSheetId) {
+    const sheetName = buildingName + ' Owner DB';
+    const newSheet  = DriveApp.getFileById(templateSheetId).makeCopy(sheetName, buildingFolder);
+    sheetId  = newSheet.getId();
+    sheetUrl = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit';
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      ok:               true,
+      buildingFolderId: buildingFolder.getId(),
+      publicFolderId:   publicFolder  ? publicFolder.getId()  : null,
+      privateFolderId:  privateFolder ? privateFolder.getId() : null,
+      sheetId:          sheetId,
+      sheetUrl:         sheetUrl
+    }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

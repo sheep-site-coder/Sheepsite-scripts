@@ -563,5 +563,78 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: March 31, 2026 (session 20 — master admin redesign, billing system steps 1-7)*
+---
+
+## Session 21 — Protected Files, PDF Embeds, Admin Manual Cleanup, Add New Building
+
+### file-manager.php
+- **Protected system files**: `Announcement Page 1` and `Mid-End Year Report` annotated as `protected: true` in `?json=list` PHP handler
+- Protected files show a **Replace** button (amber) + greyed "system file" label; no Rename or Delete
+- Replace flow: admin selects any file → uploads to folder → renames to exact protected name → migrates tags → deletes old file; website embed continues working by name
+- Hidden `<input id="replace-input">` + `replaceProtected()` / `handleReplaceSelect()` JS functions added
+- **Background storage refresh**: fire-and-forget `fetch()` on DOMContentLoaded calls `?json=storage_refresh` endpoint; updates `config/{building}.json` silently every time admin opens file manager
+
+### get-doc-byname.php
+- Now picks correct preview URL based on MIME type returned by GAS listing:
+  - Google Doc → `docs.google.com/document/d/{id}/preview`
+  - Google Sheet → `docs.google.com/spreadsheets/d/{id}/preview`
+  - Google Slides → `docs.google.com/presentation/d/{id}/preview`
+  - PDF / any other file → `drive.google.com/file/d/{id}/preview`
+- Enables replacing Google Doc embeds with PDFs (admin uses Replace button, no name change needed)
+
+### docs/build-manual.py (admin manual)
+- Removed all "manage files via Google Drive" references:
+  - Deleted "Access to Google Drive" from What You Need
+  - Deleted entire "Google Drive (Alternative Method)" section + screenshots
+  - Updated "How Publishing Works" — no Drive mention
+  - Changed both folder table headers from "Google Drive Folder" to "Folder"
+  - "Deleting a file is permanent" (was "removes it from Google Drive")
+  - Woolsy section: "correct folders" / "Public section" (no Drive)
+- Added **System files** blockquote explaining Replace button and why these files can't be renamed/deleted
+- Rebuild required: `python3 docs/build-manual.py` → upload `docs/Sheepsite-Admin-Manual.html`
+
+### building-detail.php — Add New Building (complete redesign of `?building=new`)
+- **Phase 1 form**: building key, display name, state, community + 3 pre-fillable Drive IDs (Template Folder, Association Folders, template sheet) + "Save as defaults" checkbox
+- **Create Drive Folders** button → AJAX POST → calls GAS `setupBuildingFolders` → returns public/private folder IDs + sheet URL
+- **Phase 2 checklist**: 6 numbered steps rendered after folder creation, all values pre-filled:
+  - Step 1: auto-done (green ✓), shows both folder IDs
+  - Step 2: "Open Sheet →" link + 3 remaining manual steps (BUILDING_NAME, deploy, triggers)
+  - Step 3: auto-generated `buildings.php` snippet (copy button) + credentials file path
+  - Step 4: exact admin URL (copy button) with setup instructions
+  - Step 5: owner import walkthrough
+  - Step 6: full footer script with building key pre-filled (copy button)
+- Master config IDs saved to `config/_master_config.json` (pre-filled on next new building)
+
+### dir-display-bridge.gs — new `setupBuildingFolders` action
+- Clones full folder structure AND files from template into `Association Folders/NewBuildingName/`
+- Sets `Public/` sharing to "Anyone with the link" (Viewer) automatically
+- Copies template Owner DB Google Sheet → names it `"BuildingName Owner DB"` → places in building folder → returns `sheetUrl`
+- Returns: `buildingFolderId`, `publicFolderId`, `privateFolderId`, `sheetId`, `sheetUrl`
+- **Requires GAS redeployment as new version**
+
+### config/_master_config.json (NEW)
+- Stores `templateFolderId`, `associationFolderId`, `templateSheetId` — persisted on first use via "Save as defaults"
+
+### NEW-SITE-GUIDE.md
+- Step 1 updated: describes automated folder + sheet creation via master admin dashboard
+- Step 2 updated: only 3 manual steps remain (BUILDING_NAME, deploy, triggers)
+
+---
+
+**Files to push to server (session 21):**
+- `file-manager.php`
+- `get-doc-byname.php`
+- `building-detail.php`
+- `dir-display-bridge.gs` — paste into GAS + **deploy new version**
+- `config/_master_config.json` — new file; fill in IDs via form + Save defaults
+- Run `python3 docs/build-manual.py` → upload `docs/Sheepsite-Admin-Manual.html`
+
+**One-time Drive prep before testing Add New Building:**
+- Put system PDFs (`Announcement Page 1`, `Mid-End Year Report`) in correct subfolder of template folder
+- Set up template Owner DB sheet (tabs + headers + script + library linked, but NOT deployed — deploy is per-building)
+- Get IDs for template folder, Association Folders, template sheet → paste in form → Save defaults
+
+---
+
+*Snapshot updated: March 31, 2026 (session 21 — protected files, PDF embeds, manual cleanup, Add New Building automation)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

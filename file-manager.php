@@ -191,6 +191,17 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
     unset($f);
   }
 
+  // Annotate system-protected files (embedded on building website by name — must not be renamed or deleted)
+  $protectedNames = ['Announcement Page 1', 'Mid-End Year Report'];
+  if (isset($data['files']) && is_array($data['files'])) {
+    foreach ($data['files'] as &$f) {
+      if (in_array($f['name'] ?? '', $protectedNames, true)) {
+        $f['protected'] = true;
+      }
+    }
+    unset($f);
+  }
+
   header('Content-Type: application/json');
   echo json_encode($data);
   exit;
@@ -461,6 +472,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .delete-btn:hover { background: #fff0f0; }
     .save-btn     { background: #0070f3 !important; color: #fff !important; border-color: #0070f3 !important; }
     .save-btn:hover:not(:disabled) { background: #005bb5 !important; }
+    .protected-label { font-size: 0.78rem; color: #999; font-style: italic; cursor: default; }
+    .replace-btn  { color: #7a4a00; border-color: #d0a060; }
+    .replace-btn:hover { background: #fff8f0; }
     .save-btn:disabled { opacity: 0.6; cursor: default; }
     .cancel-btn   { color: #555; }
 
@@ -523,6 +537,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </div>
 </div>
 <input type="file" id="file-input" style="display:none" multiple onchange="handleFileSelect(this)">
+<input type="file" id="replace-input" style="display:none" onchange="handleReplaceSelect(this)">
 
 <div id="listing"><p class="loading">Loading&hellip;</p></div>
 
@@ -627,7 +642,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (data.files && data.files.length) {
       html += '<div class="section-title">Files</div>';
       data.files.forEach(function (f) {
-        html += buildFileRow(f.id, f.name, f.size);
+        html += buildFileRow(f.id, f.name, f.size, f.protected, f.mimeType);
       });
     }
 
@@ -648,27 +663,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  function buildFileRow(fileId, fileName, fileSize) {
+  function buildFileRow(fileId, fileName, fileSize, isProtected, mimeType) {
     var id = esc(fileId);
     var nm = esc(fileName);
     var sz = esc(fileSize || '');
+    var actions;
+    if (isProtected) {
+      actions = '<span class="file-actions">'
+              + '<button class="action-btn replace-btn" onclick="replaceProtected(\'' + id + '\',\'' + nm + '\')">Replace</button>'
+              + '<span class="protected-label" title="This file is embedded on the building website by name and cannot be renamed or deleted.">system file</span>'
+              + '</span>';
+    } else {
+      actions = '<span class="file-actions">'
+              + '<button class="action-btn rename-btn" onclick="startRename(\'' + id + '\',\'' + nm + '\')">Rename</button>'
+              + '<button class="action-btn delete-btn" onclick="deleteFile(\'' + id + '\',\'' + nm + '\')">Delete</button>'
+              + '</span>';
+    }
+    var renameForm = isProtected ? '' :
+        '<span class="rename-form" id="rform-' + id + '">'
+      +   '<input type="text" class="rename-input" id="rinput-' + id + '" value="' + nm + '">'
+      +   '<button class="action-btn save-btn"   id="rsave-' + id + '" onclick="saveRename(\'' + id + '\')">Save</button>'
+      +   '<button class="action-btn cancel-btn" onclick="cancelRename(\'' + id + '\')">Cancel</button>'
+      + '</span>';
     return '<div class="file-row" id="row-' + id + '">'
          +   '<span class="file-icon">&#128196;</span>'
          +   '<span class="file-info" id="info-' + id + '">'
          +     '<span class="file-name" id="fname-' + id + '">' + nm + '</span>'
          +     '<span class="file-size">' + sz + '</span>'
-         +     '<span class="file-actions">'
-         +       '<button class="action-btn rename-btn" onclick="startRename(\'' + id + '\',\'' + nm + '\')">Rename</button>'
-         +       '<button class="action-btn delete-btn" onclick="deleteFile(\'' + id + '\',\'' + nm + '\')">Delete</button>'
-         +     '</span>'
+         +     actions
          +   '</span>'
-         +   '<span class="rename-form" id="rform-' + id + '">'
-         +     '<input type="text" class="rename-input" id="rinput-' + id + '" value="' + nm + '">'
-         +     '<button class="action-btn save-btn"   id="rsave-' + id + '" onclick="saveRename(\'' + id + '\')">Save</button>'
-         +     '<button class="action-btn cancel-btn" onclick="cancelRename(\'' + id + '\')">Cancel</button>'
-         +   '</span>'
+         +   renameForm
          + '</div>';
   }
+
+  // -------------------------------------------------------
+  // Replace protected file
+  // -------------------------------------------------------
+  var replaceTargetId   = null;
+  var replaceTargetName = null;
+
+  window.replaceProtected = function (fileId, fileName) {
+    replaceTargetId   = fileId;
+    replaceTargetName = fileName;
+    var input = document.getElementById('replace-input');
+    input.value = '';
+    input.click();
+  };
+
+  window.handleReplaceSelect = function (input) {
+    if (!input.files.length) return;
+    var file = input.files[0];
+    input.value = '';
+
+    var oldId   = replaceTargetId;
+    var oldName = replaceTargetName;
+    replaceTargetId   = null;
+    replaceTargetName = null;
+
+    if (!oldId || !oldName || !currentFolderId) return;
+
+    // Show progress on the drop zone
+    var dropLabel = document.getElementById('drop-label');
+    var progress  = document.getElementById('upload-progress');
+    var fill      = document.getElementById('progress-fill');
+    var text      = document.getElementById('progress-text');
+    dropLabel.style.display = 'none';
+    progress.style.display  = 'block';
+    fill.style.width = '0%';
+    text.textContent = 'Uploading replacement\u2026 0%';
+
+    var fd = new FormData();
+    fd.append('action',   'upload');
+    fd.append('folderId', currentFolderId);
+    fd.append('tree',     currentTree);
+    fd.append('file',     file);
+
+    var xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        var pct = Math.round(e.loaded / e.total * 100);
+        fill.style.width = pct + '%';
+        text.textContent = pct < 100 ? ('Uploading replacement\u2026 ' + pct + '%') : 'Processing\u2026';
+      }
+    };
+    xhr.onload = function () {
+      var result;
+      try { result = JSON.parse(xhr.responseText); } catch (e) { result = {}; }
+      if (!result.ok) {
+        dropLabel.style.display = '';
+        progress.style.display  = 'none';
+        alert('Upload failed: ' + (result.error || 'Unknown error'));
+        return;
+      }
+      var newId = result.id;
+      text.textContent = 'Renaming\u2026';
+      // Rename new file to the exact protected name
+      post({ action: 'rename', fileId: newId, newName: oldName })
+        .then(function () {
+          text.textContent = 'Migrating tags\u2026';
+          return post({ action: 'migrateTags', oldFileId: oldId, newFileId: newId }).catch(function () {});
+        })
+        .then(function () {
+          text.textContent = 'Removing old file\u2026';
+          return post({ action: 'delete', fileId: oldId }).catch(function () {});
+        })
+        .then(function () {
+          dropLabel.style.display = '';
+          progress.style.display  = 'none';
+          loadListing();
+        });
+    };
+    xhr.onerror = function () {
+      dropLabel.style.display = '';
+      progress.style.display  = 'none';
+      alert('Network error during upload');
+    };
+    xhr.open('POST', base);
+    xhr.send(fd);
+  };
 
   // -------------------------------------------------------
   // Rename
