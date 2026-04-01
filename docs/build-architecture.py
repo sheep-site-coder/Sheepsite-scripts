@@ -66,7 +66,8 @@ html = f"""<!DOCTYPE html>
   <li><a href="#auth">Authentication Architecture</a></li>
   <li><a href="#woolsy">Woolsy Chatbot Stack</a></li>
   <li><a href="#data">Data &amp; Config Files</a></li>
-  <li><a href="#buildings">Adding a Building</a></li>
+  <li><a href="#buildings">Adding and Removing Associations</a></li>
+  <li><a href="#billing">Billing &amp; Invoicing</a></li>
   <li><a href="#operator">Operator Procedures</a></li>
 </ol>
 </nav>
@@ -263,7 +264,7 @@ new library version.</p>
   <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage, ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
   <tr><td><code>building-detail.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate), Woolsy credits, storage, ToS. Also handles <code>?building=new</code> — automated Drive folder + Sheet creation via GAS, plus setup checklist.</td></tr>
+      <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate, discountPct), Woolsy credits, storage, ToS, and Billing (invoice preview, generate invoice, invoice history, mark paid). Also handles <code>?building=new</code> — automated Drive folder + Sheet creation via GAS, plus setup checklist.</td></tr>
   <tr><td><code>association-remove.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Master admin tool to decommission an association. Deletes server-side files (credentials, config, tags, Woolsy entries). Requires typing the building key to confirm. Shows manual checklist for buildings.php edit and Drive folder removal.</td></tr>
   <tr><td><code>suspension.php</code> <span class="tag tag-php">PHP</span></td>
@@ -276,6 +277,10 @@ new library version.</p>
       <td>Full-text search across public/private Drive trees.</td></tr>
   <tr><td><code>setup-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>One-time tool to create <code>_master.json</code> with a bcrypt-hashed master password. Upload, visit once, delete immediately. No longer needed for per-building admins (handled by forgot-password.php).</td></tr>
+  <tr><td><code>invoice-helpers.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Shared invoicing library. Functions: <code>generateInvoice()</code>, <code>markInvoicePaid()</code>, <code>loadInvoices()</code>, <code>buildLineItems()</code>, <code>unpaidInvoiceExists()</code>. Sends HTML invoice and receipt emails from <code>billing@sheepsite.com</code>. Used by building-detail.php (manual) and storage-cron.php (auto).</td></tr>
+  <tr><td><code>storage-cron.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Nightly cron script. Refreshes Drive storage for every building (calls dir-display-bridge.gs storageReport, saves to config/{{building}}.json). Also checks each building&rsquo;s renewal date — if within 30 days and no unpaid invoice exists for that period, auto-generates and emails an invoice. Run via cPanel Cron Jobs (CLI) or HTTP trigger with token.</td></tr>
 </table>
 
 <h3>Woolsy Chatbot Scripts</h3>
@@ -428,7 +433,9 @@ coverage without manual tracking.</p>
   <tr><td><code>faqs/{{building}}_rules.md</code> <span class="tag tag-data">data</span></td><td>Woolsy knowledge base for one building. Versioned. Has .bak backup.</td><td>No</td></tr>
   <tr><td><code>faqs/{{building}}_docindex.txt</code> <span class="tag tag-data">data</span></td><td>Document index for Woolsy system prompt.</td><td>No</td></tr>
   <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings.</td><td>No</td></tr>
-  <tr><td><code>config/{{building}}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code>, <code>storageLimit</code>, <code>tosAccepted</code>, <code>floorGrouping</code>.</td><td>No</td></tr>
+  <tr><td><code>config/{{building}}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>discountPct</code> (optional, applied to site fee on invoices), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code>, <code>storageLimit</code>, <code>storageUpdated</code> (ISO timestamp of last cron refresh), <code>tosAccepted</code>, <code>hasDomain</code>, <code>floorGrouping</code>.</td><td>No</td></tr>
+  <tr><td><code>invoices/{{building}}/{{id}}.json</code> <span class="tag tag-data">data</span></td><td>One JSON file per invoice. Fields: <code>id</code> (e.g. LyndhurstH-0001), <code>seq</code>, <code>building</code>, <code>date</code>, <code>dueDate</code> (date + 30 days), <code>renewalDate</code>, <code>status</code> (unpaid/paid), <code>lineItems</code> (array of description + amount), <code>total</code>, <code>paidDate</code>, <code>generatedBy</code> (manual/cron). Folder is protected by .htaccess — not web-accessible.</td><td>No</td></tr>
+  <tr><td><code>assets/sheepsite-mascot.jpg</code></td><td>SheepSite mascot image. Referenced by URL in HTML invoice and receipt emails.</td><td>No (binary)</td></tr>
 </table>
 
 <div class="warn"><strong>Note:</strong> All <code>credentials/</code> and <code>faqs/</code> data files
@@ -461,7 +468,58 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 
 {divider()}
 
-<h2 id="operator">10. Operator Procedures</h2>
+<h2 id="billing">10. Billing &amp; Invoicing</h2>
+
+<h3>Overview</h3>
+<p>SheepSite uses a simple file-based invoicing system. Invoices are JSON files stored in
+<code>invoices/{{building}}/</code>. The system supports recurring annual invoices (payable by
+check or Stripe) and manual one-off invoices. Woolsy credit purchases are handled separately
+via Stripe only and are not part of this system.</p>
+
+<h3>Invoice Line Items</h3>
+<p>Built by <code>buildLineItems()</code> in <code>invoice-helpers.php</code> from the building config and <code>config/pricing.json</code>:</p>
+<ol>
+  <li>Annual site fee (monthly price &times; 12)</li>
+  <li>Discount &mdash; if <code>discountPct</code> is set, applied to the site fee only</li>
+  <li>Domain renewal &mdash; if <code>hasDomain</code> is true and a domain price is set in pricing</li>
+  <li>Storage upgrade &mdash; if the building&rsquo;s <code>storageLimit</code> exceeds the default and matches a priced tier in <code>storageOptions</code></li>
+</ol>
+
+<h3>Generating an Invoice</h3>
+<p><strong>Manual:</strong> In <code>building-detail.php</code>, the Billing section shows a live preview of the next invoice and a <strong>Generate &amp; Email Invoice</strong> button. Clicking generates the JSON, saves it to <code>invoices/{{building}}/</code>, and emails it to the building&rsquo;s <code>contactEmail</code>.</p>
+<p><strong>Automatic (cron):</strong> <code>storage-cron.php</code> runs nightly. After refreshing storage, it checks each building&rsquo;s <code>renewalDate</code>. If the renewal is within 30 days <em>and</em> no unpaid invoice already exists for that renewal period, it auto-generates and emails the invoice. The duplicate check (<code>unpaidInvoiceExists()</code>) prevents re-sending if the cron runs multiple times.</p>
+
+<h3>Marking an Invoice Paid</h3>
+<p>In <code>building-detail.php</code>, the invoice history table has a <strong>Mark Paid</strong> button on each unpaid invoice. Clicking it:</p>
+<ol>
+  <li>Sets <code>status: paid</code> and <code>paidDate</code> on the invoice JSON</li>
+  <li>Advances <code>renewalDate</code> in <code>config/{{building}}.json</code> by exactly one year from the <em>current</em> renewal date (not from today)</li>
+  <li>Clears the <code>suspended</code> flag if set</li>
+  <li>Sends an HTML receipt email to the building&rsquo;s contact email</li>
+</ol>
+
+<h3>Email Addresses</h3>
+<table>
+  <tr><th>Address</th><th>Used for</th></tr>
+  <tr><td><code>billing@sheepsite.com</code></td><td>Invoice and receipt emails. Reply-To is also set to this address so customers can reply directly.</td></tr>
+  <tr><td><code>noreply@sheepsite.com</code></td><td>System emails: storage alerts, Woolsy billing triggers, ToS notifications.</td></tr>
+</table>
+
+<h3>Invoice Email Design</h3>
+<p>HTML email with the SheepSite mascot logo, green brand header, line items table (light green header row), total block, and payment options footer. Receipt email has a green confirmation panel with invoice number, amount, payment date, and next renewal date. Both use <code>invoiceEmailHtml()</code> as a shared wrapper in <code>invoice-helpers.php</code>.</p>
+
+<h3>Discount</h3>
+<p>A per-building <code>discountPct</code> field in <code>config/{{building}}.json</code> (set in building-detail.php Configuration section) applies a percentage discount to the annual site fee only. It appears as a separate line item on the invoice. Domain and storage charges are never discounted.</p>
+
+<h3>Storage Cron Schedule</h3>
+<p>Recommended cPanel cron schedule: <code>0 3 * * *</code> (3 AM daily). Command:</p>
+<pre>php /home/youraccount/sheepsite.com/Scripts/storage-cron.php</pre>
+<p>Can also be triggered manually via HTTP: <code>https://sheepsite.com/Scripts/storage-cron.php?token=CRON_TOKEN</code>.
+Results are logged to <code>storage-cron.log</code> in the Scripts folder.</p>
+
+{divider()}
+
+<h2 id="operator">11. Operator Procedures</h2>
 
 <p>This section documents recurring maintenance tasks performed by the SheepSite operator (Alain).</p>
 

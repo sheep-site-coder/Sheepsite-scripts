@@ -293,7 +293,8 @@ function sendInvoiceEmail(array $invoice, array $bldCfg): void {
 
   $html    = invoiceEmailHtml($body);
   $headers = implode("\r\n", [
-    'From: SheepSite.com <noreply@sheepsite.com>',
+    'From: SheepSite.com <billing@sheepsite.com>',
+    'Reply-To: billing@sheepsite.com',
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',
@@ -333,7 +334,8 @@ function sendReceiptEmail(array $invoice, array $cfg): void {
 
   $html    = invoiceEmailHtml($body);
   $headers = implode("\r\n", [
-    'From: SheepSite.com <noreply@sheepsite.com>',
+    'From: SheepSite.com <billing@sheepsite.com>',
+    'Reply-To: billing@sheepsite.com',
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',
