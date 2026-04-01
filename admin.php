@@ -162,7 +162,6 @@ $settingsMessageType = 'ok';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_building_settings'])) {
   $config = loadBuildingConfig($building);
   $config['contactEmail'] = trim($_POST['contact_email'] ?? '');
-  $config['siteURL']      = rtrim(trim($_POST['site_url'] ?? ''), '/');
   if (saveBuildingConfig($building, $config)) {
     $settingsMessage = 'Building settings saved.';
   } else {
@@ -409,13 +408,14 @@ if (!$mustChange) {
                style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
       </div>
       <div style="flex:1;min-width:220px;">
-        <label for="site_url" style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
+        <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
           Building website URL
         </label>
-        <input type="text" id="site_url" name="site_url"
-               value="<?= $siteURL ?>"
-               placeholder="https://lyndhurstH.com"
-               style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+        <?php if ($siteURL): ?>
+          <a href="<?= $siteURL ?>" target="_blank" style="font-size:0.9rem;"><?= $siteURL ?></a>
+        <?php else: ?>
+          <span style="font-size:0.9rem;color:#999;">Not set — configure in Master Admin</span>
+        <?php endif; ?>
       </div>
       <button type="submit" name="save_building_settings" class="save-btn" style="white-space:nowrap;">Save</button>
     </form>

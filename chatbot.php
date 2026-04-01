@@ -59,6 +59,8 @@ if (!$question || !isset($buildings[$building])) {
     exit;
 }
 
+require __DIR__ . '/suspension.php';
+
 // --- Credit check ---
 $credits        = loadCredits();
 $buildingCredit = $credits[$building] ?? ['allocated' => CREDITS_DEFAULT_ALLOCATED, 'used' => 0];

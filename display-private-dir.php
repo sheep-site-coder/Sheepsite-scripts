@@ -38,6 +38,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
 
 $buildingConfig = $buildings[$building];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+require __DIR__ . '/suspension.php';
 $returnURL      = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
 

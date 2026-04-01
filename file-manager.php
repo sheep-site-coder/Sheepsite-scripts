@@ -14,7 +14,7 @@ define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('CONFIG_DIR',        __DIR__ . '/config/');
 define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
-define('MAX_UPLOAD_BYTES',  15 * 1024 * 1024); // 15 MB
+define('MAX_UPLOAD_BYTES',  30 * 1024 * 1024); // 30 MB
 
 // -------------------------------------------------------
 // Validate building + session
@@ -67,7 +67,7 @@ function appsScriptPost(array $payload): string {
       CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
       CURLOPT_RETURNTRANSFER => true,
       CURLOPT_FOLLOWLOCATION => true,
-      CURLOPT_TIMEOUT        => 60,
+      CURLOPT_TIMEOUT        => 270,
     ]);
     $resp = curl_exec($ch);
     curl_close($ch);
@@ -192,7 +192,7 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
   }
 
   // Annotate system-protected files (embedded on building website by name — must not be renamed or deleted)
-  $protectedNames = ['Announcement Page 1', 'Mid-End Year Report'];
+  $protectedNames = ['Announcement Page1', 'Mid-End Year Report'];
   if (isset($data['files']) && is_array($data['files'])) {
     foreach ($data['files'] as &$f) {
       if (in_array($f['name'] ?? '', $protectedNames, true)) {
@@ -216,6 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // ---- Upload ----
   if ($action === 'upload') {
+    set_time_limit(300);
     $folderId = trim($_POST['folderId'] ?? '');
 
     if (!$folderId || !preg_match('/^[a-zA-Z0-9_-]+$/', $folderId)) {
@@ -230,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $file = $_FILES['file'];
     if ($file['size'] > MAX_UPLOAD_BYTES) {
-      echo json_encode(['ok' => false, 'error' => 'File exceeds 15 MB limit']);
+      echo json_encode(['ok' => false, 'error' => 'File exceeds 30 MB limit']);
       exit;
     }
 
@@ -513,7 +514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <p style="font-size:0.9rem;color:#555;margin-bottom:1.25rem;">
   Upload, delete, rename, and organize files in the Public and Private folders.
   Drag one or more files onto the drop zone to upload, or click Browse to select.
-  Maximum file size is 15 MB.
+  Maximum file size is 30 MB.
 </p>
 
 <div class="tabs">
@@ -549,7 +550,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   var currentPath     = '';
   var currentFolderId = null;
   var currentFiles    = [];   // flat list of { id, name } for duplicate detection
-  var renamingId      = null;
+  var renamingId        = null;
+  var renamingFolderId  = null;
 
   // -------------------------------------------------------
   // Bootstrap
@@ -627,14 +629,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       html += '<div class="section-title">Folders</div>';
       data.folders.forEach(function (f) {
         var folderPath = currentPath ? currentPath + '/' + f.name : f.name;
-        var delBtn = f.deletable
-          ? '<button class="action-btn delete-btn folder-del-btn" onclick="event.stopPropagation();deleteFolder(\'' + esc(f.id) + '\',\'' + esc(f.name) + '\')">Delete</button>'
-          : '';
-        html += '<div class="folder-row" onclick="navigate(\'' + esc(folderPath) + '\')">'
+        var fid = esc(f.id);
+        var fnm = esc(f.name);
+        var actionsHtml = '';
+        var renameFormHtml = '';
+        if (f.deletable) {
+          actionsHtml = '<span id="factions-' + fid + '" class="file-actions">'
+            + '<button class="action-btn rename-btn" onclick="event.stopPropagation();startFolderRename(\'' + fid + '\',\'' + fnm + '\')">Rename</button>'
+            + '<button class="action-btn delete-btn folder-del-btn" onclick="event.stopPropagation();deleteFolder(\'' + fid + '\',\'' + fnm + '\')">Delete</button>'
+            + '</span>';
+          renameFormHtml = '<span class="rename-form" id="frform-' + fid + '" onclick="event.stopPropagation()">'
+            + '<input type="text" class="rename-input" id="frinput-' + fid + '" value="' + fnm + '">'
+            + '<button class="action-btn save-btn" id="frsave-' + fid + '" onclick="saveFolderRename(\'' + fid + '\')">Save</button>'
+            + '<button class="action-btn cancel-btn" onclick="cancelFolderRename(\'' + fid + '\')">Cancel</button>'
+            + '</span>';
+        }
+        html += '<div class="folder-row" id="frow-' + fid + '" onclick="navigate(\'' + esc(folderPath) + '\')">'
               + '<span class="folder-icon">&#128193;</span>'
-              + '<span class="folder-name">' + esc(f.name) + '</span>'
-              + delBtn
-              + '<span class="folder-arrow">&#8250;</span>'
+              + '<span class="folder-name" id="ffname-' + fid + '">' + fnm + '</span>'
+              + actionsHtml
+              + renameFormHtml
+              + '<span class="folder-arrow" id="farrow-' + fid + '">&#8250;</span>'
               + '</div>';
       });
     }
@@ -657,6 +672,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter')  saveRename(f.id);
             if (e.key === 'Escape') cancelRename(f.id);
+          });
+        }
+      });
+    }
+    if (data.folders) {
+      data.folders.forEach(function (f) {
+        var input = document.getElementById('frinput-' + f.id);
+        if (input) {
+          input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter')  saveFolderRename(f.id);
+            if (e.key === 'Escape') cancelFolderRename(f.id);
           });
         }
       });
@@ -835,6 +861,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   };
 
   // -------------------------------------------------------
+  // Folder rename
+  // -------------------------------------------------------
+  window.startFolderRename = function (folderId, folderName) {
+    if (renamingFolderId && renamingFolderId !== folderId) cancelFolderRename(renamingFolderId);
+    renamingFolderId = folderId;
+    document.getElementById('ffname-'   + folderId).style.display = 'none';
+    var actions = document.getElementById('factions-' + folderId);
+    if (actions) actions.style.display = 'none';
+    document.getElementById('farrow-'   + folderId).style.display = 'none';
+    var form = document.getElementById('frform-' + folderId);
+    form.style.display = 'flex';
+    form.style.flex    = '1';
+    var input = document.getElementById('frinput-' + folderId);
+    input.value = folderName;
+    input.focus();
+    input.select();
+  };
+
+  window.cancelFolderRename = function (folderId) {
+    document.getElementById('ffname-'   + folderId).style.display = '';
+    var actions = document.getElementById('factions-' + folderId);
+    if (actions) actions.style.display = '';
+    document.getElementById('farrow-'   + folderId).style.display = '';
+    document.getElementById('frform-'   + folderId).style.display = 'none';
+    if (renamingFolderId === folderId) renamingFolderId = null;
+  };
+
+  window.saveFolderRename = function (folderId) {
+    var input   = document.getElementById('frinput-' + folderId);
+    var saveBtn = document.getElementById('frsave-'  + folderId);
+    var newName = input.value.trim();
+    var oldName = document.getElementById('ffname-'  + folderId).textContent;
+
+    if (!newName) { input.focus(); return; }
+    if (newName === oldName) { cancelFolderRename(folderId); return; }
+
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving\u2026';
+
+    post({ action: 'rename', fileId: folderId, newName: newName })
+      .then(function (d) {
+        if (d.ok) {
+          renamingFolderId = null;
+          loadListing();
+        } else {
+          alert('Rename failed: ' + (d.error || 'Unknown error'));
+          saveBtn.disabled    = false;
+          saveBtn.textContent = 'Save';
+        }
+      })
+      .catch(function () {
+        alert('Rename failed \u2014 please try again');
+        saveBtn.disabled    = false;
+        saveBtn.textContent = 'Save';
+      });
+  };
+
+  // -------------------------------------------------------
   // Delete
   // -------------------------------------------------------
   window.deleteFile = function (fileId, fileName) {
@@ -945,7 +1029,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Upload queue — processes files one at a time
   // -------------------------------------------------------
   function uploadQueue(files) {
-    var MAX     = 15 * 1024 * 1024;
+    var MAX     = 30 * 1024 * 1024;
     var total   = files.length;
     var index   = 0;
     var errors  = [];
@@ -954,7 +1038,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     var tooBig = files.filter(function (f) { return f.size > MAX; });
     if (tooBig.length) {
       alert(tooBig.map(function (f) {
-        return '"' + f.name + '" (' + fmtSize(f.size) + ') exceeds 15 MB';
+        return '"' + f.name + '" (' + fmtSize(f.size) + ') exceeds 30 MB';
       }).join('\n') + '\n\nThese files will be skipped.');
       files = files.filter(function (f) { return f.size <= MAX; });
       if (!files.length) return;

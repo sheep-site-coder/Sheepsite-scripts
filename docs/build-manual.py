@@ -166,7 +166,7 @@ html = f"""<!DOCTYPE html>
 <blockquote><strong>Forgot your password?</strong> Click the &ldquo;Forgot password?&rdquo; link on the login page. The system will email a temporary password to the President. Enter the <strong>President&rsquo;s unit number</strong> as the security verification.</blockquote>
 
 <h3>Terms of Service</h3>
-<p>The first time you log in to the admin panel, you will be presented with the SheepSite Terms of Service agreement before accessing any admin features. You must read the agreement in full and click <strong>I Accept</strong> to continue. Your acceptance is recorded with a timestamp.</p>
+<p>When you log in to the admin panel, you may be presented with the SheepSite Terms of Service agreement before accessing any admin features &mdash; on your first login, or whenever SheepSite has updated its terms. You must read the agreement in full and click <strong>I Accept</strong> to continue. Your acceptance is recorded with a timestamp.</p>
 <ul>
   <li><strong>Decline &amp; Log Out</strong> &mdash; if you click Decline, you will be logged out immediately. You must accept the Terms of Service to use the admin panel.</li>
   <li><strong>Re-acceptance</strong> &mdash; from time to time SheepSite may update its Terms of Service. When this happens, you will be prompted to review and re-accept the updated agreement on your next login. Your previous acceptance is automatically archived &mdash; it is not lost.</li>
@@ -187,7 +187,7 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
   <tr><td><strong>Woolsy Knowledge Base</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
-  <tr><td><strong>Building Settings</strong></td><td>Set the building website URL. Used for links in system-generated emails (welcome emails, password resets) so they return residents to the right site.</td></tr>
+  <tr><td><strong>Building Settings</strong></td><td>Update the building contact email address, used for resident change requests and system notifications. The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
 

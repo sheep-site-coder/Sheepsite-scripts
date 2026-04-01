@@ -32,6 +32,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
 }
 
 $buildLabel = ucwords(str_replace(['_','-'], ' ', $building));
+require __DIR__ . '/suspension.php';
 $sessionKey = 'private_auth_' . $building;
 
 $q = ''; // unused — question is passed via postMessage from the public widget

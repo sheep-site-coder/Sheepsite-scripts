@@ -2,7 +2,7 @@
 // -------------------------------------------------------
 // building-detail.php
 // Per-building management page — operator view.
-// Also handles "Add New Building" when ?building=new.
+// Also handles "Add New Association" (?building=new).
 //
 //   https://sheepsite.com/Scripts/building-detail.php?building=LyndhurstH
 //   https://sheepsite.com/Scripts/building-detail.php?building=new
@@ -97,7 +97,7 @@ function saveMasterConfig(array $cfg): void {
 $message     = '';
 $messageType = 'ok';
 
-// ---- AJAX: create Drive folders for new building ----
+// ---- AJAX: create Drive folders for new association ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isNew) {
   header('Content-Type: application/json');
   $action = $_POST['action'] ?? '';
@@ -171,8 +171,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     $cfg['contactEmail'] = trim($_POST['contact_email'] ?? '');
     $cfg['hasDomain']    = isset($_POST['has_domain']);
     $renewalRaw = trim($_POST['renewal_date'] ?? '');
-    if ($renewalRaw) $cfg['renewalDate'] = $renewalRaw;
-    elseif (isset($cfg['renewalDate'])) unset($cfg['renewalDate']);
+    if ($renewalRaw) {
+      $cfg['renewalDate'] = $renewalRaw;
+      // Clear suspension if new renewal date is in the future
+      if (strtotime($renewalRaw) > time()) unset($cfg['suspended']);
+    } elseif (isset($cfg['renewalDate'])) {
+      unset($cfg['renewalDate']);
+    }
     saveBuildingConfig($buildingKey, $cfg);
     $message = 'Configuration saved.';
   }
@@ -275,7 +280,7 @@ if (!$isNew) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title><?= $isNew ? 'Add New Building' : htmlspecialchars($label) . ' — Detail' ?></title>
+  <title><?= $isNew ? 'Add New Association' : htmlspecialchars($label) . ' — Detail' ?></title>
   <style>
     * { box-sizing: border-box; }
     body        { font-family: sans-serif; max-width: 780px; margin: 3rem auto; padding: 0 1rem; }
@@ -334,7 +339,7 @@ if (!$isNew) {
 <body>
 
 <div class="top-bar">
-  <h1><?= $isNew ? 'Add New Building' : htmlspecialchars($label) ?></h1>
+  <h1><?= $isNew ? 'Add New Association' : htmlspecialchars($label) ?></h1>
   <a href="master-admin.php" class="back">← Master Admin</a>
 </div>
 
@@ -525,7 +530,7 @@ if (!$isNew) {
       <div class="cl-body">
         <div class="cl-title">Set Up the Admin Account</div>
         <div class="cl-steps">
-          Visit the admin page for the new building &mdash; it will redirect automatically to the password reset flow:
+          Visit the admin page for the new association &mdash; it will redirect automatically to the password reset flow:
           <div class="cl-code" id="cl_admin_url">https://sheepsite.com/Scripts/admin.php?building=BuildingKey<button class="cl-copy" onclick="copyCode('cl_admin_url')">Copy</button></div>
           <ol>
             <li>Enter the <strong>President&rsquo;s unit number</strong> as the secret verification</li>
@@ -545,7 +550,7 @@ if (!$isNew) {
         <div class="cl-title">Import Owners</div>
         <div class="cl-steps">
           <ol>
-            <li>Log in to the Admin Dashboard for the new building</li>
+            <li>Log in to the Admin Dashboard for the new association</li>
             <li>Click <strong>Manage Users</strong> &rarr; <strong>Import from Association Database Sheet</strong></li>
             <li>Enter a temporary password that you will distribute to owners &rarr; click <strong>Import</strong></li>
             <li>All imported accounts have <em>must change password</em> set &mdash; owners will be forced to set their own password on first login</li>

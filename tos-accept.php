@@ -130,7 +130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="header">
     <h1><?= htmlspecialchars($buildLabel) ?> – Terms of Service</h1>
-    <p>You must review and accept the SheepSite Terms of Service before accessing the admin panel.</p>
+    <p>You must review and accept the SheepSite Terms of Service before accessing the admin panel.
+       If this is your first time here, this is your initial acceptance. If you have accepted before,
+       our Terms of Service have been updated and your renewed acceptance is required to continue.</p>
   </div>
 
   <?php if ($declined): ?>

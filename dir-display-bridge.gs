@@ -303,7 +303,7 @@ function handleDeleteFile(e) {
 }
 
 // -------------------------------------------------------
-// Rename file — token required
+// Rename file or folder — token required
 // params: fileId, newName
 // -------------------------------------------------------
 function handleRenameFile(e) {
@@ -313,7 +313,11 @@ function handleRenameFile(e) {
   const newName = e.parameter.newName;
   if (!fileId || !newName) return jsonError('Missing fileId or newName');
 
-  DriveApp.getFileById(fileId).setName(newName);
+  try {
+    DriveApp.getFileById(fileId).setName(newName);
+  } catch (err) {
+    DriveApp.getFolderById(fileId).setName(newName);
+  }
 
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true }))

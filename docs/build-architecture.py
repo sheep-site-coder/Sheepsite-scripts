@@ -261,7 +261,13 @@ new library version.</p>
   <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Building-level Woolsy admin sub-page (accessible from admin.php Woolsy card).</td></tr>
   <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>SheepSite operator dashboard (Alain only). Authenticated with <code>credentials/_master.json</code>. Session key: <code>master_admin_auth</code>. Card layout: Woolsy Management (credits table + top-up per building), future: renewals. URL: <code>master-admin.php</code> (no building param).</td></tr>
+      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage, ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
+  <tr><td><code>building-detail.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate), Woolsy credits, storage, ToS. Also handles <code>?building=new</code> — automated Drive folder + Sheet creation via GAS, plus setup checklist.</td></tr>
+  <tr><td><code>association-remove.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Master admin tool to decommission an association. Deletes server-side files (credentials, config, tags, Woolsy entries). Requires typing the building key to confirm. Shows manual checklist for buildings.php edit and Drive folder removal.</td></tr>
+  <tr><td><code>suspension.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Shared suspension check. Included by all resident-facing pages after <code>$building</code> is validated. Reads <code>config/{{building}}.json</code>; auto-sets <code>suspended:true</code> if <code>renewalDate</code> has passed. Outputs a "Service Unavailable" page (or JSON error for API endpoints) and exits.</td></tr>
   <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Admin file management tool for Drive folders.</td></tr>
   <tr><td><code>tag-admin.php</code> <span class="tag tag-php">PHP</span></td>
@@ -422,6 +428,7 @@ coverage without manual tracking.</p>
   <tr><td><code>faqs/{{building}}_rules.md</code> <span class="tag tag-data">data</span></td><td>Woolsy knowledge base for one building. Versioned. Has .bak backup.</td><td>No</td></tr>
   <tr><td><code>faqs/{{building}}_docindex.txt</code> <span class="tag tag-data">data</span></td><td>Document index for Woolsy system prompt.</td><td>No</td></tr>
   <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings.</td><td>No</td></tr>
+  <tr><td><code>config/{{building}}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code>, <code>storageLimit</code>, <code>tosAccepted</code>, <code>floorGrouping</code>.</td><td>No</td></tr>
 </table>
 
 <div class="warn"><strong>Note:</strong> All <code>credentials/</code> and <code>faqs/</code> data files
@@ -430,19 +437,27 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 
 {divider()}
 
-<h2 id="buildings">9. Adding a Building</h2>
+<h2 id="buildings">9. Adding and Removing Associations</h2>
 
+<h3>Adding a New Association</h3>
+
+<p>The automated path (recommended): in <code>master-admin.php</code>, click <strong>Add New Association</strong> in the System Tools grid. This opens <code>building-detail.php?building=new</code>, which:</p>
 <ol>
-  <li>Add an entry to <code>buildings.php</code>: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code></li>
-  <li>Deploy <code>buildings.php</code> to the server</li>
-  <li>Create the Google Sheet for the building, add building-script.gs bound to it, deploy as web app, install the two triggers</li>
-  <li>Set up Drive folders (Public and Private) and share them with the GAS project owner</li>
-  <li>Visit <code>forgot-password.php?building=X&role=admin&setup=1</code> to bootstrap the admin credential</li>
-  <li>Paste the footer script into the building website with <code>BUILDING_NAME</code> set, including the <code>chatbot-widget.js</code> script tag</li>
-  <li>Log into <code>admin.php?building=X</code>, import owners, build the document index, run Woolsy setup</li>
+  <li><strong>Phase 1:</strong> Enter building key, display name, state, community, and the three master IDs (template folder, association folder, template sheet). Click <strong>Create Drive Folders</strong> &mdash; GAS clones the template folder structure, sets Public sharing, copies the Owner DB sheet, and returns all folder/sheet IDs.</li>
+  <li><strong>Phase 2:</strong> A setup checklist appears with all values pre-filled: folder IDs, buildings.php snippet (copy button), admin URL, owner import walkthrough, and full footer script.</li>
 </ol>
+<p>Three steps remain manual: set <code>BUILDING_NAME</code> in the sheet script, deploy it as a web app, and install the two time-driven triggers.</p>
+<p>See <strong>NEW-SITE-GUIDE.html</strong> for the full walkthrough.</p>
 
-<p>See <strong>NEW-SITE-GUIDE.html</strong> for the full step-by-step walkthrough.</p>
+<h3>Removing an Association</h3>
+
+<p>In <code>master-admin.php</code>, click <strong>Remove Association</strong> in System Tools. The tool:</p>
+<ul>
+  <li>Shows a checklist of all server-side files that will be deleted (credentials, config, tags, Woolsy entries)</li>
+  <li>Requires typing the building key exactly to confirm &mdash; no undo</li>
+  <li>After deletion, shows a manual checklist: remove the entry from <code>buildings.php</code> and trash the Drive folders and Owner DB sheet</li>
+</ul>
+<div class="warn"><strong>Google Drive is not touched by this tool.</strong> Folder and sheet removal must be done manually in the SheepSite Google account.</div>
 
 {divider()}
 
@@ -520,6 +535,24 @@ the guiding test is "would a resident ask Woolsy about this?"</p>
 <p>If you find that a topic is not being extracted reliably, the best fix is usually to add an explicit
 callout sentence to the prompt (e.g. <em>"Always extract rules about X even if covered only briefly"</em>),
 then bump <code>PROMPT_VERSION</code> and deploy. All buildings will be flagged for rebuild automatically.</p>
+
+<h3>Association Suspension and Renewal</h3>
+
+<p>Every resident-facing page includes <code>suspension.php</code>, which runs on each page load:</p>
+<ol>
+  <li>Reads <code>config/{{building}}.json</code></li>
+  <li>If <code>renewalDate</code> is set and in the past, writes <code>suspended: true</code> to the config automatically</li>
+  <li>If <code>suspended</code> is true, outputs a "Service Unavailable" page and exits &mdash; residents cannot access files, reports, search, or Woolsy</li>
+</ol>
+<p>Admin pages (<code>admin.php</code>, <code>manage-users.php</code>, <code>billing.php</code>) are <strong>not</strong> blocked — the building admin can still log in and pay.</p>
+
+<p><strong>To reinstate a suspended association:</strong> log into <code>master-admin.php</code>, open the building&rsquo;s Manage page (<code>building-detail.php</code>), and update the Renewal Date to a future date. Saving a future date automatically clears the <code>suspended</code> flag.</p>
+
+<p><strong>Master admin dashboard indicators:</strong></p>
+<ul>
+  <li><span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:8px;font-size:0.8em;font-weight:600;">&#9632; SUSPENDED</span> — red badge + red card border when <code>suspended: true</code></li>
+  <li><span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:8px;font-size:0.8em;font-weight:600;">⚠ RENEWAL DUE</span> — amber badge when renewal date is within 30 days</li>
+</ul>
 
 <h3>Server Maintenance Notes</h3>
 <ul>

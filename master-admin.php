@@ -173,6 +173,7 @@ function barColor(int $pct): string {
     .badge.ok    { background: #dcfce7; color: #15803d; }
     .badge.warn  { background: #fef3c7; color: #92400e; }
     .badge.none  { background: #f3f4f6; color: #9ca3af; }
+    .badge.suspended { background: #fee2e2; color: #991b1b; font-size: 0.8rem; }
     .bld-manage  { margin-left: auto; white-space: nowrap; }
     .manage-btn  { padding: 0.4rem 1rem; background: #0070f3; color: #fff; border: none;
                    border-radius: 4px; font-size: 0.85rem; cursor: pointer; text-decoration: none;
@@ -208,8 +209,6 @@ function barColor(int $pct): string {
 <!-- ===================== BUILDINGS ===================== -->
 <div class="section-label">Associations under management</div>
 
-<a href="building-detail.php?building=new" class="add-btn">+ Add New Building</a>
-
 <?php foreach ($buildings as $b => $cfg):
   $bldCfg     = loadBuildingConfig($b);
   $label      = ucwords(str_replace(['_', '-'], ' ', $b));
@@ -232,7 +231,7 @@ function barColor(int $pct): string {
   $tosAccepted  = (int)($bldCfg['tosAccepted']['version'] ?? 0);
   $tosCurrent   = $tosAccepted >= $tosVersion;
 
-  // Renewal
+  // Renewal + suspension
   $renewalDate  = $bldCfg['renewalDate'] ?? null;
   $renewalDue   = false;
   $renewalLabel = '—';
@@ -241,16 +240,24 @@ function barColor(int $pct): string {
     $renewalLabel = date('M j, Y', strtotime($renewalDate));
     $renewalDue   = $days <= 30;
   }
+  $suspended = !empty($bldCfg['suspended']);
 
   // Card highlight
   $cardClass = '';
-  if ($wPct >= 90 || $sPct >= 90 || $renewalDue) $cardClass = 'alert';
-  elseif ($wPct >= 70 || $sPct >= 70)             $cardClass = 'warn';
+  if ($suspended || $wPct >= 90 || $sPct >= 90 || $renewalDue) $cardClass = 'alert';
+  elseif ($wPct >= 70 || $sPct >= 70)                           $cardClass = 'warn';
 ?>
 <div class="bld-card <?= $cardClass ?>">
 
   <div>
-    <div class="bld-name"><?= htmlspecialchars($label) ?></div>
+    <div class="bld-name">
+      <?= htmlspecialchars($label) ?>
+      <?php if ($suspended): ?>
+        <span class="badge suspended" style="margin-left:0.5rem;">&#9632; SUSPENDED</span>
+      <?php elseif ($renewalDue): ?>
+        <span class="badge warn" style="margin-left:0.5rem;">⚠ RENEWAL DUE</span>
+      <?php endif; ?>
+    </div>
     <?php if ($siteURL): ?>
       <div class="bld-url"><?= htmlspecialchars($siteURL) ?></div>
     <?php endif; ?>
@@ -340,6 +347,22 @@ function barColor(int $pct): string {
     <div>
       <div class="tool-title">Architecture Manual</div>
       <div class="tool-desc">Technical reference. Opens in a new tab.</div>
+    </div>
+  </a>
+
+  <a href="building-detail.php?building=new" class="tool-card">
+    <div class="tool-icon">➕</div>
+    <div>
+      <div class="tool-title">Add New Association</div>
+      <div class="tool-desc">Create Drive folders, copy sheet, generate setup checklist.</div>
+    </div>
+  </a>
+
+  <a href="association-remove.php" class="tool-card" style="border-color:#fca5a5;">
+    <div class="tool-icon">➖</div>
+    <div>
+      <div class="tool-title">Remove Association</div>
+      <div class="tool-desc">Delete server files for a decommissioned association.</div>
     </div>
   </a>
 
