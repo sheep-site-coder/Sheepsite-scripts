@@ -110,6 +110,60 @@ function loadBuildingCfg(string $building): array {
 }
 
 // -------------------------------------------------------
+// JSON: background storage refresh
+// Fires on page load — fetches public + private totals from
+// GAS, sums them, writes to config/{building}.json.
+// Returns {ok:true, total:bytes} — caller ignores the response.
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'storage_refresh') {
+  header('Content-Type: application/json');
+
+  $pubUrl  = APPS_SCRIPT_URL . '?action=storageReport'
+           . '&folderId=' . urlencode($config['publicFolderId'])
+           . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
+  $privUrl = APPS_SCRIPT_URL . '?action=storageReport'
+           . '&folderId=' . urlencode($config['privateFolderId'])
+           . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
+
+  // Fetch both in parallel via curl_multi
+  $mh   = curl_multi_init();
+  $chs  = [];
+  foreach ([$pubUrl, $privUrl] as $url) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_FOLLOWLOCATION => true,
+      CURLOPT_TIMEOUT        => 55,
+    ]);
+    curl_multi_add_handle($mh, $ch);
+    $chs[] = $ch;
+  }
+
+  do { curl_multi_exec($mh, $running); curl_multi_select($mh); } while ($running);
+
+  $total = 0;
+  foreach ($chs as $ch) {
+    $resp = curl_multi_getcontent($ch);
+    $data = $resp ? json_decode($resp, true) : null;
+    if (isset($data['total'])) $total += (int)$data['total'];
+    curl_multi_remove_handle($mh, $ch);
+    curl_close($ch);
+  }
+  curl_multi_close($mh);
+
+  // Write to building config
+  $cfgFile = CONFIG_DIR . $building . '.json';
+  $cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
+  $cfg['storageUsed']    = $total;
+  $cfg['storageUpdated'] = date('c');
+  if (!is_dir(CONFIG_DIR)) mkdir(CONFIG_DIR, 0755, true);
+  file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+
+  echo json_encode(['ok' => true, 'total' => $total]);
+  exit;
+}
+
+// -------------------------------------------------------
 // JSON: list folder contents (proxied from Apps Script)
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'list') {
@@ -985,5 +1039,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   </div>
 </div>
+
+<script>
+// Background storage refresh — fires once on page load, no spinner, no UI impact.
+// Updates config/{building}.json so the upload limit check stays current.
+document.addEventListener('DOMContentLoaded', function () {
+  fetch('file-manager.php?building=<?= urlencode($building) ?>&json=storage_refresh')
+    .catch(function () {}); // fire and forget — silently ignore errors
+});
+</script>
+
 </body>
 </html>
