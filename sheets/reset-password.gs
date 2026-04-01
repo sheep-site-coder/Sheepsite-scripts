@@ -48,7 +48,7 @@ function doResetPassword(params, expectedToken) {
       'If you have any questions, please contact your building administrator.',
     ].join('\n');
     try {
-      MailApp.sendEmail(directEmail, subject, body);
+      MailApp.sendEmail(directEmail, subject, body, { name: 'SheepSite.com' });
     } catch (e) {
       return _rpJson({ error: 'Failed to send email: ' + e.message });
     }
@@ -132,7 +132,7 @@ function doResetPassword(params, expectedToken) {
   ].join('\n');
 
   try {
-    MailApp.sendEmail(foundEmail, subject, body);
+    MailApp.sendEmail(foundEmail, subject, body, { name: 'SheepSite.com' });
   } catch (e) {
     return _rpJson({ error: 'Failed to send email: ' + e.message });
   }

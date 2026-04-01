@@ -12,9 +12,11 @@
 // -------------------------------------------------------
 session_start();
 
-define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
-define('CONFIG_DIR',      __DIR__ . '/config/');
-define('SESSION_KEY',     'master_admin_auth');
+define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
+define('CONFIG_DIR',        __DIR__ . '/config/');
+define('SESSION_KEY',       'master_admin_auth');
+define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
+define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
 
 // -------------------------------------------------------
 // Load credentials
@@ -137,6 +139,45 @@ function barColor(int $pct): string {
   if ($pct >= 70) return '#f59e0b';
   return '#22c55e';
 }
+
+// -------------------------------------------------------
+// AJAX: refresh storage for one building
+// Called from the ↺ button or "Refresh All"
+// -------------------------------------------------------
+if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
+  header('Content-Type: application/json');
+  $b = $_GET['building'] ?? '';
+  if (!$b || !isset($buildings[$b])) {
+    echo json_encode(['error' => 'Unknown building']);
+    exit;
+  }
+  $bCfg = $buildings[$b];
+  $fetchFolder = function(string $folderId): ?int {
+    $url = APPS_SCRIPT_URL
+         . '?action=storageReport'
+         . '&folderId=' . urlencode($folderId)
+         . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
+    $r = @file_get_contents($url);
+    if ($r === false) return null;
+    $d = json_decode($r, true);
+    return isset($d['total']) ? (int)$d['total'] : null;
+  };
+  $pub  = $fetchFolder($bCfg['publicFolderId']);
+  $priv = $fetchFolder($bCfg['privateFolderId']);
+  if ($pub === null || $priv === null) {
+    echo json_encode(['error' => 'Could not reach Apps Script']);
+    exit;
+  }
+  $total   = $pub + $priv;
+  $cfgFile = CONFIG_DIR . $b . '.json';
+  $saved   = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
+  $saved['storageUsed']    = $total;
+  $saved['storageUpdated'] = date('c');
+  file_put_contents($cfgFile, json_encode($saved, JSON_PRETTY_PRINT));
+  $limit = (int)($saved['storageLimit'] ?? $defaultLimit);
+  echo json_encode(['ok' => true, 'total' => $total, 'limit' => $limit]);
+  exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -181,6 +222,7 @@ function barColor(int $pct): string {
     .manage-btn:hover { background: #005bb5; }
     .renewal-val { font-size: 0.78rem; color: #555; }
     .renewal-val.due  { color: #dc2626; font-weight: 600; }
+    .stat-age    { font-size: 0.7rem; color: #bbb; margin-top: 0.15rem; }
 
     /* System tool cards */
     .tool-grid   { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
@@ -197,6 +239,11 @@ function barColor(int $pct): string {
                    border-radius: 4px; color: #0070f3; font-size: 0.875rem;
                    text-decoration: none; cursor: pointer; margin-bottom: 0.75rem; }
     .add-btn:hover { background: #f0f7ff; }
+    .refresh-btn { font-size: 0.8rem; color: #aaa; background: none; border: none;
+                   cursor: pointer; padding: 0 0 0 0.3rem; line-height: 1; }
+    .refresh-btn:hover { color: #0070f3; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning    { display: inline-block; animation: spin 0.8s linear infinite; }
   </style>
 </head>
 <body>
@@ -221,10 +268,18 @@ function barColor(int $pct): string {
   $wPct       = pct((int)($wUsed * 1000), (int)($wAlloc * 1000));
 
   // Storage
-  $storageUsed  = (int)($bldCfg['storageUsed']    ?? 0);
-  $storageLimit = (int)($bldCfg['storageLimit']   ?? $defaultLimit);
-  $sPct         = pct($storageUsed, $storageLimit);
-  $storageKnown = isset($bldCfg['storageUsed']);
+  $storageUsed    = (int)($bldCfg['storageUsed']    ?? 0);
+  $storageLimit   = (int)($bldCfg['storageLimit']   ?? $defaultLimit);
+  $sPct           = pct($storageUsed, $storageLimit);
+  $storageKnown   = isset($bldCfg['storageUsed']);
+  $storageUpdated = $bldCfg['storageUpdated'] ?? null;
+  $storageAge     = '';
+  if ($storageUpdated) {
+    $diff = time() - strtotime($storageUpdated);
+    if ($diff < 3600)       $storageAge = 'Updated ' . max(1, (int)($diff / 60)) . 'm ago';
+    elseif ($diff < 86400)  $storageAge = 'Updated ' . (int)($diff / 3600) . 'h ago';
+    else                    $storageAge = 'Updated ' . (int)($diff / 86400) . 'd ago';
+  }
 
   // ToS
   $inScope      = $tosVersion > 0 && ($tosScope === 'all' || (is_array($tosScope) && in_array($b, $tosScope)));
@@ -273,11 +328,15 @@ function barColor(int $pct): string {
     </div>
 
     <!-- Storage -->
-    <div class="stat">
-      <div class="stat-label">Storage</div>
+    <div class="stat" id="storage-stat-<?= htmlspecialchars($b) ?>">
+      <div class="stat-label">
+        Storage
+        <button class="refresh-btn" onclick="refreshStorage('<?= htmlspecialchars($b) ?>')" title="Refresh storage">↺</button>
+      </div>
       <?php if ($storageKnown): ?>
         <div class="bar-wrap"><div class="bar-fill" style="width:<?= $sPct ?>%;background:<?= barColor($sPct) ?>;"></div></div>
         <div class="stat-val"><?= fmtBytes($storageUsed) ?> / <?= fmtBytes($storageLimit) ?> (<?= $sPct ?>%)</div>
+        <?php if ($storageAge): ?><div class="stat-age"><?= htmlspecialchars($storageAge) ?></div><?php endif; ?>
       <?php else: ?>
         <div class="stat-val" style="color:#bbb;font-style:italic;">Not yet measured</div>
       <?php endif; ?>
@@ -367,6 +426,48 @@ function barColor(int $pct): string {
   </a>
 
 </div>
+
+<script>
+function fmtBytes(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+  if (b >= 1048576)    return (b / 1048576).toFixed(1)    + ' MB';
+  return Math.round(b / 1024) + ' KB';
+}
+
+function refreshStorage(key) {
+  var el = document.getElementById('storage-stat-' + key);
+  if (!el) { alert('Storage element not found for: ' + key); return; }
+  var btn = el.querySelector('.refresh-btn');
+  if (!btn) return;
+
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  fetch('master-admin.php?action=refreshStorage&building=' + encodeURIComponent(key))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.textContent = '↺';
+      btn.disabled = false;
+      if (d.error) {
+        el.querySelector('.stat-val') && (el.querySelector('.stat-val').textContent = 'Error: ' + d.error);
+        return;
+      }
+      var pct   = Math.min(100, Math.round(d.total / d.limit * 100));
+      var color = pct >= 90 ? '#dc2626' : pct >= 70 ? '#f59e0b' : '#22c55e';
+      el.innerHTML =
+        '<div class="stat-label">Storage <button class="refresh-btn" onclick="refreshStorage(' + JSON.stringify(key) + ')" title="Refresh storage">↺</button></div>' +
+        '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + color + ';"></div></div>' +
+        '<div class="stat-val">' + fmtBytes(d.total) + ' / ' + fmtBytes(d.limit) + ' (' + pct + '%)</div>' +
+        '<div class="stat-age">Just updated</div>';
+    })
+    .catch(function(err) {
+      btn.textContent = '↺';
+      btn.disabled = false;
+      alert('Refresh failed: ' + err);
+    });
+}
+
+</script>
 
 </body>
 </html>

@@ -520,6 +520,6 @@ function doSendChangeRequest(data, expectedToken) {
   lines.push('', `Please log in to the admin panel and open Manage Residents/Owners → Unit ${unit} to make the change.`);
   if (adminUrl) lines.push('', adminUrl);
 
-  MailApp.sendEmail({ to: toEmail, subject, body: lines.join('\n') });
+  MailApp.sendEmail({ to: toEmail, subject, body: lines.join('\n'), name: 'SheepSite.com' });
   return jsonOut_({ ok: true });
 }
