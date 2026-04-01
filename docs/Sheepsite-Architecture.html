@@ -252,7 +252,7 @@ new library version.</p>
   <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Building-level Woolsy admin sub-page (accessible from admin.php Woolsy card).</td></tr>
   <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage, ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
+      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage (with last-updated age and ↺ per-card refresh button), ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. The <code>?action=refreshStorage&amp;building=X</code> AJAX handler calls dir-display-bridge.gs storageReport and saves the result to <code>config/{building}.json</code> without a page reload. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
   <tr><td><code>building-detail.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate, discountPct), Woolsy credits, storage, ToS, and Billing (invoice preview, generate invoice, invoice history, mark paid). Also handles <code>?building=new</code> — automated Drive folder + Sheet creation via GAS, plus setup checklist.</td></tr>
   <tr><td><code>association-remove.php</code> <span class="tag tag-php">PHP</span></td>
