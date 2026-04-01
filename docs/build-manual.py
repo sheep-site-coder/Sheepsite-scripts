@@ -188,6 +188,7 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
   <tr><td><strong>Woolsy Knowledge Base</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
+  <tr><td><strong>Building Settings</strong></td><td>Set the building website URL. Used for links in system-generated emails (welcome emails, password resets) so they return residents to the right site.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
 
@@ -398,6 +399,11 @@ html = f"""<!DOCTYPE html>
   </div>
 </div>
 
+<h3>Storage Limit</h3>
+<p>Each building has a storage limit set by SheepSite. If an upload would exceed the limit, it will be blocked and you will see a message in the file manager.</p>
+<p>When the limit is reached, an email notification is sent automatically to the building&rsquo;s contact address with a link to purchase additional storage. Storage is available in upgrade tiers &mdash; you choose the size that works for your building and pay online. The new limit takes effect immediately after payment.</p>
+<blockquote><strong>Tip:</strong> Running the Storage Report regularly lets you keep an eye on usage before you hit the limit. Large files such as high-resolution scans and videos fill storage quickly &mdash; PDFs are much more space-efficient for most documents.</blockquote>
+
 {divider()}
 
 <h2>Section 7 &mdash; The Owner &amp; Resident Database</h2>
@@ -514,7 +520,8 @@ html = f"""<!DOCTYPE html>
 <ul>
   <li>The card shows <strong>used / allocated</strong> credits and a progress bar</li>
   <li>A warning appears when usage reaches 80% of the allocated amount</li>
-  <li>When credits are exhausted, Woolsy displays a message to residents to contact the building administrator. Contact SheepSite to top up credits.</li>
+  <li>At 90% usage, an email is sent automatically to the building&rsquo;s contact address with a link to purchase additional credits. Choose any quantity and pay online &mdash; credits are applied automatically after payment.</li>
+  <li>When credits are exhausted, Woolsy displays a message to residents to contact the building administrator</li>
 </ul>
 
 <h3>Before You Begin &mdash; Upload Your Documents First</h3>
