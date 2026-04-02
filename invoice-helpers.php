@@ -301,7 +301,7 @@ function loadInvoices(string $building): array {
 // Shared HTML email wrapper
 // -------------------------------------------------------
 function invoiceEmailHtml(string $bodyContent): string {
-  $logo = 'https://sheepsite.com/Scripts/assets/sheepsite-mascot.jpg';
+  $logo = 'https://sheepsite.com/Scripts/assets/Woolsy-original-transparent.png';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
 <tr><td align="center">
@@ -318,7 +318,7 @@ function invoiceEmailHtml(string $bodyContent): string {
           <td align="right" valign="top">
             <div style="font-size:26px;font-weight:bold;color:#3a7a3a;line-height:1.1;">SheepSite</div>
             <div style="font-size:13px;color:#777;font-style:italic;">Powered by Sheep</div>
-            <div style="font-size:12px;color:#999;margin-top:2px;">noreply@sheepsite.com</div>
+            <div style="font-size:12px;color:#999;margin-top:2px;">SheepSite@sheepsite.com</div>
           </td>
         </tr>
       </table>
@@ -350,9 +350,16 @@ function sendInvoiceEmail(array $invoice, array $bldCfg): void {
   $to = $bldCfg['contactEmail'] ?? '';
   if (!$to) return;
 
-  $building = $invoice['building'];
-  $label    = htmlspecialchars(ucwords(str_replace(['_', '-'], ' ', $building)));
-  $subject  = 'Invoice ' . $invoice['id'] . ' — ' . strip_tags($label) . ' Annual Renewal';
+  $building    = $invoice['building'];
+  $label       = htmlspecialchars(ucwords(str_replace(['_', '-'], ' ', $building)));
+  $invoiceType = $invoice['invoiceType'] ?? 'renewal';
+  $typeSuffix  = match($invoiceType) {
+    'renewal' => strip_tags($label) . ' Annual Renewal',
+    'storage' => strip_tags($label) . ' Storage Upgrade',
+    'woolsy'  => strip_tags($label) . ' Woolsy Credits',
+    default   => strip_tags($label),
+  };
+  $subject = 'Invoice ' . $invoice['id'] . ' — ' . $typeSuffix;
 
   // Line items rows
   $itemRows = '';
@@ -425,8 +432,8 @@ function sendInvoiceEmail(array $invoice, array $bldCfg): void {
 
   $html    = invoiceEmailHtml($body);
   $headers = implode("\r\n", [
-    'From: SheepSite.com <billing@sheepsite.com>',
-    'Reply-To: billing@sheepsite.com',
+    'From: SheepSite.com <SheepSite@sheepsite.com>',
+    'Reply-To: SheepSite@sheepsite.com',
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',
@@ -466,8 +473,8 @@ function sendReceiptEmail(array $invoice, array $cfg): void {
 
   $html    = invoiceEmailHtml($body);
   $headers = implode("\r\n", [
-    'From: SheepSite.com <billing@sheepsite.com>',
-    'Reply-To: billing@sheepsite.com',
+    'From: SheepSite.com <SheepSite@sheepsite.com>',
+    'Reply-To: SheepSite@sheepsite.com',
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',

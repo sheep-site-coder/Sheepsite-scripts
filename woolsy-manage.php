@@ -162,7 +162,7 @@ $allTimeTotal = array_sum($usageData);
   <title><?= htmlspecialchars($buildLabel) ?> – Woolsy Management</title>
   <style>
     body             { font-family: sans-serif; max-width: 760px; margin: 3rem auto; padding: 0 1rem; color: #222; }
-    .top-bar         { display: flex; align-items: baseline; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .top-bar         { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1.5rem; }
     h1               { margin: 0; font-size: 1.4rem; }
     h2               { font-size: 1.1rem; color: #333; margin: 1.75rem 0 0.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
     .back-link       { font-size: 0.9rem; color: #0070f3; text-decoration: none; white-space: nowrap; }
@@ -208,8 +208,8 @@ $allTimeTotal = array_sum($usageData);
 <body>
 
 <div class="top-bar">
+  <h1><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="44" alt="Woolsy" style="vertical-align:middle;margin-right:0.4rem;"> <?= htmlspecialchars($buildLabel) ?> – Woolsy Management</h1>
   <a href="admin.php?building=<?= urlencode($building) ?>" class="back-link">← Admin</a>
-  <h1>🐑 <?= htmlspecialchars($buildLabel) ?> – Woolsy Management</h1>
 </div>
 
 <?php if ($promptOutdated): ?>

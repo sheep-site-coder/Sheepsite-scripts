@@ -110,7 +110,7 @@ function bCredits(array $allCredits, string $building): array {
 <body>
 
 <div class="top-bar">
-  <h1>🐑 Woolsy Management</h1>
+  <h1><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="44" alt="Woolsy" style="vertical-align:middle;margin-right:0.4rem;"> Woolsy Management</h1>
   <a href="master-admin.php" class="back">← Master Admin</a>
 </div>
 <div class="subtitle">Credit usage across all buildings</div>

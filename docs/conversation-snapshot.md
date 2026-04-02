@@ -638,6 +638,36 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
+## Session 25 — UI polish, one-off invoices, billing section improvements
+
+### Woolsy icon — replaced 🐑 emoji with image across all admin pages
+- `admin.php`: Woolsy card icon → `Woolsy-standing-transparent.png` at 44px
+- `master-admin.php`: Woolsy tool card icon → same image
+- `woolsy-admin.php`: h1 title → image inline with text
+- `woolsy-manage.php`: h1 title → image inline with text; top-bar fixed (`space-between` so "← Admin" stays right)
+- `chatbot-widget.js`: FAB button → white circle (46px) inside blue ring (52px) with Woolsy at 38px
+
+### Invoice improvements (`invoice-helpers.php`)
+- `sendInvoiceEmail()` subject now type-aware:
+  - `renewal` → "Invoice ID — Building Annual Renewal"
+  - `storage` → "Invoice ID — Building Storage Upgrade"
+  - `woolsy` → "Invoice ID — Building Woolsy Credits"
+  - `other` → "Invoice ID — Building" (no suffix)
+
+### `building-detail.php` — Billing section restructure
+- **Renewal date + Discount %** moved from Configuration section to Billing section
+  - New `save_billing_config` POST action (separate from `save_config` to avoid blanking other fields)
+  - "Save Billing Settings" button
+- **One-off invoice form** added below "Generate & Email Invoice":
+  - Description (text) + Amount ($) fields + "Create & Send" button
+  - Uses `generate_other_invoice` action → `createOpenInvoice()` with `invoiceType=other` + `paymentToken`
+  - Sends invoice email immediately; "Pay →" link appears in admin.php billing card
+
+### `billing-helpers.php`
+- Storage invoice email subject changed to plain "Invoice" (no "Annual Renewal" suffix)
+
+---
+
 ## Session 24 — Invoicing system hardening + Mark Paid (Check) flow
 
 ### Invoice creation for threshold emails (`billing-helpers.php`)
@@ -684,5 +714,5 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: April 2, 2026 (session 24 — invoicing hardening, Mark Paid by check, type-aware side effects)*
+*Snapshot updated: April 2, 2026 (session 25 — Woolsy icon, one-off invoices, billing section restructure)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

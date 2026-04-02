@@ -393,7 +393,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
 <div class="tool-grid">
 
   <a href="woolsy-admin.php" class="tool-card">
-    <div class="tool-icon">🐑</div>
+    <div class="tool-icon"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="44" alt="Woolsy"></div>
     <div>
       <div class="tool-title">Woolsy Overview</div>
       <div class="tool-desc">Credit usage across all buildings and top-up.</div>

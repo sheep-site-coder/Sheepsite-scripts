@@ -450,7 +450,7 @@ if (!$mustChange) {
     $monthCount   = $usageAll[$building][date('Y-m')] ?? 0;
   ?>
   <a href="woolsy-manage.php?building=<?= urlencode($building) ?>" class="card">
-    <div class="card-icon">🐑</div>
+    <div class="card-icon"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="44" alt="Woolsy"></div>
     <div>
       <div class="card-title">Woolsy AI Assistant</div>
       <div class="card-desc">

@@ -170,19 +170,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     $cfg['siteURL']      = rtrim(trim($_POST['site_url']      ?? ''), '/');
     $cfg['contactEmail'] = trim($_POST['contact_email'] ?? '');
     $cfg['hasDomain']    = isset($_POST['has_domain']);
+    saveBuildingConfig($buildingKey, $cfg);
+    $message = 'Configuration saved.';
+  }
+
+  // ---- Save billing config (renewalDate + discountPct) ----
+  if ($action === 'save_billing_config') {
+    $cfg = loadBuildingConfig($buildingKey);
     $discountRaw = (float)($_POST['discount_pct'] ?? 0);
     if ($discountRaw > 0) $cfg['discountPct'] = round(min(100, $discountRaw), 2);
     else unset($cfg['discountPct']);
     $renewalRaw = trim($_POST['renewal_date'] ?? '');
     if ($renewalRaw) {
       $cfg['renewalDate'] = $renewalRaw;
-      // Clear suspension if new renewal date is in the future
       if (strtotime($renewalRaw) > time()) unset($cfg['suspended']);
     } elseif (isset($cfg['renewalDate'])) {
       unset($cfg['renewalDate']);
     }
     saveBuildingConfig($buildingKey, $cfg);
-    $message = 'Configuration saved.';
+    $message = 'Billing settings saved.';
   }
 
   // ---- Manual Woolsy top-up ----
@@ -218,6 +224,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     } catch (Exception $e) {
       $message     = 'Invoice generation failed: ' . $e->getMessage();
       $messageType = 'error';
+    }
+  }
+
+  // ---- Generate one-off "other" invoice ----
+  if ($action === 'generate_other_invoice') {
+    require_once __DIR__ . '/invoice-helpers.php';
+    $cfg         = loadBuildingConfig($buildingKey);
+    $description = trim($_POST['other_description'] ?? '');
+    $amount      = round((float)($_POST['other_amount'] ?? 0), 2);
+    if (!$description || $amount <= 0) {
+      $message     = 'Description and a positive amount are required.';
+      $messageType = 'error';
+    } elseif (empty($cfg['contactEmail'])) {
+      $message     = 'No contact email set — cannot send invoice.';
+      $messageType = 'error';
+    } else {
+      $lineItems = [['description' => $description, 'amount' => $amount]];
+      $inv = createOpenInvoice($buildingKey, $lineItems, $amount, 'manual', ['invoiceType' => 'other', 'paymentToken' => generateInvoiceToken()]);
+      sendInvoiceEmail($inv, $cfg);
+      $message = 'Invoice ' . $inv['id'] . ' created and emailed ($' . number_format($amount, 2) . ').';
     }
   }
 
@@ -844,19 +870,6 @@ function esc(s) {
                placeholder="board@example.com" style="width:100%;">
       </div>
     </div>
-    <div class="form-row">
-      <div>
-        <label>Renewal date</label>
-        <input type="date" name="renewal_date"
-               value="<?= htmlspecialchars($bldCfg['renewalDate'] ?? '') ?>">
-      </div>
-      <div>
-        <label>Discount %</label>
-        <input type="number" name="discount_pct" min="0" max="100" step="0.01"
-               value="<?= htmlspecialchars((string)($bldCfg['discountPct'] ?? '')) ?>"
-               placeholder="0" style="width:90px;">
-      </div>
-    </div>
     <div class="checkbox-row">
       <input type="checkbox" id="has_domain" name="has_domain" <?= !empty($bldCfg['hasDomain']) ? 'checked' : '' ?>>
       <label for="has_domain" style="margin:0;font-weight:normal;">This building has its own domain (billed for domain renewal)</label>
@@ -1026,6 +1039,24 @@ function esc(s) {
   $previewTotal = array_sum(array_column($previewItems, 'amount'));
   ?>
 
+  <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>" style="margin-bottom:1.25rem;">
+    <input type="hidden" name="action" value="save_billing_config">
+    <div class="form-row">
+      <div>
+        <label>Renewal date</label>
+        <input type="date" name="renewal_date"
+               value="<?= htmlspecialchars($bldCfg['renewalDate'] ?? '') ?>">
+      </div>
+      <div>
+        <label>Discount %</label>
+        <input type="number" name="discount_pct" min="0" max="100" step="0.01"
+               value="<?= htmlspecialchars((string)($bldCfg['discountPct'] ?? '')) ?>"
+               placeholder="0" style="width:90px;">
+      </div>
+    </div>
+    <button type="submit" class="btn">Save Billing Settings</button>
+  </form>
+
   <div style="margin-bottom:1rem;">
     <div class="stat-label" style="margin-bottom:0.4rem;">Next invoice preview</div>
     <table style="max-width:380px;margin-bottom:0.5rem;">
@@ -1056,6 +1087,25 @@ function esc(s) {
     <?php if (empty($bldCfg['contactEmail'])): ?>
       <span style="font-size:0.8rem;color:#c00;margin-left:0.5rem;">No contact email set</span>
     <?php endif; ?>
+  </form>
+
+  <hr>
+  <div style="font-size:0.875rem;font-weight:bold;margin-bottom:0.5rem;">One-off invoice</div>
+  <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>"
+        onsubmit="return confirm('Create and email a one-off invoice to <?= htmlspecialchars($bldCfg['contactEmail'] ?? 'the contact email') ?>?');"
+        style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
+    <input type="hidden" name="action" value="generate_other_invoice">
+    <div>
+      <label style="display:block;font-size:0.82rem;font-weight:bold;margin-bottom:0.25rem;">Description</label>
+      <input type="text" name="other_description" placeholder="e.g. Setup fee" style="width:240px;">
+    </div>
+    <div>
+      <label style="display:block;font-size:0.82rem;font-weight:bold;margin-bottom:0.25rem;">Amount ($)</label>
+      <input type="number" name="other_amount" min="0.01" step="0.01" placeholder="0.00" style="width:100px;">
+    </div>
+    <button type="submit" class="btn" <?= empty($bldCfg['contactEmail']) ? 'disabled title="Set a contact email first"' : '' ?>>
+      Create &amp; Send
+    </button>
   </form>
 
   <?php if ($invoices): ?>

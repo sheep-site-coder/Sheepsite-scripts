@@ -231,7 +231,7 @@
     if (!document.getElementById('ss-chat-fab')) {
       const fab = document.createElement('button');
       fab.id = 'ss-chat-fab';
-      fab.innerHTML = '🐑';
+      fab.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;background:#fff;border-radius:50%;"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="38" alt="Woolsy" style="display:block;"></span>';
       fab.title = 'Woolsy';
       fab.onclick = openChatbot;
       document.body.appendChild(fab);

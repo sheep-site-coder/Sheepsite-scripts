@@ -84,9 +84,12 @@ $isPaid = ($inv['status'] ?? '') === 'paid';
 <body>
 
 <div class="header">
-  <div>
-    <div class="brand">SheepSite</div>
-    <div class="brand-sub">Powered by Sheep</div>
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <img src="https://sheepsite.com/Scripts/assets/Woolsy-original-transparent.png" alt="SheepSite" width="60" style="border-radius:4px;">
+    <div>
+      <div class="brand">SheepSite</div>
+      <div class="brand-sub">Powered by Sheep</div>
+    </div>
   </div>
   <div class="inv-meta">
     <strong>Invoice #:</strong> <?= htmlspecialchars($inv['id']) ?><br>

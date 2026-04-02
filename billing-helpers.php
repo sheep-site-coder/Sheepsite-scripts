@@ -112,7 +112,7 @@ function sendBillingEmail(string $building, string $type, array &$cfg): bool {
              . "— SheepSite";
     $flag    = 'woolsyBillingEmailSent';
   } else {
-    $subject = "[$label] Storage limit reached — uploads blocked";
+    $subject = "[$label] Invoice";
     $body    = "Your building's file storage has reached its limit.\n\n"
              . "File uploads are currently blocked. To add more storage:\n\n"
              . "  $billingUrl\n\n"
