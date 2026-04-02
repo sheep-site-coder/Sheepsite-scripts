@@ -9,6 +9,14 @@
 
 defined('INVOICES_DIR') || define('INVOICES_DIR', __DIR__ . '/invoices/');
 defined('CONFIG_DIR')   || define('CONFIG_DIR',   __DIR__ . '/config/');
+defined('SCRIPTS_URL')  || define('SCRIPTS_URL',  'https://sheepsite.com/Scripts/');
+
+// -------------------------------------------------------
+// Generate a secure one-time payment token for an invoice
+// -------------------------------------------------------
+function generateInvoiceToken(): string {
+  return bin2hex(random_bytes(24)); // 48-char hex
+}
 
 // -------------------------------------------------------
 // Invoice numbering
@@ -87,6 +95,78 @@ function buildLineItems(array $bldCfg, array $pricing): array {
 }
 
 // -------------------------------------------------------
+// Create an open (unpaid) invoice without emailing it.
+// Used by billing-helpers.php when a threshold email fires —
+// gives the pending row a real invoice ID and amount.
+// $extra: optional fields merged into the invoice (e.g.
+//   invoiceType, newBytes, creditsToAdd).
+// -------------------------------------------------------
+function createOpenInvoice(string $building, array $lineItems, float $total, string $generatedBy = 'auto', array $extra = []): array {
+  $dir = INVOICES_DIR . $building . '/';
+  if (!is_dir($dir)) {
+    mkdir($dir, 0755, true);
+    file_put_contents($dir . '.htaccess', "Deny from all\n");
+  }
+
+  $seq     = nextInvoiceSeq($building);
+  $id      = makeInvoiceId($building, $seq);
+  $today   = date('Y-m-d');
+
+  $invoice = array_merge([
+    'id'           => $id,
+    'seq'          => $seq,
+    'building'     => $building,
+    'date'         => $today,
+    'dueDate'      => $today, // instant billing — due immediately
+    'renewalDate'  => null,
+    'status'       => 'unpaid',
+    'lineItems'    => $lineItems,
+    'total'        => round($total, 2),
+    'paidDate'     => null,
+    'paymentToken' => null,
+    'generatedBy'  => $generatedBy,
+    'paymentMethod' => null,
+  ], $extra);
+
+  file_put_contents($dir . $id . '.json', json_encode($invoice, JSON_PRETTY_PRINT));
+  return $invoice;
+}
+
+// -------------------------------------------------------
+// Record an already-paid invoice (no email sent).
+// Used for immediate purchases: storage upgrades, Woolsy top-ups.
+// -------------------------------------------------------
+function recordPaidInvoice(string $building, array $lineItems, float $total, string $generatedBy = 'online'): array {
+  $dir = INVOICES_DIR . $building . '/';
+  if (!is_dir($dir)) {
+    mkdir($dir, 0755, true);
+    file_put_contents($dir . '.htaccess', "Deny from all\n");
+  }
+
+  $seq     = nextInvoiceSeq($building);
+  $id      = makeInvoiceId($building, $seq);
+  $today   = date('Y-m-d');
+
+  $invoice = [
+    'id'           => $id,
+    'seq'          => $seq,
+    'building'     => $building,
+    'date'         => $today,
+    'dueDate'      => $today,
+    'renewalDate'  => null,
+    'status'       => 'paid',
+    'lineItems'    => $lineItems,
+    'total'        => round($total, 2),
+    'paidDate'     => $today,
+    'paymentToken' => null,
+    'generatedBy'  => $generatedBy,
+  ];
+
+  file_put_contents($dir . $id . '.json', json_encode($invoice, JSON_PRETTY_PRINT));
+  return $invoice;
+}
+
+// -------------------------------------------------------
 // Generate and save an invoice, then email it
 // Returns the invoice array, or throws on failure.
 // -------------------------------------------------------
@@ -104,17 +184,20 @@ function generateInvoice(string $building, array $bldCfg, array $pricing): array
   $total = array_sum(array_column($items, 'amount'));
 
   $invoice = [
-    'id'          => $id,
-    'seq'         => $seq,
-    'building'    => $building,
-    'date'        => date('Y-m-d'),
-    'dueDate'     => date('Y-m-d', strtotime('+30 days')),
-    'renewalDate' => $bldCfg['renewalDate'] ?? null,
-    'status'      => 'unpaid',
-    'lineItems'   => $items,
-    'total'       => round($total, 2),
-    'paidDate'    => null,
-    'generatedBy' => 'manual', // overwritten to 'cron' when triggered by cron
+    'id'            => $id,
+    'seq'           => $seq,
+    'building'      => $building,
+    'date'          => date('Y-m-d'),
+    'dueDate'       => date('Y-m-d', strtotime('+30 days')),
+    'renewalDate'   => $bldCfg['renewalDate'] ?? null,
+    'status'        => 'unpaid',
+    'lineItems'     => $items,
+    'total'         => round($total, 2),
+    'paidDate'      => null,
+    'paymentToken'  => generateInvoiceToken(),
+    'generatedBy'   => 'manual', // overwritten to 'cron' when triggered by cron
+    'invoiceType'   => 'renewal',
+    'paymentMethod' => null,
   ];
 
   file_put_contents($dir . $id . '.json', json_encode($invoice, JSON_PRETTY_PRINT));
@@ -124,27 +207,76 @@ function generateInvoice(string $building, array $bldCfg, array $pricing): array
 }
 
 // -------------------------------------------------------
-// Mark an invoice as paid, advance renewalDate, send receipt
+// Update line items and total on an open invoice.
+// Call this before markInvoicePaid() when the customer
+// selects a different amount than the estimate.
 // -------------------------------------------------------
-function markInvoicePaid(string $building, string $invoiceId): bool {
+function updateOpenInvoice(string $building, string $invoiceId, array $lineItems, float $total): bool {
+  if (!preg_match('/^[a-zA-Z0-9_-]+-\d{4}$/', $invoiceId)) return false;
+  $file = INVOICES_DIR . $building . '/' . $invoiceId . '.json';
+  if (!file_exists($file)) return false;
+  $invoice = json_decode(file_get_contents($file), true);
+  if (($invoice['status'] ?? '') === 'paid') return false; // already paid, don't touch
+  $invoice['lineItems'] = $lineItems;
+  $invoice['total']     = round($total, 2);
+  file_put_contents($file, json_encode($invoice, JSON_PRETTY_PRINT));
+  return true;
+}
+
+// -------------------------------------------------------
+// Mark an invoice as paid.
+// Applies type-specific side effects:
+//   renewal → advance renewalDate 1 year, clear suspension
+//   storage → set storageLimit to invoice newBytes, clear flags
+//   woolsy  → add creditsToAdd to woolsy allocation, clear flags
+// Stores paymentMethod ('check', 'stripe', etc.) on the invoice.
+// -------------------------------------------------------
+function markInvoicePaid(string $building, string $invoiceId, string $paymentMethod = 'check'): bool {
   // Validate invoice ID to prevent path traversal
   if (!preg_match('/^[a-zA-Z0-9_-]+-\d{4}$/', $invoiceId)) return false;
 
   $file = INVOICES_DIR . $building . '/' . $invoiceId . '.json';
   if (!file_exists($file)) return false;
 
-  $invoice             = json_decode(file_get_contents($file), true);
-  $invoice['status']   = 'paid';
-  $invoice['paidDate'] = date('Y-m-d');
+  $invoice                  = json_decode(file_get_contents($file), true);
+  $invoice['status']        = 'paid';
+  $invoice['paidDate']      = date('Y-m-d');
+  $invoice['paymentMethod'] = $paymentMethod;
   file_put_contents($file, json_encode($invoice, JSON_PRETTY_PRINT));
 
-  // Advance renewalDate by exactly 1 year from the current renewal date
   $cfgFile = CONFIG_DIR . $building . '.json';
   $cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
-  $current = $cfg['renewalDate'] ?? date('Y-m-d');
-  $cfg['renewalDate'] = date('Y-m-d', strtotime($current . ' +1 year'));
-  unset($cfg['suspended']); // clear any suspension
-  file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+
+  $invoiceType = $invoice['invoiceType'] ?? 'renewal';
+
+  if ($invoiceType === 'storage') {
+    $newBytes = (int)($invoice['newBytes'] ?? 0);
+    if ($newBytes > 0) {
+      $cfg['storageLimit'] = $newBytes;
+    }
+    unset($cfg['storageLimitEmailSent'], $cfg['billingToken']);
+    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+
+  } elseif ($invoiceType === 'woolsy') {
+    $creditsToAdd = (float)($invoice['creditsToAdd'] ?? 0);
+    if ($creditsToAdd > 0) {
+      $credFile   = __DIR__ . '/faqs/woolsy_credits.json';
+      $allCredits = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) ?? [] : [];
+      if (!isset($allCredits[$building])) {
+        $allCredits[$building] = ['allocated' => 1.0, 'used' => 0.0];
+      }
+      $allCredits[$building]['allocated'] = round($allCredits[$building]['allocated'] + $creditsToAdd, 4);
+      file_put_contents($credFile, json_encode($allCredits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+    unset($cfg['woolsyBillingEmailSent'], $cfg['billingToken']);
+    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+
+  } else { // renewal (default)
+    $current = $cfg['renewalDate'] ?? date('Y-m-d');
+    $cfg['renewalDate'] = date('Y-m-d', strtotime($current . ' +1 year'));
+    unset($cfg['suspended']);
+    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+  }
 
   sendReceiptEmail($invoice, $cfg);
   return true;
@@ -287,7 +419,7 @@ function sendInvoiceEmail(array $invoice, array $bldCfg): void {
   <div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px;padding:14px 16px;font-size:13px;color:#555;">
     <strong style="color:#333;">Payment Options</strong><br><br>
     <strong>By check:</strong> Make payable to <strong>SheepSite LLC</strong> and mail to [YOUR MAILING ADDRESS]<br><br>
-    <strong>Online:</strong> Stripe payment link coming soon.<br><br>
+    <strong>Online:</strong> <a href="' . SCRIPTS_URL . 'billing-invoice.php?' . http_build_query(['building' => $building, 'invoice' => $invoice['id'], 'token' => $invoice['paymentToken']]) . '" style="color:#0070f3;">Pay online →</a><br><br>
     Questions? Reply to this email.
   </div>';
 

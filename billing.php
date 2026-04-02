@@ -135,18 +135,84 @@ $contactEmail = $cfg['contactEmail'] ?? '';
 // -------------------------------------------------------
 // POST — create Stripe Checkout session
 // -------------------------------------------------------
-$postError = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stripeReady) {
+$postError  = '';
+$successUrl = SCRIPTS_URL . 'billing-success.php?' . http_build_query([
+  'building' => $building,
+  'type'     => $type,
+]);
+$cancelUrl  = SCRIPTS_URL . 'billing.php?' . http_build_query([
+  'building' => $building,
+  'type'     => $type,
+  'token'    => $token,
+]);
 
-  $successUrl = SCRIPTS_URL . 'billing-success.php?' . http_build_query([
-    'building' => $building,
-    'type'     => $type,
-  ]);
-  $cancelUrl  = SCRIPTS_URL . 'billing.php?' . http_build_query([
-    'building' => $building,
-    'type'     => $type,
-    'token'    => $token,
-  ]);
+// -------------------------------------------------------
+// POST — fake pay (test mode — Stripe not configured)
+// -------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$stripeReady) {
+
+  require_once __DIR__ . '/invoice-helpers.php';
+
+  // Existing open invoice from billing token (created when threshold email was sent)
+  $pendingInvoiceId = $cfg['billingToken']['invoiceId'] ?? null;
+
+  if ($type === 'woolsy') {
+    $qty        = max(1, (int)($_POST['qty'] ?? 1));
+    $credFile   = __DIR__ . '/faqs/woolsy_credits.json';
+    $allCredits = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) ?? [] : [];
+    if (!isset($allCredits[$building])) $allCredits[$building] = ['allocated' => 1.0, 'used' => 0.0];
+    $allCredits[$building]['allocated'] = round($allCredits[$building]['allocated'] + $qty, 4);
+    file_put_contents($credFile, json_encode($allCredits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+    $bCfg = loadConfig($building);
+    unset($bCfg['woolsyBillingEmailSent'], $bCfg['billingToken']);
+    saveConfig($building, $bCfg);
+
+    $creditPrice = (float)($pricing['creditPrice'] ?? 0);
+    $total       = round($qty * $creditPrice, 2);
+    $lineItems   = [['description' => 'Woolsy Credits (' . $qty . ' credit' . ($qty !== 1 ? 's' : '') . ')', 'amount' => $total]];
+    if ($pendingInvoiceId) {
+      updateOpenInvoice($building, $pendingInvoiceId, $lineItems, $total);
+      markInvoicePaid($building, $pendingInvoiceId, false);
+    } elseif ($total > 0) {
+      recordPaidInvoice($building, $lineItems, $total, 'online');
+    }
+
+  } else { // storage
+    $tierIdx = (int)($_POST['tier'] ?? 0);
+    $tiers   = $pricing['storageOptions'] ?? [];
+    if (isset($tiers[$tierIdx])) {
+      $tier     = $tiers[$tierIdx];
+      $newBytes = (int)($tier['bytes'] ?? 0);
+      $monthly  = (float)($tier['pricePerMonth'] ?? 0);
+      $months   = $renewalDate ? monthsUntil($renewalDate) : 12;
+      $total    = round($monthly * $months, 2);
+      if ($newBytes > 0) {
+        $bCfg = loadConfig($building);
+        $bCfg['storageLimit'] = $newBytes;
+        unset($bCfg['storageLimitEmailSent'], $bCfg['billingToken']);
+        saveConfig($building, $bCfg);
+
+        $tierLabel = $tier['label'] ?? fmtBytes($newBytes);
+        $lineItems = [['description' => 'Storage Upgrade — ' . $tierLabel, 'amount' => $total]];
+        if ($pendingInvoiceId) {
+          updateOpenInvoice($building, $pendingInvoiceId, $lineItems, $total);
+          markInvoicePaid($building, $pendingInvoiceId, false);
+        } elseif ($total > 0) {
+          recordPaidInvoice($building, $lineItems, $total, 'online');
+        }
+      }
+    }
+  }
+
+  header('Location: ' . $successUrl);
+  exit;
+}
+
+// -------------------------------------------------------
+// POST — create Stripe Checkout session
+// -------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stripeReady) {
 
   if ($type === 'woolsy') {
     $qty         = max(1, (int)($_POST['qty'] ?? 1));
@@ -295,7 +361,7 @@ foreach ($storageTiers as $i => $t) {
 <?php endif; ?>
 
 <?php if (!$stripeReady): ?>
-  <div class="notice">Payment processing is not yet configured. Please contact SheepSite to complete this purchase.</div>
+  <div class="notice"><strong>Test mode</strong> — Stripe is not configured. Use "Fake Pay" to simulate a completed payment and test the full end-to-end flow.</div>
 <?php endif; ?>
 
 <?php if ($type === 'woolsy'): ?>
@@ -326,11 +392,11 @@ foreach ($storageTiers as $i => $t) {
     <div class="total-line" id="woolsy-total">
       Total: <strong>$<?= number_format($creditPrice * 10, 2) ?></strong>
     </div>
-    <button type="submit" class="btn"<?= $stripeReady ? '' : ' disabled' ?>>
-      <?= $stripeReady ? 'Pay with Card →' : 'Payment not configured' ?>
+    <button type="submit" class="btn">
+      <?= $stripeReady ? 'Pay with Card →' : 'Fake Pay →' ?>
     </button>
   </form>
-  <p class="stripe-note">Powered by Stripe. Credits are applied automatically after payment.</p>
+  <p class="stripe-note"><?= $stripeReady ? 'Powered by Stripe.' : 'Test mode — no real payment processed.' ?> Credits are applied automatically after payment.</p>
 </div>
 
 <script>
@@ -402,12 +468,12 @@ document.getElementById('qty').addEventListener('input', function() {
     <?php if (empty($storageTiers)): ?>
       <p style="color:#888;font-size:0.9rem;">No storage tiers configured. Contact SheepSite.</p>
     <?php else: ?>
-      <button type="submit" class="btn"<?= $stripeReady ? '' : ' disabled' ?>>
-        <?= $stripeReady ? 'Pay with Card →' : 'Payment not configured' ?>
+      <button type="submit" class="btn">
+        <?= $stripeReady ? 'Pay with Card →' : 'Fake Pay →' ?>
       </button>
     <?php endif; ?>
   </form>
-  <p class="stripe-note">Powered by Stripe. Storage is upgraded automatically after payment.</p>
+  <p class="stripe-note"><?= $stripeReady ? 'Powered by Stripe.' : 'Test mode — no real payment processed.' ?> Storage is upgraded automatically after payment.</p>
 </div>
 
 <?php endif; ?>

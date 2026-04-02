@@ -224,13 +224,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
   // ---- Mark invoice paid ----
   if ($action === 'mark_paid') {
     require_once __DIR__ . '/invoice-helpers.php';
-    $invoiceId = trim($_POST['invoice_id'] ?? '');
-    if (markInvoicePaid($buildingKey, $invoiceId)) {
-      $message = 'Invoice ' . $invoiceId . ' marked as paid. Receipt sent. Renewal date advanced one year.';
+    $invoiceId     = trim($_POST['invoice_id'] ?? '');
+    $paymentMethod = trim($_POST['payment_method'] ?? 'check');
+    if (!in_array($paymentMethod, ['check', 'stripe', 'cash', 'transfer'], true)) $paymentMethod = 'check';
+    if (markInvoicePaid($buildingKey, $invoiceId, $paymentMethod)) {
+      $message = 'Invoice ' . $invoiceId . ' marked as paid (' . $paymentMethod . '). Receipt sent.';
     } else {
       $message     = 'Could not mark invoice as paid — invoice not found.';
       $messageType = 'error';
     }
+  }
+
+  // ---- Reset billing email flags (test helper) ----
+  if ($action === 'reset_billing_flags') {
+    $cfg = loadBuildingConfig($buildingKey);
+    unset($cfg['storageLimitEmailSent'], $cfg['woolsyBillingEmailSent'], $cfg['billingToken']);
+    saveBuildingConfig($buildingKey, $cfg);
+    $message = 'Billing email flags cleared — threshold emails will fire again on next trigger.';
   }
 
   // ---- Set storage limit ----
@@ -1064,7 +1074,12 @@ function esc(s) {
     <tbody>
     <?php foreach ($invoices as $inv): ?>
       <tr>
-        <td><code style="font-size:0.82rem;"><?= htmlspecialchars($inv['id']) ?></code></td>
+        <td>
+          <a href="invoice-view.php?<?= htmlspecialchars(http_build_query(['building' => $buildingKey, 'invoice' => $inv['id']])) ?>"
+             target="_blank" style="font-size:0.82rem;font-family:monospace;color:#0070f3;text-decoration:none;">
+            <?= htmlspecialchars($inv['id']) ?>
+          </a>
+        </td>
         <td style="white-space:nowrap;"><?= htmlspecialchars($inv['date']) ?></td>
         <td style="text-align:right;">$<?= number_format($inv['total'], 2) ?></td>
         <td>
@@ -1077,10 +1092,11 @@ function esc(s) {
         <td>
           <?php if ($inv['status'] !== 'paid'): ?>
             <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>"
-                  onsubmit="return confirm('Mark <?= htmlspecialchars($inv['id']) ?> as paid? This will advance the renewal date one year and send a receipt.');"
+                  onsubmit="return confirm('Mark <?= htmlspecialchars($inv['id']) ?> as paid by check? This will apply the appropriate service change and send a receipt.');"
                   style="margin:0;">
               <input type="hidden" name="action" value="mark_paid">
               <input type="hidden" name="invoice_id" value="<?= htmlspecialchars($inv['id']) ?>">
+              <input type="hidden" name="payment_method" value="check">
               <button type="submit" class="btn btn-gray" style="font-size:0.8rem;padding:0.2rem 0.6rem;">Mark Paid</button>
             </form>
           <?php endif; ?>
@@ -1094,9 +1110,18 @@ function esc(s) {
   <?php if (!empty($bldCfg['stripeCustomerId'])): ?>
     <p style="font-size:0.875rem;margin-top:0.75rem;">Stripe customer ID: <code><?= htmlspecialchars($bldCfg['stripeCustomerId']) ?></code></p>
   <?php endif; ?>
+
+  <hr style="margin:1.25rem 0;">
+  <div style="font-size:0.8rem;color:#888;margin-bottom:0.5rem;">Testing</div>
+  <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>"
+        onsubmit="return confirm('Clear storageLimitEmailSent and woolsyBillingEmailSent flags for <?= htmlspecialchars($buildingKey) ?>?');">
+    <input type="hidden" name="action" value="reset_billing_flags">
+    <button type="submit" class="btn btn-gray" style="font-size:0.82rem;">Reset billing email flags</button>
+  </form>
 </div>
 
 <?php endif; // isNew ?>
+
 
 </body>
 </html>

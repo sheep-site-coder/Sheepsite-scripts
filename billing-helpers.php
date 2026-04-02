@@ -12,9 +12,12 @@
 // or if no contactEmail is configured for the building.
 // -------------------------------------------------------
 
-define('BILLING_BASE_URL',   'https://sheepsite.com/Scripts/');
-define('BILLING_TOKEN_TTL',  7 * 86400); // 7 days in seconds
-define('BILLING_CONFIG_DIR', __DIR__ . '/config/');
+define('BILLING_BASE_URL',    'https://sheepsite.com/Scripts/');
+define('BILLING_TOKEN_TTL',   7 * 86400); // 7 days in seconds
+define('BILLING_CONFIG_DIR',  __DIR__ . '/config/');
+define('BILLING_PRICING_FILE', __DIR__ . '/config/pricing.json');
+
+require_once __DIR__ . '/invoice-helpers.php';
 
 // -------------------------------------------------------
 // Config helpers
@@ -54,7 +57,46 @@ function sendBillingEmail(string $building, string $type, array &$cfg): bool {
   $contactEmail = $cfg['contactEmail'] ?? '';
   if (!filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) return false;
 
+  // Build line items and create open invoice before sending email
+  $pricing  = file_exists(BILLING_PRICING_FILE) ? json_decode(file_get_contents(BILLING_PRICING_FILE), true) ?? [] : [];
+  $lineItems = [];
+  $total     = 0.0;
+
+  $invoiceExtra = [];
+
+  if ($type === 'woolsy') {
+    $creditPrice  = (float)($pricing['creditPrice'] ?? 0);
+    $qty          = 10; // default top-up
+    $total        = round($creditPrice * $qty, 2);
+    $lineItems    = [['description' => 'Woolsy Credits (' . $qty . ' credits)', 'amount' => $total]];
+    $invoiceExtra = ['invoiceType' => 'woolsy', 'creditsToAdd' => $qty];
+  } else { // storage
+    $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+    $currentLimit = (int)($cfg['storageLimit'] ?? $defaultLimit);
+    $renewalDate  = $cfg['renewalDate'] ?? null;
+    $tiers        = $pricing['storageOptions'] ?? [];
+    usort($tiers, fn($a, $b) => (int)($a['bytes'] ?? 0) <=> (int)($b['bytes'] ?? 0));
+    foreach ($tiers as $tier) {
+      $monthly = (float)($tier['pricePerMonth'] ?? 0);
+      if ((int)($tier['bytes'] ?? 0) > $currentLimit && $monthly > 0) {
+        $months       = $renewalDate ? max(1, (int)ceil((strtotime($renewalDate) - time()) / (30.44 * 86400))) : 12;
+        $total        = round($monthly * $months, 2);
+        $tierLabel    = $tier['label'] ?? (round($tier['bytes'] / 1073741824, 2) . ' GB');
+        $lineItems    = [['description' => 'Storage Upgrade — ' . $tierLabel, 'amount' => $total]];
+        $invoiceExtra = ['invoiceType' => 'storage', 'newBytes' => (int)$tier['bytes']];
+        break;
+      }
+    }
+    if (!$lineItems) {
+      $lineItems    = [['description' => 'Storage Upgrade', 'amount' => 0]];
+      $invoiceExtra = ['invoiceType' => 'storage'];
+    }
+  }
+
+  $openInvoice = createOpenInvoice($building, $lineItems, $total, 'auto', $invoiceExtra);
+
   $token      = generateBillingToken($building, $type, $cfg);
+  $cfg['billingToken']['invoiceId'] = $openInvoice['id'];
   $billingUrl = BILLING_BASE_URL . 'billing.php?'
               . http_build_query(['building' => $building, 'type' => $type, 'token' => $token]);
 

@@ -7,7 +7,7 @@
 // -------------------------------------------------------
 
 $building = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['building'] ?? '');
-$type     = in_array($_GET['type'] ?? '', ['woolsy', 'storage']) ? $_GET['type'] : '';
+$type     = in_array($_GET['type'] ?? '', ['woolsy', 'storage', 'invoice']) ? $_GET['type'] : '';
 $label    = $building ? ucwords(str_replace(['_', '-'], ' ', $building)) : 'Your building';
 ?>
 <!DOCTYPE html>
@@ -29,7 +29,10 @@ $label    = $building ? ucwords(str_replace(['_', '-'], ' ', $building)) : 'Your
   <div class="icon">✓</div>
   <h1>Payment received — thank you!</h1>
 
-  <?php if ($type === 'woolsy'): ?>
+  <?php if ($type === 'invoice'): ?>
+    <p>Your annual renewal payment for <strong><?= htmlspecialchars($label) ?></strong> has been received.
+       Your receipt has been emailed and your renewal date has been updated.</p>
+  <?php elseif ($type === 'woolsy'): ?>
     <p>Your Woolsy credits for <strong><?= htmlspecialchars($label) ?></strong> are being applied now
        and will be active within a few minutes.</p>
   <?php elseif ($type === 'storage'): ?>

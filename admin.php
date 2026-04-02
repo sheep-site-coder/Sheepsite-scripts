@@ -27,6 +27,12 @@ function getRulesVersion(string $file): int {
     return 1;
 }
 
+function fmtAdminBytes(int $bytes): string {
+  if ($bytes >= 1073741824) return round($bytes / 1073741824, 2) . ' GB';
+  if ($bytes >= 1048576)    return round($bytes / 1048576, 1)    . ' MB';
+  return round($bytes / 1024) . ' KB';
+}
+
 function loadBuildingConfig(string $building): array {
     $file = CONFIG_DIR . $building . '.json';
     return file_exists($file) ? json_decode(file_get_contents($file), true) ?? [] : [];
@@ -212,6 +218,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   }
 }
 // -------------------------------------------------------
+// Load building config, pricing, and invoices for storage + billing cards
+$bldCfg      = loadBuildingConfig($building);
+$pricingFile = CONFIG_DIR . 'pricing.json';
+$pricing     = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
+$storageUsed  = (int)($bldCfg['storageUsed']  ?? 0);
+$storageLimit = (int)($bldCfg['storageLimit'] ?? (int)($pricing['storageDefaultLimit'] ?? 524288000));
+require_once __DIR__ . '/invoice-helpers.php';
+$invoices = loadInvoices($building);
+
+// Billing token — used to generate Pay URL for threshold invoices (no paymentToken)
+$billingTok        = $bldCfg['billingToken'] ?? null;
+$hasBillingToken   = !empty($billingTok['token']) && strtotime($billingTok['expires'] ?? '0') > time();
+$billingTokenPayUrl = $hasBillingToken
+  ? 'billing.php?' . http_build_query(['building' => $building, 'type' => $billingTok['type'] ?? '', 'token' => $billingTok['token']])
+  : null;
+
+
+// -------------------------------------------------------
 // ToS gate — only when logged in and no mustChange pending
 // -------------------------------------------------------
 if (!$mustChange) {
@@ -328,11 +352,79 @@ if (!$mustChange) {
     <div>
       <div class="card-title">Storage Report</div>
       <div class="card-desc">
-        View storage usage for the building's Public and Private folders,
-        broken down by subfolder.
+        View usage for Public and Private folders, broken down by subfolder.
+        <?php if ($storageUsed > 0): ?>
+          <br><strong><?= fmtAdminBytes($storageUsed) ?></strong> used
+          of <strong><?= fmtAdminBytes($storageLimit) ?></strong> allowed.
+        <?php endif; ?>
       </div>
     </div>
   </a>
+
+  <?php
+    $openInvoices = array_values(array_filter($invoices, fn($i) => ($i['status'] ?? '') !== 'paid'));
+    $totalOwed    = array_sum(array_column($openInvoices, 'total'));
+  ?>
+  <details class="card" style="display:block;padding:1.25rem;cursor:default;">
+    <summary style="list-style:none;display:flex;gap:1.25rem;align-items:flex-start;cursor:pointer;">
+      <div class="card-icon">💳</div>
+      <div style="flex:1;">
+        <div class="card-title" style="color:inherit;">Billing History</div>
+        <div class="card-desc">
+          <?php if ($openInvoices): ?>
+            <span style="color:#b45309;font-weight:600;">$<?= number_format($totalOwed, 2) ?> due</span>
+          <?php elseif ($invoices): ?>
+            <span style="color:#1a7f37;font-weight:600;">&#10003; Paid</span>
+          <?php else: ?>
+            No invoices on record
+          <?php endif; ?>
+        </div>
+      </div>
+    </summary>
+
+    <?php if ($invoices): ?>
+    <table style="width:100%;border-collapse:collapse;font-size:0.875rem;margin-top:1rem;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:5px 8px;border-bottom:2px solid #eee;color:#777;font-size:0.78rem;font-weight:600;">Invoice</th>
+          <th style="text-align:left;padding:5px 8px;border-bottom:2px solid #eee;color:#777;font-size:0.78rem;font-weight:600;">Date</th>
+          <th style="text-align:right;padding:5px 8px;border-bottom:2px solid #eee;color:#777;font-size:0.78rem;font-weight:600;">Amount</th>
+          <th style="text-align:left;padding:5px 8px;border-bottom:2px solid #eee;color:#777;font-size:0.78rem;font-weight:600;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach ($invoices as $inv):
+        $isPaid   = ($inv['status'] ?? '') === 'paid';
+        $invToken = $inv['paymentToken'] ?? '';
+      ?>
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">
+            <a href="invoice-view.php?<?= htmlspecialchars(http_build_query(['building' => $building, 'invoice' => $inv['id']])) ?>"
+               target="_blank" style="font-size:0.78rem;font-family:monospace;color:#0070f3;text-decoration:none;">
+              <?= htmlspecialchars($inv['id']) ?>
+            </a>
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap;"><?= htmlspecialchars($inv['date']) ?></td>
+          <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;">$<?= number_format($inv['total'], 2) ?></td>
+          <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">
+            <?php if ($isPaid): ?>
+              <span style="color:#1a7f37;font-weight:600;">&#10003; Paid</span>
+            <?php elseif ($invToken): ?>
+              <a href="billing-invoice.php?<?= htmlspecialchars(http_build_query(['building' => $building, 'invoice' => $inv['id'], 'token' => $invToken])) ?>"
+                 style="color:#b45309;font-weight:600;">Pay &rarr;</a>
+            <?php elseif ($billingTokenPayUrl && ($billingTok['invoiceId'] ?? '') === $inv['id']): ?>
+              <a href="<?= htmlspecialchars($billingTokenPayUrl) ?>"
+                 style="color:#b45309;font-weight:600;">Pay &rarr;</a>
+            <?php else: ?>
+              <span style="color:#b45309;font-weight:600;">Open</span>
+            <?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    <?php endif; ?>
+  </details>
 
   <a href="<?= htmlspecialchars(USER_MANUAL_URL) ?>" target="_blank" class="card">
     <div class="card-icon">📖</div>
@@ -446,6 +538,7 @@ if (!$mustChange) {
 
   <button type="submit" name="change_admin_pass" class="save-btn">Update password</button>
 </form>
+
 
 </body>
 </html>

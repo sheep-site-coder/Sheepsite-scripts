@@ -636,5 +636,53 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: March 31, 2026 (session 21 — protected files, PDF embeds, manual cleanup, Add New Building automation)*
+---
+
+## Session 24 — Invoicing system hardening + Mark Paid (Check) flow
+
+### Invoice creation for threshold emails (`billing-helpers.php`)
+- `sendBillingEmail()` now calls `createOpenInvoice()` before sending the email — creates a real
+  invoice file at `invoices/{building}/{id}.json` with correct amount, due date, and type metadata
+- `invoiceExtra` array passed to `createOpenInvoice()` stores type-specific data:
+  - Woolsy: `invoiceType=woolsy`, `creditsToAdd=10`
+  - Storage: `invoiceType=storage`, `newBytes={tier bytes}`
+- `invoiceId` stored in `config/{building}.json` under `billingToken.invoiceId`
+- Root cause of "pending" display fixed: `billing-helpers.php` was never uploaded after the
+  invoice creation logic was added last session
+
+### `invoice-helpers.php` — type-aware `markInvoicePaid()`
+- `createOpenInvoice()` gains optional `$extra` array param (merged into invoice JSON)
+- `generateInvoice()` (renewal cron) now stores `invoiceType=renewal` and `paymentMethod=null`
+- `markInvoicePaid()` signature changed: `$advanceRenewal` replaced by `$paymentMethod='check'`
+  - Stores `paymentMethod` on the invoice JSON
+  - Applies side effects based on `invoiceType`:
+    - `renewal` → advance renewalDate 1 year, clear suspension (same as before)
+    - `storage` → set `storageLimit` to `invoice.newBytes`, clear `storageLimitEmailSent` + `billingToken`
+    - `woolsy` → add `invoice.creditsToAdd` to `woolsy_credits.json`, clear `woolsyBillingEmailSent` + `billingToken`
+
+### `billing-webhook.php`
+- `type=invoice` path now passes `'stripe'` as payment method to `markInvoicePaid()`
+
+### `invoice-view.php`
+- Paid invoices show payment method: "✓ Paid 2026-04-02 — Check" or "— Stripe"
+
+### `building-detail.php` — invoice display cleanup
+- Removed the `$hasPendingBilling` special row (was causing every invoice to appear twice)
+- Invoice history now relies solely on `loadInvoices()` loop — single source of truth
+- Mark Paid button label: "Mark Paid" (was "Mark Paid (Check)")
+- Confirm dialog updated to reflect type-aware side effects
+- `$hasPendingBilling`, `$pendingInvoice`, `$bldTok` variables removed (no longer needed)
+
+### `admin.php` (association admin page) — same duplicate fix
+- Removed `$hasPendingBilling` special row from invoice table
+- Restored billing token Pay URL lookup (`$billingTokenPayUrl`) for threshold invoices that
+  have no `paymentToken` — Pay link now correctly points to `billing.php` for those invoices
+- `$hasPendingBilling` fallback in billing status header removed (open invoices cover it)
+
+### `master-admin.php`
+- Building cards unchanged (Billing ✓/✗ only) — Mark Paid lives in building-detail only
+
+---
+
+*Snapshot updated: April 2, 2026 (session 24 — invoicing hardening, Mark Paid by check, type-aware side effects)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

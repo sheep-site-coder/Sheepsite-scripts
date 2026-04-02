@@ -14,6 +14,7 @@ session_start();
 
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('CONFIG_DIR',        __DIR__ . '/config/');
+require_once __DIR__ . '/invoice-helpers.php';
 define('SESSION_KEY',       'master_admin_auth');
 define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
@@ -297,6 +298,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
   }
   $suspended = !empty($bldCfg['suspended']);
 
+  // Invoices + pending billing token
+  $bldInvoices       = loadInvoices($b);
+  $openInvoices      = array_values(array_filter($bldInvoices, fn($i) => ($i['status'] ?? '') !== 'paid'));
+  $bldTok            = $bldCfg['billingToken'] ?? null;
+  $hasPendingBilling = !empty($bldTok['token']) && strtotime($bldTok['expires'] ?? '0') > time();
+
   // Card highlight
   $cardClass = '';
   if ($suspended || $wPct >= 90 || $sPct >= 90 || $renewalDue) $cardClass = 'alert';
@@ -366,6 +373,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
   </div>
 
   <div class="bld-manage">
+    <div style="text-align:right;margin-bottom:0.5rem;font-size:0.78rem;font-weight:600;color:#777;">
+      Billing
+      <?php if ($openInvoices || $hasPendingBilling): ?>
+        <span style="color:#dc2626;font-size:1rem;" title="<?= $openInvoices ? 'Outstanding invoice' : 'Payment requested' ?>">✗</span>
+      <?php else: ?>
+        <span style="color:#16a34a;font-size:1rem;" title="<?= $bldInvoices ? 'All paid' : 'No invoices' ?>">✓</span>
+      <?php endif; ?>
+    </div>
     <a href="building-detail.php?building=<?= urlencode($b) ?>" class="manage-btn">Manage →</a>
   </div>
 

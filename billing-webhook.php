@@ -77,7 +77,7 @@ $building = $meta['building']        ?? '';
 $type     = $meta['type']            ?? '';
 
 if (!$building || !preg_match('/^[a-zA-Z0-9_-]+$/', $building)
-  || !in_array($type, ['woolsy', 'storage'], true)) {
+  || !in_array($type, ['woolsy', 'storage', 'invoice'], true)) {
   http_response_code(200); // Don't retry — bad metadata
   error_log("billing-webhook.php: invalid building=$building type=$type");
   exit;
@@ -115,26 +115,46 @@ if ($type === 'woolsy') {
     $allCredits[$building]['allocated'] = round($allCredits[$building]['allocated'] + $creditsToAdd, 4);
     file_put_contents($credFile, json_encode($allCredits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-    // Clear the email-sent flag so the 90% trigger can fire again next time
     $bCfg = loadBuildingConfig($building);
-    unset($bCfg['woolsyBillingEmailSent']);
-    // Also clear billing token (one-time use)
-    unset($bCfg['billingToken']);
+    unset($bCfg['woolsyBillingEmailSent'], $bCfg['billingToken']);
     saveBuildingConfig($building, $bCfg);
+
+    $amountPaid = (int)($session['amount_total'] ?? 0) / 100;
+    require_once __DIR__ . '/invoice-helpers.php';
+    recordPaidInvoice($building, [
+      ['description' => 'Woolsy Credits (' . $creditsToAdd . ' credit' . ($creditsToAdd !== 1 ? 's' : '') . ')', 'amount' => $amountPaid],
+    ], $amountPaid, 'stripe');
 
     $ok      = true;
     $logNote = "woolsy +$creditsToAdd credits for $building";
   }
 
+} elseif ($type === 'invoice') {
+  $invoiceId = $meta['invoice_id'] ?? '';
+  if ($invoiceId) {
+    require_once __DIR__ . '/invoice-helpers.php';
+    $ok      = markInvoicePaid($building, $invoiceId, 'stripe');
+    $logNote = "invoice $invoiceId marked paid for $building";
+  }
+
 } else { // storage
   $newBytes = (int)($meta['new_bytes'] ?? 0);
   if ($newBytes > 0) {
-    $bCfg                    = loadBuildingConfig($building);
-    $bCfg['storageLimit']    = $newBytes;
-    // Clear the email-sent flag and billing token
-    unset($bCfg['storageLimitEmailSent']);
-    unset($bCfg['billingToken']);
+    $bCfg                 = loadBuildingConfig($building);
+    $bCfg['storageLimit'] = $newBytes;
+    unset($bCfg['storageLimitEmailSent'], $bCfg['billingToken']);
     saveBuildingConfig($building, $bCfg);
+
+    $amountPaid = (int)($session['amount_total'] ?? 0) / 100;
+    require_once __DIR__ . '/invoice-helpers.php';
+    $tierLabel = $meta['tier_label'] ?? (
+      $newBytes >= 1073741824 ? round($newBytes / 1073741824, 2) . ' GB' :
+      ($newBytes >= 1048576   ? round($newBytes / 1048576, 1)    . ' MB' :
+                                round($newBytes / 1024)          . ' KB')
+    );
+    recordPaidInvoice($building, [
+      ['description' => 'Storage Upgrade — ' . $tierLabel, 'amount' => $amountPaid],
+    ], $amountPaid, 'stripe');
 
     $ok      = true;
     $logNote = "storage limit set to $newBytes bytes for $building";
