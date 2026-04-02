@@ -132,6 +132,7 @@ html = f"""<!DOCTYPE html>
     <li>The Owner &amp; Resident Database</li>
     <li>Search &mdash; Training Your Residents</li>
     <li>Woolsy Knowledge Base</li>
+    <li>Billing &amp; Invoices</li>
     <li>Appendix: Sample Introduction Email</li>
   </ol>
 </div>
@@ -388,7 +389,7 @@ html = f"""<!DOCTYPE html>
 
 <h3>Storage Limit</h3>
 <p>Each building has a storage limit set by SheepSite. If an upload would exceed the limit, it will be blocked and you will see a message in the file manager.</p>
-<p>When the limit is reached, an email notification is sent automatically to the building&rsquo;s contact address with a link to purchase additional storage. Storage is available in upgrade tiers &mdash; you choose the size that works for your building and pay online. The new limit takes effect immediately after payment.</p>
+<p>When the limit is reached, an invoice is automatically created and an email notification is sent to the building&rsquo;s contact address with a link to pay online. Storage is available in upgrade tiers &mdash; you choose the size that works for your building. The new limit takes effect immediately after payment. You can also pay by check &mdash; see <strong>Section 10 &mdash; Billing &amp; Invoices</strong> for details.</p>
 <blockquote><strong>Tip:</strong> Running the Storage Report regularly lets you keep an eye on usage before you hit the limit. Large files such as high-resolution scans and videos fill storage quickly &mdash; PDFs are much more space-efficient for most documents.</blockquote>
 
 {divider()}
@@ -507,7 +508,7 @@ html = f"""<!DOCTYPE html>
 <ul>
   <li>The card shows <strong>used / allocated</strong> credits and a progress bar</li>
   <li>A warning appears when usage reaches 80% of the allocated amount</li>
-  <li>At 90% usage, an email is sent automatically to the building&rsquo;s contact address with a link to purchase additional credits. Choose any quantity and pay online &mdash; credits are applied automatically after payment.</li>
+  <li>At 90% usage, an invoice is automatically created and an email is sent to the building&rsquo;s contact address with a link to pay online &mdash; credits are applied immediately after payment. You can also pay by check &mdash; see <strong>Section 10 &mdash; Billing &amp; Invoices</strong>.</li>
   <li>When credits are exhausted, Woolsy displays a message to residents to contact the building administrator</li>
 </ul>
 
@@ -573,6 +574,29 @@ For maintenance requests, contact ABC Management at 555-123-4567 or manager@abcm
 <div class="tip"><strong>How it works:</strong> The Building FAQ text is injected directly into Woolsy&rsquo;s context alongside the knowledge base on every request. When a resident asks about board members or anything you have added here, Woolsy uses your text as the authoritative answer. Because Woolsy reads this on every question, edits are live the moment you save &mdash; there is no need to rebuild or wait.</div>
 
 <div class="warn"><strong>Important &mdash; Board member information:</strong> Woolsy intentionally does not extract specific board member names, unit numbers, or phone numbers from governing documents, because this information changes with elections and would quickly become outdated. Always provide current board contact information through the Building FAQ editor instead, or direct residents to the live Board of Directors page on your website.</div>
+
+{divider()}
+
+<h2>Section 10 &mdash; Billing &amp; Invoices</h2>
+
+<h3>Overview</h3>
+<p>Your Admin Dashboard includes a <strong>Billing</strong> section that shows your invoice history. Invoices are created automatically when a service limit is reached (storage or Woolsy credits) or when your annual subscription is due for renewal. You can view each invoice by clicking its ID, and pay online via the <strong>Pay &rarr;</strong> link if available.</p>
+
+<h3>Types of Invoices</h3>
+<ul>
+  <li><strong>Annual renewal</strong> &mdash; covers your yearly subscription. Generated about 30 days before your renewal date.</li>
+  <li><strong>Storage upgrade</strong> &mdash; created when an upload is blocked because your storage is full. The invoice is for the next available storage tier.</li>
+  <li><strong>Woolsy credits</strong> &mdash; created when Woolsy credits reach 90% usage. The invoice covers a credit top-up to keep Woolsy available to residents.</li>
+</ul>
+
+<h3>Paying Online</h3>
+<p>When a threshold invoice is triggered (storage or Woolsy), an email is sent to your building&rsquo;s contact address with a secure payment link. Click <strong>Pay &rarr;</strong> in that email or in the Billing section of your dashboard to pay by credit card via Stripe. The service is updated immediately after payment &mdash; storage limit raised or credits added.</p>
+
+<h3>Paying by Check</h3>
+<p>If you prefer to pay by check, send the payment to SheepSite and notify your account manager. The operator will mark the invoice as paid in the system, which applies the same service changes (storage upgrade, credits added, or renewal date advanced) and sends you a receipt by email.</p>
+
+<h3>Invoice History</h3>
+<p>The Billing section of your Admin Dashboard shows all invoices for your building &mdash; both paid and unpaid. Each row shows the invoice ID (click to view the full invoice), date, amount, and status. Paid invoices show the payment date.</p>
 
 {divider()}
 
