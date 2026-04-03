@@ -1,0 +1,551 @@
+<?php
+// -------------------------------------------------------
+// building-site.php — SheepSite self-hosted building website
+//
+// Test mode:  sheepsite.com/Scripts/building-site.php?building=SampleSite
+// Production: per-domain index.php defines BUILDING constant and requires this file
+// -------------------------------------------------------
+
+$buildings = require __DIR__ . '/buildings.php';
+
+// In production, the domain's index.php sets: define('BUILDING', 'SampleSite');
+// In test mode, building comes from the query string.
+if (defined('BUILDING')) {
+  $building = BUILDING;
+} else {
+  $building = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['building'] ?? '');
+}
+
+if (!$building || !isset($buildings[$building])) {
+  http_response_code(404);
+  exit('<h2 style="font-family:sans-serif;padding:2rem;">Building not found.</h2>');
+}
+
+$page = preg_replace('/[^a-z-]/', '', $_GET['page'] ?? 'home');
+if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private'])) {
+  $page = 'home';
+}
+
+$cfg = $buildings[$building];
+
+$displayName    = $cfg['displayName']           ?? $building;
+$headerImageUrl = $cfg['headerImageUrl']         ?? '';
+$calendarUrl    = $cfg['calendarUrl']            ?? '';
+$pmName         = $cfg['propertyMgmt']['name']   ?? 'Property Management';
+$pmUrl          = $cfg['propertyMgmt']['url']    ?? '#';
+$pmPhone        = $cfg['propertyMgmt']['phone']  ?? '';
+
+$heroTitles = [
+  'home'              => 'Welcome to ' . $displayName,
+  'about'             => 'About Us',
+  'resources-public'  => 'Resource Center',
+  'resources-private' => 'Private Resources',
+];
+$heroTitle = $heroTitles[$page] ?? 'Welcome';
+
+// Nav URL helper: includes ?building= in test mode, omits it in production
+function navUrl($p) {
+  global $building;
+  $qs = '?page=' . $p;
+  if (!defined('BUILDING')) $qs .= '&building=' . urlencode($building);
+  return $qs;
+}
+function isActive($p) {
+  global $page;
+  return $page === $p ? ' class="active"' : '';
+}
+
+$bldJs = json_encode($building);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><?php echo htmlspecialchars($displayName); ?></title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; background: #fff; }
+
+  /* ---- NAV ---- */
+  nav {
+    background: #1a1a2e;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    height: 62px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: bold;
+    font-family: Georgia, serif;
+    font-style: italic;
+    text-decoration: none;
+  }
+  .nav-brand .palm { font-size: 1.6rem; line-height: 1; }
+  .nav-links { display: flex; gap: 0.1rem; align-items: center; }
+  .nav-links a {
+    color: #ccc;
+    text-decoration: none;
+    padding: 0.45rem 0.9rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: color 0.15s;
+    border-bottom: 2px solid transparent;
+  }
+  .nav-links a:hover { color: #fff; }
+  .nav-links a.active { color: #4dd0e1; border-bottom-color: #4dd0e1; }
+
+  /* ---- HERO ---- */
+  .hero {
+    width: 100%;
+    height: 280px;
+    background-size: cover;
+    background-position: center;
+    background-color: #2d0050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.38);
+  }
+  .hero-title {
+    position: relative;
+    z-index: 1;
+    color: #fff;
+    font-size: 2.8rem;
+    font-weight: bold;
+    font-style: italic;
+    text-align: center;
+    text-shadow: 2px 3px 10px rgba(0,0,0,0.75);
+    padding: 0 2rem;
+  }
+
+  /* ---- CONTENT WRAPPER ---- */
+  .content { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+  .section  { margin-bottom: 2rem; }
+
+  /* ---- BUTTONS ---- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 10px 26px;
+    border-radius: 5px;
+    border: none;
+    font-size: 15px;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .btn-primary  { background: linear-gradient(to right, #3D0066, #BB0099); color: #fff; }
+  .btn-primary:hover  { opacity: 0.88; }
+  .btn-teal     { background: #00796b; color: #fff; }
+  .btn-teal:hover     { background: #00695c; }
+  .btn-calendar { background: #f59e0b; color: #fff; }
+  .btn-calendar:hover { background: #d97706; }
+  .btn-search {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+    background: transparent;
+    color: #BB0099;
+    border: 2px solid #BB0099;
+    font-size: 1rem;
+    padding: 12px;
+    margin-bottom: 2rem;
+  }
+  .btn-search:hover { background: #fff0fb; }
+
+  /* ---- ANNOUNCEMENT ---- */
+  .announce-head {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  .announce-head .bar { flex: 1; height: 4px; background: #222; border-radius: 2px; }
+  .announce-head h2 {
+    font-size: 1.45rem;
+    font-weight: 900;
+    font-style: italic;
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  /* ---- IFRAME CONTAINER ---- */
+  .iframe-box {
+    position: relative;
+    width: 100%;
+    height: 340px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f8f8f8;
+  }
+  .iframe-box iframe { width: 100%; height: 100%; border: none; display: none; }
+  .iframe-spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .spinner-ring {
+    width: 40px; height: 40px;
+    border: 4px solid #e0c0f0;
+    border-top-color: #7A0099;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .iframe-spinner p { margin-top: 10px; font-size: 13px; color: #888; font-family: inherit; }
+
+  /* ---- RESOURCE ROWS ---- */
+  .resource-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .resource-row:last-child { border-bottom: none; }
+  .resource-row .label { flex: 1; font-weight: 600; font-size: 0.98rem; }
+  .resource-row .sublabel { color: #666; font-size: 0.88rem; font-weight: 400; }
+
+  /* ---- ABOUT BOX ---- */
+  .about-box {
+    border: 2px solid #BB0099;
+    border-radius: 6px;
+    padding: 2rem;
+    text-align: center;
+    margin-top: 2rem;
+  }
+  .about-box h2 { font-size: 1.4rem; font-weight: 900; font-style: italic; margin-bottom: 0.8rem; }
+  .about-box p  { color: #444; font-size: 0.95rem; line-height: 1.75; max-width: 560px; margin: 0 auto; }
+
+  /* ---- FOOTER ---- */
+  footer {
+    background: #e8e8e8;
+    padding: 1.1rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .footer-left .copy    { font-size: 0.85rem; color: #444; }
+  .footer-left .copy a  { color: #BB0099; text-decoration: none; }
+  .footer-left .powered { font-style: italic; color: #BB0099; font-size: 0.88rem; margin-top: 2px; }
+  footer img { height: 48px; }
+
+  /* ---- SECTION HEADING (Resources pages) ---- */
+  .page-intro { color: #444; font-size: 0.95rem; line-height: 1.7; margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #faf5ff; border-left: 4px solid #BB0099; border-radius: 0 4px 4px 0; }
+</style>
+</head>
+<body>
+
+<!-- ===== NAV ===== -->
+<nav>
+  <a class="nav-brand" href="<?php echo navUrl('home'); ?>">
+    <span class="palm">🌴</span>
+    <?php echo htmlspecialchars($displayName); ?>
+  </a>
+  <div class="nav-links">
+    <a href="<?php echo navUrl('home'); ?>"<?php echo isActive('home'); ?>>Home</a>
+    <a href="<?php echo navUrl('about'); ?>"<?php echo isActive('about'); ?>>About Us</a>
+    <a href="<?php echo navUrl('resources-public'); ?>"<?php echo isActive('resources-public'); ?>>Resources Public</a>
+    <a href="<?php echo navUrl('resources-private'); ?>"<?php echo isActive('resources-private'); ?>>Resources Private</a>
+    <a href="#" onclick="openAdmin(); return false;">Site Admin</a>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<div class="hero"<?php if ($headerImageUrl) echo ' style="background-image:url(' . htmlspecialchars($headerImageUrl, ENT_QUOTES) . ');"'; ?>>
+  <div class="hero-title"><?php echo htmlspecialchars($heroTitle); ?></div>
+</div>
+
+<!-- ===== PAGE CONTENT ===== -->
+<div class="content">
+
+<?php if ($page === 'home'): ?>
+
+  <button class="btn btn-search" onclick="openSearch()">&#128269; Search ALL Documents</button>
+
+  <!-- Latest News / Announcement -->
+  <div class="section">
+    <div class="announce-head">
+      <div class="bar"></div>
+      <h2>LATEST NEWS /<br>ANNOUNCEMENT</h2>
+      <div class="bar"></div>
+    </div>
+    <div class="iframe-box">
+      <div class="iframe-spinner" id="doc-loader">
+        <div class="spinner-ring"></div>
+        <p>Loading...</p>
+      </div>
+      <iframe
+        data-script="get-doc-byname"
+        data-subdir="Page1Docs"
+        data-filename="Announcement Page1"
+        title="Latest Announcement">
+      </iframe>
+    </div>
+  </div>
+
+  <!-- Mid/End Year Report -->
+  <div class="section">
+    <div class="resource-row">
+      <span class="label">Mid/End Year Report</span>
+      <button class="btn btn-primary" onclick="openDoc('Page1Docs', 'Mid-End Year Report')">&#128196; Click to open</button>
+    </div>
+
+    <!-- Calendar -->
+    <div class="resource-row">
+      <span class="label">Calendar</span>
+      <?php if ($calendarUrl): ?>
+        <a class="btn btn-calendar" href="<?php echo htmlspecialchars($calendarUrl); ?>" target="_blank">&#128197; Building's Calendar</a>
+      <?php else: ?>
+        <span style="color:#aaa;font-size:0.9rem;">No calendar configured</span>
+      <?php endif; ?>
+    </div>
+
+    <!-- Work Order / Property Management -->
+    <div class="resource-row">
+      <div class="label">
+        Work Order (<?php echo htmlspecialchars($pmName); ?>)
+        <?php if ($pmPhone): ?>
+          <br><span class="sublabel"><?php echo htmlspecialchars($pmPhone); ?></span>
+        <?php endif; ?>
+      </div>
+      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; Vantaca</a>
+    </div>
+  </div>
+
+  <!-- About Us -->
+  <div class="about-box">
+    <h2>ABOUT US</h2>
+    <p>This is our little slice of paradise here in sunny Florida. This is a PRIVATE site
+       intended solely for the owners and residents of this building, to serve as a central
+       location for the sharing of information related to our community.</p>
+  </div>
+
+<?php elseif ($page === 'about'): ?>
+
+  <div style="position:relative;width:100%;height:75vh;border:1px solid #ddd;border-radius:4px;overflow:hidden;background:#f8f8f8;">
+    <div class="iframe-spinner" id="doc-loader">
+      <div class="spinner-ring"></div>
+      <p>Loading...</p>
+    </div>
+    <iframe
+      data-script="public-report"
+      data-page="board"
+      style="width:100%;height:100%;border:none;display:block;"
+      title="Board of Directors">
+    </iframe>
+  </div>
+
+<?php elseif ($page === 'resources-public'): ?>
+
+  <div class="page-intro">
+    Use the links below to browse public documents and resources. No login is required.
+  </div>
+
+  <button class="btn btn-search" onclick="openSearch()">&#128269; Search ALL Documents</button>
+
+  <div class="section">
+    <div class="resource-row">
+      <span class="label">Go to <?php echo htmlspecialchars($pmName); ?>&rsquo;s Vantaca</span>
+      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; Click to go</a>
+    </div>
+    <div class="resource-row">
+      <div class="label">Work Order<br><span class="sublabel"><?php echo htmlspecialchars($pmPhone); ?></span></div>
+      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; Click to go</a>
+    </div>
+    <div class="resource-row">
+      <span class="label">Root Folder &mdash; All Public Docs</span>
+      <button class="btn btn-primary" onclick="openFolder()">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Building Guides &amp; Rules</span>
+      <button class="btn btn-primary" onclick="openFolder('RulesDocs')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Forms / Applications</span>
+      <button class="btn btn-primary" onclick="openFolder('Forms')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Other Documents</span>
+      <button class="btn btn-primary" onclick="openFolder('OtherDocs')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Incorporation Documents</span>
+      <button class="btn btn-primary" onclick="openFolder('IncorporationDocs')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Owner Directory</span>
+      <button class="btn btn-primary" onclick="openReport('resident')">&#128196; List / Print</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Parking Spots</span>
+      <button class="btn btn-primary" onclick="openReport('parking')">&#128196; Click to open</button>
+    </div>
+  </div>
+
+<?php elseif ($page === 'resources-private'): ?>
+
+  <div class="page-intro">
+    This page contains links to the Association&rsquo;s private documents, made available only
+    to owners. Click on the document type of interest and the system will ask you to log in with
+    a username and password. If you do not have log-in credentials, please contact a member of
+    the Board.
+  </div>
+
+  <button class="btn btn-search" onclick="openSearch()">&#128269; Search ALL Documents</button>
+
+  <div class="section">
+    <div class="resource-row">
+      <span class="label">Root Folder &mdash; All Private Docs</span>
+      <button class="btn btn-primary" onclick="openPrivateFolder()">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Board Minutes</span>
+      <button class="btn btn-primary" onclick="openPrivateFolder('BoardMinutes')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Financial Statements</span>
+      <button class="btn btn-primary" onclick="openPrivateFolder('FinancialStatements')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Budgets</span>
+      <button class="btn btn-primary" onclick="openPrivateFolder('Budgets')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">SIRs Documents</span>
+      <button class="btn btn-primary" onclick="openPrivateFolder('SIRsDocs')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Contracts</span>
+      <button class="btn btn-primary" onclick="openPrivateFolder('Contracts')">&#128196; Click to open</button>
+    </div>
+  </div>
+
+<?php endif; ?>
+
+</div><!-- /content -->
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div class="footer-left">
+    <div class="copy">&copy; 2025 <a href="https://sheepsite.com">SheepSite.com</a></div>
+    <div class="powered">Powered by Sheep</div>
+  </div>
+  <img src="https://sheepsite.com/Scripts/Woolsy-original-transparent.png" alt="SheepSite">
+</footer>
+
+<!-- ===== SCRIPTS ===== -->
+<script>
+const BUILDING_NAME = <?php echo $bldJs; ?>;
+window.BUILDING_NAME = BUILDING_NAME;
+
+document.addEventListener('DOMContentLoaded', function () {
+  var SCRIPTS = 'https://sheepsite.com/Scripts/';
+
+  // Admin links
+  document.querySelectorAll('a[href*="admin.php"]').forEach(function (link) {
+    link.href = SCRIPTS + 'admin.php?building=' + encodeURIComponent(BUILDING_NAME);
+  });
+
+  // get-doc-byname iframes (announcement, documents)
+  document.querySelectorAll('iframe[data-script="get-doc-byname"]').forEach(function (iframe) {
+    var url = SCRIPTS + 'get-doc-byname.php?building=' + encodeURIComponent(BUILDING_NAME);
+    var subdir   = iframe.getAttribute('data-subdir');
+    var filename = iframe.getAttribute('data-filename');
+    if (subdir)   url += '&subdir='   + encodeURIComponent(subdir);
+    if (filename) url += '&filename=' + encodeURIComponent(filename);
+    iframe.onload = function () {
+      iframe.style.display = 'block';
+      var loader = document.getElementById('doc-loader');
+      if (loader) loader.style.display = 'none';
+    };
+    iframe.src = url;
+  });
+
+  // Public report iframes (board of directors)
+  document.querySelectorAll('iframe[data-script="public-report"]').forEach(function (iframe) {
+    var url = SCRIPTS + 'public-report.php?building=' + encodeURIComponent(BUILDING_NAME);
+    var pg = iframe.getAttribute('data-page');
+    if (pg) url += '&page=' + encodeURIComponent(pg);
+    url += '&nav=0';
+    iframe.onload = function () {
+      var loader = document.getElementById('doc-loader');
+      if (loader) loader.style.display = 'none';
+    };
+    iframe.src = url;
+  });
+});
+
+function openFolder(subdir) {
+  var url = 'https://sheepsite.com/Scripts/display-public-dir.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&return='   + encodeURIComponent(window.location.href);
+  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+  window.location.href = url;
+}
+function openPrivateFolder(subdir) {
+  var url = 'https://sheepsite.com/Scripts/display-private-dir.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&return='   + encodeURIComponent(window.location.href);
+  if (subdir) url += '&path=' + encodeURIComponent(subdir);
+  window.location.href = url;
+}
+function openReport(reportPage) {
+  window.location.href = 'https://sheepsite.com/Scripts/protected-report.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&page='     + encodeURIComponent(reportPage)
+    + '&return='   + encodeURIComponent(window.location.href);
+}
+function openPublicReport(reportPage) {
+  window.location.href = 'https://sheepsite.com/Scripts/public-report.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&page='     + encodeURIComponent(reportPage)
+    + '&return='   + encodeURIComponent(window.location.href);
+}
+function openAdmin() {
+  window.location.href = 'https://sheepsite.com/Scripts/admin.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME);
+}
+function openSearch() {
+  window.location.href = 'https://sheepsite.com/Scripts/search.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&return='   + encodeURIComponent(window.location.href);
+}
+function openDoc(subdir, filename) {
+  var url = 'https://sheepsite.com/Scripts/get-doc-byname.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME)
+    + '&filename=' + encodeURIComponent(filename);
+  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
+  window.open(url, '_blank');
+}
+</script>
+
+<!-- Woolsy floating chatbot -->
+<script src="https://sheepsite.com/Scripts/chatbot-widget.js"></script>
+
+</body>
+</html>

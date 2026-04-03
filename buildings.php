@@ -26,6 +26,15 @@ return [
     'publicFolderId'  => '1etbQzwJ30sLbSO7rNouEcAOQ_gUS1lHN',  // SampleSite/WebSite/Public
     'privateFolderId' => '1DVONmgPHxKLETKHRv-sJxnBmCx0B50Tb',  // SampleSite/WebSite/Private
     'webAppURL'       => 'https://script.google.com/macros/s/AKfycbyEqHwoX1ju5s--vNfy7U50BJH0FYLHQRN5UOqUAqotcHFlS2hBF51-K9I7QScgGyUw-w/exec',
+    // Site template fields
+    'displayName'     => 'SampleSite Condo',
+    'headerImageUrl'  => '',   // URL to hero background image — leave blank for purple fallback
+    'calendarUrl'     => '',   // Google Calendar URL for this building
+    'propertyMgmt'    => [
+      'name'  => 'Seacrest',
+      'url'   => 'https://home.seacrestservices.com/login',
+      'phone' => '1-888-828-6464',
+    ],
   ],
   'LyndhurstH' => [
     'state'           => 'FL',
