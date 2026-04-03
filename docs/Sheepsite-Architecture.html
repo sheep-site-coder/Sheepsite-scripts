@@ -44,7 +44,7 @@
 <body>
 
 <h1>🐑 SheepSite — Architecture Manual</h1>
-<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated April 2026</div>
+<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated April 2026 (session 26)</div>
 
 <nav>
 <ol class="toc">
@@ -191,6 +191,9 @@ so the web app endpoint is not open to the public.</p>
   <tr><td><code>extractDocText</code></td><td>Extracts text from a PDF via Drive OCR (copy + convert to Doc + read)</td></tr>
   <tr><td><code>stampBaseline</code></td><td>Records current Drive state as baseline after Woolsy update</td></tr>
   <tr><td><code>buildDocIndex</code></td><td>Recursively walks the public folder tree and returns all file names</td></tr>
+  <tr><td><code>setupBigUploadFolder</code></td><td>Creates <code>BigUploads/{targetPath}/</code> at the building Drive root (idempotent). Used when a file exceeds the per-request size threshold — file-manager.php opens the folder in Google Drive for direct upload.</td></tr>
+  <tr><td><code>listBigUploads</code></td><td>Recursively scans the building&rsquo;s <code>BigUploads/</code> tree, returning <code>{id, name, bytes, size, targetPath}</code> for every file found. Used to populate the Quarantined tab in file-manager.php.</td></tr>
+  <tr><td><code>publishBigUpload</code></td><td>Moves a quarantined file from <code>BigUploads/</code> into the target Public or Private subfolder (creating it if needed) via Drive <code>moveTo()</code>. Called once per checked file during a Quarantined-tab publish operation.</td></tr>
 </table>
 <p>A time-driven trigger runs <code>checkAllBuildings()</code> weekly to scan all buildings for
 doc changes and cache results in Script Properties. A <code>keepWarm()</code> trigger fires every
@@ -242,7 +245,7 @@ new library version.</p>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{building}</code> session.</td></tr>
+      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual, Billing (invoice history + invoice actions). Billing card shows the building&rsquo;s next renewal date; the date is displayed in red when &le;30 days away. Pay links open billing-invoice.php in a new tab. Invoices are sorted newest first by sequence number. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{building}</code> session.</td></tr>
   <tr><td><code>manage-users.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Add, remove, and reset passwords for resident accounts. Import owners from Google Sheet. Supports both building admin and master admin login.</td></tr>
   <tr><td><code>storage-report.php</code> <span class="tag tag-php">PHP</span></td>
@@ -260,7 +263,7 @@ new library version.</p>
   <tr><td><code>suspension.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Shared suspension check. Included by all resident-facing pages after <code>$building</code> is validated. Reads <code>config/{building}.json</code>; auto-sets <code>suspended:true</code> if <code>renewalDate</code> has passed. Outputs a "Service Unavailable" page (or JSON error for API endpoints) and exits.</td></tr>
   <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Admin file management tool for Drive folders.</td></tr>
+      <td>Admin file management UI for Drive folders. Three tabs: <strong>Public</strong>, <strong>Private</strong>, and <strong>Quarantined</strong>. Upload, rename, delete, and create subfolders in Public/Private. For files too large to upload through the browser, pre-checks remaining storage (limit minus used minus pending small files); if sufficient, opens a Google Drive folder in a new tab for direct upload — the file is quarantined in <code>BigUploads/</code> at the building root. The Quarantined tab lists all files there with checkboxes; admin selects which to publish (checked) or delete (unchecked) and confirms. Files are moved via GAS <code>publishBigUpload</code> action. If storage is insufficient, a <strong>Buy More Storage →</strong> button generates a fresh billing token and opens the billing page in a new tab.</td></tr>
   <tr><td><code>tag-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Admin interface for tagging documents (search feature).</td></tr>
   <tr><td><code>search.php</code> <span class="tag tag-php">PHP</span></td>
@@ -268,7 +271,7 @@ new library version.</p>
   <tr><td><code>setup-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>One-time tool to create <code>_master.json</code> with a bcrypt-hashed master password. Upload, visit once, delete immediately. No longer needed for per-building admins (handled by forgot-password.php).</td></tr>
   <tr><td><code>invoice-helpers.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Shared invoicing library. Key functions: <code>generateInvoice()</code> (renewal invoices with email), <code>createOpenInvoice(extra)</code> (threshold invoices — no email, stores invoiceType/newBytes/creditsToAdd), <code>recordPaidInvoice()</code> (Stripe immediate-pay), <code>markInvoicePaid(paymentMethod)</code> (type-aware: renewal advances renewalDate; storage sets storageLimit; woolsy adds credits), <code>loadInvoices()</code>, <code>buildLineItems()</code>, <code>unpaidInvoiceExists()</code>. Sends HTML invoice and receipt emails from <code>billing@sheepsite.com</code>.</td></tr>
+      <td>Shared invoicing library. Key functions: <code>generateInvoice()</code> (renewal invoices with email), <code>createOpenInvoice(extra)</code> (threshold invoices — no email, stores invoiceType/newBytes/creditsToAdd), <code>recordPaidInvoice()</code> (Stripe immediate-pay), <code>markInvoicePaid(paymentMethod)</code> (type-aware: renewal advances renewalDate; storage sets storageLimit; woolsy adds credits), <code>loadInvoices()</code> (sorted by <code>seq</code> descending — newest first), <code>buildLineItems()</code>, <code>unpaidInvoiceExists()</code>, <code>getUnpaidRenewalInvoice()</code> (returns invoice array with <code>_file</code> path for use by cron), <code>sendReminderEmail()</code> (amber 10-day reminder email; stamps <code>reminderSent</code> on invoice JSON after sending). All invoice/receipt emails sent from <code>sheepsite@sheepsite.com</code>.</td></tr>
   <tr><td><code>billing-helpers.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Threshold billing triggers. <code>checkStorageThreshold(building)</code> — called by file-manager.php when an upload is blocked; fires once per event (flag). <code>checkWoolsyThreshold(building, used, allocated)</code> — called by chatbot.php after credit deduction; fires at 90%. Both call <code>sendBillingEmail()</code> which: builds line items from pricing, calls <code>createOpenInvoice()</code> to create a real invoice file, generates a 7-day billing token, and emails the contact address a tokenized <code>billing.php</code> link. Stores <code>billingToken.invoiceId</code> in <code>config/{building}.json</code>.</td></tr>
   <tr><td><code>billing.php</code> <span class="tag tag-php">PHP</span></td>
@@ -276,13 +279,13 @@ new library version.</p>
   <tr><td><code>billing-webhook.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Stripe webhook endpoint (<code>checkout.session.completed</code>). Verifies Stripe signature (HMAC-SHA256, 5-min replay window). Routes by <code>metadata.type</code>: <code>woolsy</code> — adds credits + clears flags; <code>storage</code> — sets storageLimit + clears flags; <code>invoice</code> — calls <code>markInvoicePaid(&apos;stripe&apos;)</code>. Idempotency via <code>config/processed_payments.json</code>.</td></tr>
   <tr><td><code>billing-invoice.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Customer invoice payment page for renewal invoices (authenticated by <code>paymentToken</code> stored on the invoice). Shows invoice details and initiates Stripe Checkout.</td></tr>
+      <td>Customer invoice payment page for renewal and one-off invoices (authenticated by <code>paymentToken</code> stored on the invoice). Shows SheepSite logo, invoice details, and initiates Stripe Checkout. Passes <code>invoiceType</code> to the success URL so the post-payment page can show a context-appropriate message.</td></tr>
   <tr><td><code>invoice-view.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Invoice viewer. Accessible to master admin via building-detail.php and to building admin via admin.php invoice history. Shows line items, status, paid date, and payment method (Check/Stripe).</td></tr>
   <tr><td><code>billing-success.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Post-payment Stripe landing page (cosmetic). Actual fulfilment happens in billing-webhook.php.</td></tr>
+      <td>Post-payment Stripe landing page. Shows animated dancing Woolsy mascot and a type-aware thank-you message: specific messages for <code>renewal</code>, <code>woolsy</code>, and <code>storage</code> types; generic message for one-off invoices (<code>other</code>). Calls <code>window.opener.location.reload()</code> to refresh the admin dashboard tab that triggered the payment. Actual fulfilment happens in billing-webhook.php.</td></tr>
   <tr><td><code>storage-cron.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Nightly cron script. Refreshes Drive storage for every building (calls dir-display-bridge.gs storageReport, saves to config/{building}.json). Also checks each building&rsquo;s renewal date — if within 30 days and no unpaid invoice exists for that period, auto-generates and emails an invoice. Run via cPanel Cron Jobs (CLI) or HTTP trigger with token.</td></tr>
+      <td>Nightly cron script. Refreshes Drive storage for every building (calls dir-display-bridge.gs storageReport, saves to config/{building}.json). Also checks each building&rsquo;s renewal date: (1) if within 30 days and no unpaid invoice exists, auto-generates and emails an invoice; (2) if within 10 days and an unpaid renewal invoice exists without <code>reminderSent</code>, calls <code>sendReminderEmail()</code> — sends an amber reminder email and stamps <code>reminderSent</code> on the invoice to prevent duplicates. Run via cPanel Cron Jobs (CLI) or HTTP trigger with token.</td></tr>
 </table>
 
 <h3>Woolsy Chatbot Scripts</h3>
@@ -476,13 +479,14 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 
 <h3>Overview</h3>
 <p>SheepSite uses a file-based invoicing system. Invoices are JSON files stored in
-<code>invoices/{building}/</code>, one file per invoice. Three invoice types exist:</p>
+<code>invoices/{building}/</code>, one file per invoice. Four invoice types exist:</p>
 <ul>
   <li><strong>renewal</strong> &mdash; annual subscription invoice; generated manually or by cron 30 days before renewal</li>
   <li><strong>storage</strong> &mdash; storage tier upgrade; generated automatically when an upload is blocked by the limit</li>
   <li><strong>woolsy</strong> &mdash; Woolsy credit top-up; generated automatically when credits reach 90%</li>
+  <li><strong>other</strong> &mdash; one-off invoice created manually by the operator in building-detail.php for any ad-hoc charge</li>
 </ul>
-<p>Each type stores the data needed to fulfil the service on payment (<code>newBytes</code> for storage, <code>creditsToAdd</code> for Woolsy). Payment can be made online via Stripe or by physical check marked paid manually by the operator.</p>
+<p>Each type stores the data needed to fulfil the service on payment (<code>newBytes</code> for storage, <code>creditsToAdd</code> for Woolsy). Payment can be made online via Stripe or by physical check marked paid manually by the operator. All invoices carry an <code>invoiceType</code> field that flows through to <code>billing-success.php</code> for a type-aware thank-you message.</p>
 
 <h3>Renewal Invoice Line Items</h3>
 <p>Built by <code>buildLineItems()</code> in <code>invoice-helpers.php</code> from the building config and <code>config/pricing.json</code>:</p>
@@ -496,6 +500,7 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 <h3>Generating a Renewal Invoice</h3>
 <p><strong>Manual:</strong> In <code>building-detail.php</code>, the Billing section shows a live preview of the next invoice and a <strong>Generate &amp; Email Invoice</strong> button. Clicking generates the JSON, saves it, and emails it to the building&rsquo;s <code>contactEmail</code>.</p>
 <p><strong>Automatic (cron):</strong> <code>storage-cron.php</code> checks each building&rsquo;s <code>renewalDate</code> nightly. If renewal is within 30 days and no unpaid invoice exists for that period, it auto-generates and emails the invoice. <code>unpaidInvoiceExists()</code> prevents duplicates.</p>
+<p><strong>10-day reminder:</strong> On subsequent nightly runs, if the renewal is still within 10 days and the unpaid invoice does not yet have a <code>reminderSent</code> date, <code>sendReminderEmail()</code> sends an amber-styled reminder email with a direct pay link. After sending, <code>reminderSent: YYYY-MM-DD</code> is stamped on the invoice JSON so the reminder is sent exactly once.</p>
 
 <h3>Threshold-Triggered Invoices (Storage &amp; Woolsy)</h3>
 <p>These invoices are created automatically when a service limit is hit — no operator action needed:</p>
@@ -526,7 +531,7 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 <h3>Email Addresses</h3>
 <table>
   <tr><th>Address</th><th>Used for</th></tr>
-  <tr><td><code>billing@sheepsite.com</code></td><td>Invoice and receipt emails. Reply-To is also set to this address so customers can reply directly.</td></tr>
+  <tr><td><code>sheepsite@sheepsite.com</code></td><td>Invoice, receipt, and reminder emails. Reply-To is also set to this address so customers can reply directly. Contact address shown in invoice footers.</td></tr>
   <tr><td><code>noreply@sheepsite.com</code></td><td>System emails: storage alerts, Woolsy billing triggers, ToS notifications.</td></tr>
 </table>
 
@@ -535,6 +540,16 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 
 <h3>Discount</h3>
 <p>A per-building <code>discountPct</code> field in <code>config/{building}.json</code> (set in building-detail.php Configuration section) applies a percentage discount to the annual site fee only. It appears as a separate line item on the invoice. Domain and storage charges are never discounted.</p>
+
+<h3>Large File Quarantine Flow</h3>
+<p>Files too large to upload through the PHP file manager (browser fetch limit) are handled via a quarantine pattern rather than being rejected outright:</p>
+<ol>
+  <li><strong>Storage pre-check:</strong> Before opening Google Drive, file-manager.php computes <code>effectiveLeft = storageLimit - storageUsed - smallFilesTotal</code>. If the limit would be exceeded, a <strong>Buy More Storage →</strong> button is shown instead of a Drive link; clicking it generates a fresh billing token and opens <code>billing.php</code> in a new tab.</li>
+  <li><strong>Drive upload:</strong> If storage is available, a Google Drive folder is opened in a new browser tab via the <code>setupBigUploadFolder</code> GAS action, which creates <code>BigUploads/{targetPath}/</code> at the building root (idempotent). The user uploads directly to Drive.</li>
+  <li><strong>Quarantined tab:</strong> The file-manager <strong>Quarantined</strong> tab (styled in amber) calls <code>listBigUploads</code> to show all files in <code>BigUploads/</code>. Each file has a checkbox (checked by default) showing its size and destination path.</li>
+  <li><strong>Publish &amp; delete:</strong> The admin selects which files to publish (checked) and which to discard (unchecked), then confirms. For each checked file, <code>publishBigUpload</code> moves it from <code>BigUploads/</code> into the target Public or Private subfolder. Unchecked files are deleted. The operation is all-or-nothing per publish batch.</li>
+</ol>
+<p><strong>Note:</strong> Once a file has been uploaded directly to Drive, SheepSite has no way to prevent the user from adding more files outside the quota. The quarantine step gives the admin visibility and control before files are published to residents.</p>
 
 <h3>Storage Cron Schedule</h3>
 <p>Recommended cPanel cron schedule: <code>0 3 * * *</code> (3 AM daily). Command:</p>

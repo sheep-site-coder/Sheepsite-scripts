@@ -19,7 +19,7 @@ function generateInvoiceToken(): string {
 }
 
 // -------------------------------------------------------
-// Invoice numbering
+// Invoice numbering — per-building sequence
 // -------------------------------------------------------
 function nextInvoiceSeq(string $building): int {
   $dir = INVOICES_DIR . $building . '/';
@@ -41,15 +41,21 @@ function makeInvoiceId(string $building, int $seq): string {
 // the current renewal period (prevents duplicates from cron)
 // -------------------------------------------------------
 function unpaidInvoiceExists(string $building, string $renewalDate): bool {
+  return getUnpaidRenewalInvoice($building, $renewalDate) !== null;
+}
+
+// Returns the unpaid renewal invoice array for a building/renewalDate, or null if none.
+function getUnpaidRenewalInvoice(string $building, string $renewalDate): ?array {
   $dir = INVOICES_DIR . $building . '/';
-  if (!is_dir($dir)) return false;
+  if (!is_dir($dir)) return null;
   foreach (glob($dir . '*.json') as $f) {
     $inv = json_decode(file_get_contents($f), true) ?? [];
     if (($inv['status'] ?? '') === 'unpaid' && ($inv['renewalDate'] ?? '') === $renewalDate) {
-      return true;
+      $inv['_file'] = $f;
+      return $inv;
     }
   }
-  return false;
+  return null;
 }
 
 // -------------------------------------------------------
@@ -293,7 +299,7 @@ function loadInvoices(string $building): array {
     $inv = json_decode(file_get_contents($f), true);
     if ($inv) $invoices[] = $inv;
   }
-  usort($invoices, fn($a, $b) => strcmp($b['date'], $a['date']));
+  usort($invoices, fn($a, $b) => (int)($b['seq'] ?? 0) - (int)($a['seq'] ?? 0));
   return $invoices;
 }
 
@@ -424,16 +430,15 @@ function sendInvoiceEmail(array $invoice, array $bldCfg): void {
 
   <!-- Payment terms -->
   <div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px;padding:14px 16px;font-size:13px;color:#555;">
-    <strong style="color:#333;">Payment Options</strong><br><br>
-    <strong>By check:</strong> Make payable to <strong>SheepSite LLC</strong> and mail to [YOUR MAILING ADDRESS]<br><br>
-    <strong>Online:</strong> <a href="' . SCRIPTS_URL . 'billing-invoice.php?' . http_build_query(['building' => $building, 'invoice' => $invoice['id'], 'token' => $invoice['paymentToken']]) . '" style="color:#0070f3;">Pay online →</a><br><br>
-    Questions? Reply to this email.
+    <strong style="color:#333;">Payment</strong><br><br>
+    <a href="' . SCRIPTS_URL . 'billing-invoice.php?' . http_build_query(['building' => $building, 'invoice' => $invoice['id'], 'token' => $invoice['paymentToken']]) . '" style="color:#0070f3;">Pay online →</a><br><br>
+    Questions? Contact us at <a href="mailto:SheepSite@sheepsite.com" style="color:#0070f3;">SheepSite@sheepsite.com</a>
   </div>';
 
   $html    = invoiceEmailHtml($body);
   $headers = implode("\r\n", [
-    'From: SheepSite.com <SheepSite@sheepsite.com>',
-    'Reply-To: SheepSite@sheepsite.com',
+    'From: SheepSite.com <sheepsite@sheepsite.com>',
+    'Reply-To: sheepsite@sheepsite.com',
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',
@@ -473,12 +478,65 @@ function sendReceiptEmail(array $invoice, array $cfg): void {
 
   $html    = invoiceEmailHtml($body);
   $headers = implode("\r\n", [
-    'From: SheepSite.com <SheepSite@sheepsite.com>',
-    'Reply-To: SheepSite@sheepsite.com',
+    'From: SheepSite.com <sheepsite@sheepsite.com>',
+    'Reply-To: sheepsite@sheepsite.com',
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',
   ]);
 
   mail($to, $subject, $html, $headers);
+}
+
+// -------------------------------------------------------
+// 10-day reminder email — sent once per unpaid renewal invoice
+// -------------------------------------------------------
+function sendReminderEmail(array $invoice, array $bldCfg): void {
+  $to = $bldCfg['contactEmail'] ?? '';
+  if (!$to) return;
+
+  $building = $invoice['building'];
+  $label    = htmlspecialchars(ucwords(str_replace(['_', '-'], ' ', $building)));
+  $subject  = 'Payment Reminder — ' . strip_tags($label) . ' renewal due in 10 days';
+
+  $payUrl = SCRIPTS_URL . 'billing-invoice.php?token=' . urlencode($invoice['paymentToken'] ?? '');
+
+  $body = '
+  <div style="font-size:22px;font-weight:bold;color:#222;margin-bottom:20px;">Payment Reminder</div>
+
+  <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:4px;padding:16px 20px;margin-bottom:24px;">
+    <div style="font-size:15px;color:#b45309;font-weight:bold;margin-bottom:12px;">&#9888; Your renewal is due in 10 days</div>
+    <table cellpadding="0" cellspacing="0" style="font-size:14px;color:#333;">
+      <tr><td style="padding:3px 16px 3px 0;color:#777;">Invoice #</td><td style="font-weight:bold;">' . htmlspecialchars($invoice['id']) . '</td></tr>
+      <tr><td style="padding:3px 16px 3px 0;color:#777;">Amount due</td><td style="font-weight:bold;">$' . number_format($invoice['total'], 2) . '</td></tr>
+      <tr><td style="padding:3px 16px 3px 0;color:#777;">Due date</td><td>' . htmlspecialchars($bldCfg['renewalDate'] ?? '—') . '</td></tr>
+    </table>
+  </div>
+
+  <div style="text-align:center;margin-bottom:24px;">
+    <a href="' . htmlspecialchars($payUrl) . '" style="display:inline-block;background:#1a73e8;color:#fff;text-decoration:none;padding:12px 32px;border-radius:4px;font-size:16px;font-weight:bold;">Pay Online Now</a>
+  </div>
+
+  <div style="font-size:13px;color:#777;">
+    Questions? Email us at <a href="mailto:sheepsite@sheepsite.com" style="color:#1a73e8;">sheepsite@sheepsite.com</a>
+  </div>';
+
+  $html    = invoiceEmailHtml($body);
+  $headers = implode("\r\n", [
+    'From: SheepSite.com <sheepsite@sheepsite.com>',
+    'Reply-To: sheepsite@sheepsite.com',
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=UTF-8',
+    'X-Mailer: SheepSite/1.0',
+  ]);
+
+  if (mail($to, $subject, $html, $headers)) {
+    // Stamp reminderSent on the invoice file
+    $filePath = $invoice['_file'] ?? null;
+    if ($filePath && file_exists($filePath)) {
+      $data = json_decode(file_get_contents($filePath), true) ?? [];
+      $data['reminderSent'] = date('Y-m-d');
+      file_put_contents($filePath, json_encode($data, JSON_PRETTY_PRINT));
+    }
+  }
 }

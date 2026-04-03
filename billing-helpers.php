@@ -123,7 +123,7 @@ function sendBillingEmail(string $building, string $type, array &$cfg): bool {
   }
 
   $headers = implode("\r\n", [
-    'From: SheepSite.com <noreply@sheepsite.com>',
+    'From: SheepSite.com <sheepsite@sheepsite.com>',
     'Content-Type: text/plain; charset=UTF-8',
     'X-Mailer: SheepSite/1.0',
   ]);

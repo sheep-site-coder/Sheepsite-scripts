@@ -638,6 +638,90 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
+## Session 26 — Billing UX polish, invoice email fixes, large file quarantine
+
+### Large file upload — quarantine flow (`file-manager.php` + `dir-display-bridge.gs`)
+- Files >30 MB now go through a quarantine flow instead of raw Drive link
+- **Storage pre-check**: before showing the Drive modal, checks if big files + small files
+  would exceed remaining storage → if yes, shows "Buy More Storage" modal instead
+- **"Too large" modal**: calls `setup_big_upload` endpoint first to create
+  `BigUploads/{tree}/{path}/` folder structure under building root in Drive;
+  opens a blank window immediately (prevents popup blocker) then navigates to the Drive folder;
+  explains the Quarantined tab next step
+- **Quarantined tab** (3rd tab, amber): hidden until clicked; on open fires storage_refresh +
+  listBigUploads in parallel; shows all pending files with checkboxes (all checked by default);
+  live storage math — remaining space updates as files are checked/unchecked;
+  over-limit: Publish disabled + warning + "Buy More Storage" button;
+  Publish → confirm dialog listing what gets published vs deleted → moves checked files to
+  target paths, deletes unchecked; tab reloads after
+- **Buy More Storage**: opens blank window immediately, fetches billing token, navigates to
+  `billing.php?type=storage` — same popup-blocker fix applied
+- **Bug fix**: toolbar div was missing `id="toolbar"` causing `switchTree()` to crash silently
+  (JS error aborted before `loadListing()` — tabs appeared to switch but content didn't change)
+
+### New GAS actions (`dir-display-bridge.gs`) — deploy new version required
+- `setupBigUploadFolder` — creates `BigUploads/{tree}/{path}/` under building root (idempotent)
+- `listBigUploads` — recursive scan of BigUploads tree; returns `{id,name,bytes,size,targetPath}`
+- `publishBigUpload` — moves file to target path in Public/Private tree; creates subfolders if needed
+- `scanBigUploads` — internal recursive helper
+
+### New PHP endpoints (`file-manager.php`)
+- `json=setup_big_upload` — creates BigUploads subfolder, returns Drive folderId
+- `json=list_big_uploads` — proxies GAS listBigUploads
+- `json=publish_quarantine` — moves checked files, deletes unchecked, returns counts
+- `json=billing_url` — generates fresh billing token, returns `billing.php` URL for storage upgrade
+
+### Billing / invoice UX (`admin.php`, `invoice-helpers.php`, `billing-helpers.php`)
+- Pay links open in new tab (`target="_blank"`)
+- `window.opener.location.reload()` in `billing-success.php` — parent admin tab refreshes after payment
+- Billing card shows renewal date: grey normally, red+bold if ≤30 days
+- Invoice sort changed to seq descending (largest number first) in `loadInvoices()`
+- All From/Reply-To email headers → `sheepsite@sheepsite.com`
+- Invoice email: removed "pay by check" block; contact email shown as clickable link
+- `billing-invoice.php`: passes `invoice['invoiceType']` to success page instead of hardcoded `invoice`
+- `billing-success.php`: type-aware messages (`renewal`/`woolsy`/`storage`); generic fallback for
+  one-off (`other`) and unknown types; dancing Woolsy (`Woolsy-danse-transparent.png`, 3× animation)
+- Woolsy logo (`Woolsy-original-transparent.png`, 70px) added to `billing-invoice.php`
+- Storage limit modal in file manager: replaced "Contact SheepSite" text with "Buy More Storage →" button
+
+### `~/.claude/settings.json`
+- Hook key corrected: `postToolUse` → `PostToolUse` (PascalCase required by current Claude Code)
+
+---
+
+## Session 25 — UI polish, one-off invoices, billing section improvements
+
+### `admin.php`
+- Pay links now open in new tab (`target="_blank"`)
+- Billing card summary shows renewal date: grey normally, red+bold if ≤30 days away
+
+### `billing-invoice.php`
+- Woolsy logo (`Woolsy-original-transparent.png`, 70px) added at top of page
+- Success URL now passes `invoice['invoiceType']` instead of hardcoded `type=invoice`
+  so renewal invoices get the renewal message and one-off invoices get the generic message
+
+### `billing-success.php`
+- Dancing Woolsy animation: `Woolsy-danse-transparent.png`, bounces+wiggles 3× on load
+- Type-aware messages restored: `renewal`, `woolsy`, `storage` get specific text; anything
+  else (one-off `other` invoices, unknown types) falls back to generic "payment received" message
+- `window.opener.location.reload()` — reloads parent admin tab after payment so Pay link
+  updates to ✓ Paid without manual refresh
+
+### `invoice-helpers.php`
+- `loadInvoices()` sort changed from date to seq descending — largest invoice number first
+  (affects both admin.php and master-admin.php invoice tables)
+- Invoice email payment block: removed "pay by check" text; Pay online link kept;
+  contact email changed to `SheepSite@sheepsite.com`
+- Invoice numbering remains per-building (global numbering tried and reverted — obfuscates business size)
+
+### `billing-helpers.php` + `invoice-helpers.php`
+- All `From:` and `Reply-To:` email headers updated to `sheepsite@sheepsite.com`
+
+### `~/.claude/settings.json`
+- Hook key corrected from `postToolUse` → `PostToolUse` (PascalCase required by current Claude Code)
+
+---
+
 ## Session 25 — UI polish, one-off invoices, billing section improvements
 
 ### Woolsy icon — replaced 🐑 emoji with image across all admin pages
@@ -714,5 +798,5 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: April 2, 2026 (session 25 — Woolsy icon, one-off invoices, billing section restructure)*
+*Snapshot updated: April 3, 2026 (session 26 — billing UX polish, invoice email fixes, large file quarantine)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

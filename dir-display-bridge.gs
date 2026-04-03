@@ -27,6 +27,9 @@ function doGet(e) {
   if (action === 'stampBaseline')         return handleStampBaseline(e);
   if (action === 'buildDocIndex')         return handleBuildDocIndex(e);
   if (action === 'setupBuildingFolders')  return handleSetupBuildingFolders(e);
+  if (action === 'setupBigUploadFolder')  return handleSetupBigUploadFolder(e);
+  if (action === 'listBigUploads')        return handleListBigUploads(e);
+  if (action === 'publishBigUpload')      return handlePublishBigUpload(e);
 
   return jsonError('Unknown action');
 }
@@ -825,5 +828,109 @@ function handleBuildDocIndex(e) {
 
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true, sections: sections }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -------------------------------------------------------
+// BigUploads — quarantine folder management
+// -------------------------------------------------------
+
+// Create (or find) BigUploads/{targetPath} under the building root.
+// Building root is the parent of the Public folder.
+// params: publicFolderId, targetPath (e.g. "private/Minutes/Zooms")
+function handleSetupBigUploadFolder(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const publicFolderId = e.parameter.publicFolderId;
+  const targetPath     = e.parameter.targetPath;
+  if (!publicFolderId || !targetPath) return jsonError('Missing params');
+
+  const buildingRoot = DriveApp.getFolderById(publicFolderId).getParents().next();
+
+  // Get or create BigUploads root
+  const buIter   = buildingRoot.getFoldersByName('BigUploads');
+  const bigUploads = buIter.hasNext() ? buIter.next() : buildingRoot.createFolder('BigUploads');
+
+  // Walk/create path segments
+  let current = bigUploads;
+  for (const part of targetPath.split('/').filter(p => p)) {
+    const iter = current.getFoldersByName(part);
+    current = iter.hasNext() ? iter.next() : current.createFolder(part);
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, folderId: current.getId() }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Recursively list all files under BigUploads/, with target path derived from folder structure.
+// params: publicFolderId
+function handleListBigUploads(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const publicFolderId = e.parameter.publicFolderId;
+  if (!publicFolderId) return jsonError('Missing publicFolderId');
+
+  const buildingRoot = DriveApp.getFolderById(publicFolderId).getParents().next();
+  const buIter = buildingRoot.getFoldersByName('BigUploads');
+  if (!buIter.hasNext()) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, files: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  const files = [];
+  scanBigUploads(buIter.next(), '', files);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, files }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function scanBigUploads(folder, path, files) {
+  const fileIter = folder.getFiles();
+  while (fileIter.hasNext()) {
+    const file  = fileIter.next();
+    const bytes = file.getSize();
+    files.push({
+      id:         file.getId(),
+      name:       file.getName(),
+      bytes,
+      size:       bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB',
+      targetPath: path   // e.g. "Private/Minutes/Zooms"
+    });
+  }
+  const folderIter = folder.getFolders();
+  while (folderIter.hasNext()) {
+    const sub = folderIter.next();
+    scanBigUploads(sub, path ? path + '/' + sub.getName() : sub.getName(), files);
+  }
+}
+
+// Move a quarantined file to its target path in Public or Private tree.
+// params: fileId, targetPath (e.g. "Private/Minutes/Zooms"), publicFolderId, privateFolderId
+function handlePublishBigUpload(e) {
+  if (!validateToken(e)) return jsonError('Unauthorized');
+  const fileId          = e.parameter.fileId;
+  const targetPath      = e.parameter.targetPath;
+  const publicFolderId  = e.parameter.publicFolderId;
+  const privateFolderId = e.parameter.privateFolderId;
+  if (!fileId || !targetPath || !publicFolderId || !privateFolderId) return jsonError('Missing params');
+
+  const parts   = targetPath.split('/').filter(p => p);
+  const tree    = parts[0].toLowerCase();  // 'private' or 'public'
+  const subpath = parts.slice(1).join('/');
+  const rootId  = tree === 'private' ? privateFolderId : publicFolderId;
+
+  let target = DriveApp.getFolderById(rootId);
+  if (subpath) {
+    for (const part of subpath.split('/')) {
+      const iter = target.getFoldersByName(part);
+      target = iter.hasNext() ? iter.next() : target.createFolder(part);
+    }
+  }
+
+  DriveApp.getFileById(fileId).moveTo(target);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
 }

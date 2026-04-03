@@ -117,6 +117,19 @@ foreach ($buildings as $key => $cfg) {
         log_line("  $key — Invoice generation FAILED: " . $e->getMessage());
       }
     }
+
+    // 10-day reminder — send once per unpaid renewal invoice
+    if ($daysUntil <= 10 && $daysUntil >= 0) {
+      $unpaidInv = getUnpaidRenewalInvoice($key, $renewalDate);
+      if ($unpaidInv && empty($unpaidInv['reminderSent'])) {
+        try {
+          sendReminderEmail($unpaidInv, $saved);
+          log_line("  $key — Reminder sent for {$unpaidInv['id']}");
+        } catch (Exception $e) {
+          log_line("  $key — Reminder FAILED: " . $e->getMessage());
+        }
+      }
+    }
   }
 }
 

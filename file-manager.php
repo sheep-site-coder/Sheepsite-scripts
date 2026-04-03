@@ -164,6 +164,103 @@ if (isset($_GET['json']) && $_GET['json'] === 'storage_refresh') {
 }
 
 // -------------------------------------------------------
+// JSON: set up BigUploads quarantine subfolder in Drive
+// Returns {ok, folderId} — the Drive folder to open
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'setup_big_upload') {
+  header('Content-Type: application/json');
+  $tree       = ($_GET['tree'] ?? '') === 'private' ? 'Private' : 'Public';
+  $path       = trim($_GET['path'] ?? '', '/');
+  $targetPath = $path ? $tree . '/' . $path : $tree;
+
+  $url = APPS_SCRIPT_URL
+       . '?action=setupBigUploadFolder'
+       . '&token='          . urlencode(APPS_SCRIPT_TOKEN)
+       . '&publicFolderId=' . urlencode($config['publicFolderId'])
+       . '&targetPath='     . urlencode($targetPath);
+
+  echo appsScriptGet($url);
+  exit;
+}
+
+// -------------------------------------------------------
+// JSON: list all quarantined files (BigUploads tree)
+// Returns {ok, files:[{id,name,bytes,size,targetPath}]}
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'list_big_uploads') {
+  header('Content-Type: application/json');
+  $url = APPS_SCRIPT_URL
+       . '?action=listBigUploads'
+       . '&token='          . urlencode(APPS_SCRIPT_TOKEN)
+       . '&publicFolderId=' . urlencode($config['publicFolderId']);
+  echo appsScriptGet($url);
+  exit;
+}
+
+// -------------------------------------------------------
+// POST: publish checked quarantine files, delete unchecked
+// Body: publish[]=fileId&targetPath[]=path&delete[]=fileId
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'publish_quarantine') {
+  header('Content-Type: application/json');
+  $toPublish    = $_POST['publish']    ?? [];
+  $targetPaths  = $_POST['targetPath'] ?? [];
+  $toDelete     = $_POST['delete']     ?? [];
+  $published = $deleted = $errors = 0;
+
+  foreach ($toPublish as $i => $fileId) {
+    $fileId     = preg_replace('/[^a-zA-Z0-9_-]/', '', $fileId);
+    $targetPath = $targetPaths[$i] ?? '';
+    if (!$fileId || !$targetPath) continue;
+
+    $url = APPS_SCRIPT_URL
+         . '?action=publishBigUpload'
+         . '&token='           . urlencode(APPS_SCRIPT_TOKEN)
+         . '&fileId='          . urlencode($fileId)
+         . '&targetPath='      . urlencode($targetPath)
+         . '&publicFolderId='  . urlencode($config['publicFolderId'])
+         . '&privateFolderId=' . urlencode($config['privateFolderId']);
+
+    $result = json_decode(appsScriptGet($url), true);
+    if ($result['ok'] ?? false) { $published++; } else { $errors++; }
+  }
+
+  foreach ($toDelete as $fileId) {
+    $fileId = preg_replace('/[^a-zA-Z0-9_-]/', '', $fileId);
+    if (!$fileId) continue;
+    $url = APPS_SCRIPT_URL
+         . '?action=deleteFile'
+         . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
+         . '&fileId=' . urlencode($fileId);
+    $result = json_decode(appsScriptGet($url), true);
+    if ($result['ok'] ?? false) { $deleted++; } else { $errors++; }
+  }
+
+  echo json_encode(['ok' => $errors === 0, 'published' => $published, 'deleted' => $deleted, 'errors' => $errors]);
+  exit;
+}
+
+// -------------------------------------------------------
+// JSON: generate a storage billing URL for Buy More Storage
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'billing_url') {
+  header('Content-Type: application/json');
+  require_once __DIR__ . '/billing-helpers.php';
+  require_once __DIR__ . '/invoice-helpers.php';
+  $cfg = loadBillingBuildingConfig($building);
+  if (empty($cfg['contactEmail'])) {
+    echo json_encode(['ok' => false, 'error' => 'No contact email set for this building.']);
+    exit;
+  }
+  $token = generateBillingToken($building, 'storage', $cfg);
+  $cfg['billingToken']['invoiceId'] = null; // no invoice for direct link
+  saveBillingBuildingConfig($building, $cfg);
+  $url = 'billing.php?' . http_build_query(['building' => $building, 'type' => 'storage', 'token' => $token]);
+  echo json_encode(['ok' => true, 'url' => $url]);
+  exit;
+}
+
+// -------------------------------------------------------
 // JSON: list folder contents (proxied from Apps Script)
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'list') {
@@ -391,6 +488,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   echo json_encode(['ok' => false, 'error' => 'Unknown action']);
   exit;
 }
+// Storage limit for client-side pre-check
+$_pageBldCfg      = loadBuildingCfg($building);
+$_pagePricing     = file_exists(CONFIG_DIR . 'pricing.json') ? json_decode(file_get_contents(CONFIG_DIR . 'pricing.json'), true) ?? [] : [];
+$_pageStorageUsed  = (int)($_pageBldCfg['storageUsed']  ?? 0);
+$_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing['storageDefaultLimit'] ?? 524288000));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -518,13 +620,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </p>
 
 <div class="tabs">
-  <button class="tab active" id="tab-public"  onclick="switchTree('public')">Public</button>
-  <button class="tab"        id="tab-private" onclick="switchTree('private')">Private</button>
+  <button class="tab active" id="tab-public"      onclick="switchTree('public')">Public</button>
+  <button class="tab"        id="tab-private"     onclick="switchTree('private')">Private</button>
+  <button class="tab"        id="tab-quarantine"  onclick="switchTree('quarantine')" style="color:#b45309;">Quarantined</button>
 </div>
 
 <div class="breadcrumb" id="breadcrumb"></div>
 
-<div class="toolbar">
+<div class="toolbar" id="toolbar">
   <button class="toolbar-btn" onclick="promptNewFolder()">+ New Folder</button>
 </div>
 
@@ -542,10 +645,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div id="listing"><p class="loading">Loading&hellip;</p></div>
 
+<div id="quarantine-section" style="display:none;">
+  <div id="quarantine-body"><p class="loading">Loading quarantined files&hellip;</p></div>
+</div>
+
 <script>
 (function () {
   var building        = <?= json_encode($building) ?>;
   var base            = 'file-manager.php?building=' + encodeURIComponent(building);
+  var storageUsed     = <?= json_encode($_pageStorageUsed) ?>;
+  var storageLimit    = <?= json_encode($_pageStorageLimit) ?>;
   var currentTree     = 'public';
   var currentPath     = '';
   var currentFolderId = null;
@@ -564,9 +673,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   window.switchTree = function (tree) {
     currentTree = tree;
     currentPath = '';
-    document.getElementById('tab-public').classList.toggle('active',  tree === 'public');
-    document.getElementById('tab-private').classList.toggle('active', tree === 'private');
-    loadListing();
+    document.getElementById('tab-public').classList.toggle('active',      tree === 'public');
+    document.getElementById('tab-private').classList.toggle('active',     tree === 'private');
+    document.getElementById('tab-quarantine').classList.toggle('active',  tree === 'quarantine');
+
+    var isQ = tree === 'quarantine';
+    document.getElementById('breadcrumb').style.display   = isQ ? 'none' : '';
+    document.getElementById('toolbar').style.display      = isQ ? 'none' : '';
+    document.getElementById('drop-zone').style.display    = isQ ? 'none' : '';
+    document.getElementById('listing').style.display      = isQ ? 'none' : '';
+    document.getElementById('quarantine-section').style.display = isQ ? '' : 'none';
+
+    if (isQ) loadQuarantine();
+    else loadListing();
   };
 
   // -------------------------------------------------------
@@ -1026,6 +1145,165 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   };
 
   // -------------------------------------------------------
+  // -------------------------------------------------------
+  // Quarantine tab
+  // -------------------------------------------------------
+  function loadQuarantine() {
+    document.getElementById('quarantine-body').innerHTML = '<p class="loading">Fetching pending files and storage usage&hellip;</p>';
+
+    // Fire storage refresh + file list in parallel
+    var refreshDone = false, listDone = false;
+    var freshUsed = storageUsed;
+    var qFiles    = [];
+
+    function tryRender() {
+      if (!refreshDone || !listDone) return;
+      renderQuarantine(qFiles, freshUsed);
+    }
+
+    fetch(base + '&json=storage_refresh')
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.total) freshUsed = d.total; })
+      .catch(function() {})
+      .then(function() { refreshDone = true; tryRender(); });
+
+    fetch(base + '&json=list_big_uploads')
+      .then(function(r) { return r.json(); })
+      .then(function(d) { qFiles = d.files || []; })
+      .catch(function() {})
+      .then(function() { listDone = true; tryRender(); });
+  }
+
+  function renderQuarantine(files, usedBytes) {
+    var body = document.getElementById('quarantine-body');
+
+    if (!files.length) {
+      body.innerHTML = '<p style="color:#555;margin-top:1rem;">No large files are waiting in quarantine.</p>';
+      return;
+    }
+
+    var remaining = storageLimit > 0 ? storageLimit - usedBytes : Infinity;
+
+    var rows = files.map(function(f, i) {
+      return '<tr id="qrow-' + i + '">'
+        + '<td style="padding:7px 8px;"><input type="checkbox" id="qchk-' + i + '" checked onchange="updateQuarantineMath()"></td>'
+        + '<td style="padding:7px 8px;">' + esc(f.name) + '</td>'
+        + '<td style="padding:7px 8px;white-space:nowrap;">' + esc(f.size) + '</td>'
+        + '<td style="padding:7px 8px;color:#777;font-size:0.82rem;">' + (f.targetPath ? '\u2192 ' + esc(f.targetPath) : '\u2014') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    body.innerHTML = ''
+      + '<div id="q-storage-bar" style="margin:1rem 0 0.5rem;font-size:0.88rem;color:#555;"></div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-bottom:1rem;">'
+      + '<thead><tr>'
+      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;width:32px;"></th>'
+      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;">File</th>'
+      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;">Size</th>'
+      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;">Publishes to</th>'
+      + '</tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '</table>'
+      + '<div id="q-over-msg" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;padding:0.6rem 0.85rem;font-size:0.875rem;color:#92400e;margin-bottom:0.75rem;">'
+      + 'The checked files exceed your available storage. Uncheck files to fit within your limit, or upgrade your storage.'
+      + '</div>'
+      + '<div style="display:flex;gap:0.75rem;flex-wrap:wrap;">'
+      + '<button id="q-publish-btn" class="toolbar-btn" onclick="confirmQuarantinePublish()">Publish checked &amp; delete unchecked</button>'
+      + '<button id="q-buy-btn" class="toolbar-btn" style="display:none;background:#b45309;" onclick="buyMoreStorage()">Buy More Storage &rarr;</button>'
+      + '</div>';
+
+    // Store file data for publish step
+    window._qFiles    = files;
+    window._qRemaining = remaining;
+    updateQuarantineMath();
+  }
+
+  window.updateQuarantineMath = function() {
+    var files     = window._qFiles || [];
+    var remaining = window._qRemaining !== undefined ? window._qRemaining : Infinity;
+    var checkedTotal = 0;
+    files.forEach(function(f, i) {
+      if (document.getElementById('qchk-' + i) && document.getElementById('qchk-' + i).checked) {
+        checkedTotal += f.bytes;
+      }
+    });
+
+    var overLimit = storageLimit > 0 && checkedTotal > remaining;
+    var barColor  = overLimit ? '#dc2626' : '#1a7f37';
+    var barText   = storageLimit > 0
+      ? fmtSize(checkedTotal) + ' of ' + fmtSize(remaining) + ' remaining'
+      : fmtSize(checkedTotal) + ' selected';
+
+    var bar = document.getElementById('q-storage-bar');
+    if (bar) bar.innerHTML = '<span style="color:' + barColor + ';font-weight:600;">' + barText + '</span>';
+
+    var publishBtn = document.getElementById('q-publish-btn');
+    var buyBtn     = document.getElementById('q-buy-btn');
+    var overMsg    = document.getElementById('q-over-msg');
+    if (publishBtn) publishBtn.disabled = overLimit;
+    if (buyBtn)     buyBtn.style.display = overLimit ? '' : 'none';
+    if (overMsg)    overMsg.style.display = overLimit ? '' : 'none';
+  };
+
+  window.confirmQuarantinePublish = function() {
+    var files    = window._qFiles || [];
+    var toPublish = [], toDelete = [];
+    files.forEach(function(f, i) {
+      var chk = document.getElementById('qchk-' + i);
+      if (chk && chk.checked) toPublish.push(f); else toDelete.push(f);
+    });
+
+    var pubList = toPublish.map(function(f) {
+      return '<li><strong>' + esc(f.name) + '</strong>' + (f.targetPath ? ' \u2192 ' + esc(f.targetPath) : '') + '</li>';
+    }).join('');
+    var delList = toDelete.map(function(f) {
+      return '<li>' + esc(f.name) + '</li>';
+    }).join('');
+
+    var bodyHtml = '<p><strong>Will be published (' + toPublish.length + '):</strong></p>'
+      + (pubList ? '<ul style="margin:0.25rem 0 0.75rem;">' + pubList + '</ul>' : '<p style="color:#777;font-size:0.88rem;">None</p>')
+      + (toDelete.length ? '<p><strong>Will be deleted (' + toDelete.length + '):</strong></p><ul style="margin:0.25rem 0;">' + delList + '</ul>' : '');
+
+    showFmConfirm('Confirm Publish', bodyHtml, 'Publish', function() {
+      executeQuarantinePublish(toPublish, toDelete);
+    });
+  };
+
+  function executeQuarantinePublish(toPublish, toDelete) {
+    document.getElementById('quarantine-body').innerHTML = '<p class="loading">Publishing&hellip;</p>';
+    var fd = new FormData();
+    toPublish.forEach(function(f) {
+      fd.append('publish[]',    f.id);
+      fd.append('targetPath[]', f.targetPath);
+    });
+    toDelete.forEach(function(f) { fd.append('delete[]', f.id); });
+
+    fetch(base + '&json=publish_quarantine', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.errors) {
+          document.getElementById('quarantine-body').innerHTML =
+            '<p style="color:#c00;">' + d.errors + ' operation(s) failed. Published: ' + d.published + ', Deleted: ' + d.deleted + '.</p>';
+        }
+        loadQuarantine();
+      })
+      .catch(function() {
+        document.getElementById('quarantine-body').innerHTML = '<p style="color:#c00;">Network error — please try again.</p>';
+      });
+  }
+
+  window.buyMoreStorage = function() {
+    var win = window.open('', '_blank'); // open immediately while in user gesture
+    fetch(base + '&json=billing_url')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.ok && d.url) { win.location.href = d.url; }
+        else { win.close(); alert(d.error || 'Could not generate billing link.'); }
+      })
+      .catch(function() { win.close(); alert('Network error — please try again'); });
+  };
+
+  // -------------------------------------------------------
   // Upload queue — processes files one at a time
   // -------------------------------------------------------
   function uploadQueue(files) {
@@ -1034,16 +1312,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     var index   = 0;
     var errors  = [];
 
-    // Validate all files up front
-    var tooBig = files.filter(function (f) { return f.size > MAX; });
+    // Validate all files up front — catch oversized files before upload attempt
+    var tooBig     = files.filter(function (f) { return f.size > MAX; });
+    var smallFiles = files.filter(function (f) { return f.size <= MAX; });
     if (tooBig.length) {
-      alert(tooBig.map(function (f) {
-        return '"' + f.name + '" (' + fmtSize(f.size) + ') exceeds 30 MB';
-      }).join('\n') + '\n\nThese files will be skipped.');
-      files = files.filter(function (f) { return f.size <= MAX; });
-      if (!files.length) return;
+      // Storage check: would big files + small files exceed the remaining space?
+      if (storageUsed > 0 && storageLimit > 0) {
+        var smallTotal    = smallFiles.reduce(function (s, f) { return s + f.size; }, 0);
+        var tooBigTotal   = tooBig.reduce(function (s, f) { return s + f.size; }, 0);
+        var effectiveLeft = storageLimit - storageUsed - smallTotal;
+        if (tooBigTotal > effectiveLeft) {
+          showFmConfirm(
+            'Storage limit reached',
+            '<p>These files cannot be uploaded — they would exceed your storage limit.</p>',
+            'Buy More Storage \u2192',
+            function () { buyMoreStorage(); },
+            null, null
+          );
+          return;
+        }
+      }
+
+      var fileList = tooBig.map(function (f) {
+        return '<li><strong>' + esc(f.name) + '</strong> (' + fmtSize(f.size) + ')</li>';
+      }).join('');
+      showFmConfirm(
+        tooBig.length === 1 ? 'File too large' : 'Files too large',
+        (tooBig.length === 1
+          ? '<p>This file exceeds the 30 MB limit and cannot be uploaded through the file manager:</p>'
+          : '<p>These files exceed the 30 MB limit and cannot be uploaded through the file manager:</p>')
+        + '<ul style="margin:0.5rem 0;">' + fileList + '</ul>'
+        + '<p style="font-size:0.88rem;color:#555;margin-top:0.75rem;">Click <strong>Open in Google Drive</strong> to upload directly there. Afterwards, return here and open the <strong>Quarantined</strong> tab to review and publish the file(s).</p>',
+        'Open in Google Drive \u2192',
+        function () {
+          var win = window.open('', '_blank'); // open immediately while in user gesture
+          var url = base + '&json=setup_big_upload&tree=' + currentTree
+                  + (currentPath ? '&path=' + encodeURIComponent(currentPath) : '');
+          fetch(url).then(function(r) { return r.json(); }).then(function(d) {
+            if (d.ok && d.folderId) {
+              win.location.href = 'https://drive.google.com/drive/folders/' + d.folderId;
+            } else {
+              win.close();
+              alert('Could not prepare upload folder: ' + (d.error || 'Unknown error'));
+            }
+          }).catch(function() { win.close(); alert('Network error — please try again'); });
+        },
+        smallFiles.length ? ('Upload ' + (smallFiles.length === 1 ? '1 other file' : smallFiles.length + ' other files')) : null,
+        smallFiles.length ? function () { continueWithFiles(smallFiles); } : null
+      );
+      return;
     }
 
+    continueWithFiles(files);
+
+  function continueWithFiles(files) {
     if (!currentFolderId) { alert('Loading \u2014 please wait'); return; }
 
     // Check duplicates for all files at once, build replace map
@@ -1064,7 +1386,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'File' + (toReplace.length > 1 ? 's' : '') + ' already exist',
         bodyHtml,
         'Replace',
-        function() { startUpload(files, total, replaceMap); },
+        function() { startUpload(files, files.length, replaceMap); },
         'Skip & upload others',
         function() {
           var kept = files.filter(function (f) { return !replaceMap[f.name]; });
@@ -1074,7 +1396,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       return;
     }
 
-    startUpload(files, total, replaceMap);
+    startUpload(files, files.length, replaceMap);
+  } // end continueWithFiles
 
   function startUpload(files, total, replaceMap) {
     var dropLabel = document.getElementById('drop-label');

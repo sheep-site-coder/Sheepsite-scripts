@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyPaid) {
     if (markInvoicePaid($building, $invoiceId)) {
       header('Location: ' . SCRIPTS_URL . 'billing-success.php?' . http_build_query([
         'building' => $building,
-        'type'     => 'invoice',
+        'type'     => $invoice['invoiceType'] ?? 'other',
         'invoice'  => $invoiceId,
       ]));
       exit;
@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyPaid) {
     } else {
       $successUrl = SCRIPTS_URL . 'billing-success.php?' . http_build_query([
         'building' => $building,
-        'type'     => 'invoice',
+        'type'     => $invoice['invoiceType'] ?? 'other',
         'invoice'  => $invoiceId,
       ]);
       $cancelUrl = SCRIPTS_URL . 'billing-invoice.php?' . http_build_query([
@@ -217,6 +217,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyPaid) {
   </style>
 </head>
 <body>
+
+<div style="text-align:center;margin-bottom:1.5rem;">
+  <img src="https://sheepsite.com/Scripts/assets/Woolsy-original-transparent.png" alt="SheepSite" height="70">
+</div>
 
 <h1>Invoice <?= htmlspecialchars($invoiceId) ?></h1>
 <div class="subtitle">

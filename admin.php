@@ -362,8 +362,11 @@ if (!$mustChange) {
   </a>
 
   <?php
-    $openInvoices = array_values(array_filter($invoices, fn($i) => ($i['status'] ?? '') !== 'paid'));
-    $totalOwed    = array_sum(array_column($openInvoices, 'total'));
+    $openInvoices  = array_values(array_filter($invoices, fn($i) => ($i['status'] ?? '') !== 'paid'));
+    $totalOwed     = array_sum(array_column($openInvoices, 'total'));
+    $renewalDate   = $bldCfg['renewalDate'] ?? null;
+    $renewalDays   = $renewalDate ? (int)ceil((strtotime($renewalDate) - time()) / 86400) : null;
+    $renewalUrgent = $renewalDays !== null && $renewalDays <= 30;
   ?>
   <details class="card" style="display:block;padding:1.25rem;cursor:default;">
     <summary style="list-style:none;display:flex;gap:1.25rem;align-items:flex-start;cursor:pointer;">
@@ -377,6 +380,12 @@ if (!$mustChange) {
             <span style="color:#1a7f37;font-weight:600;">&#10003; Paid</span>
           <?php else: ?>
             No invoices on record
+          <?php endif; ?>
+          <?php if ($renewalDate): ?>
+            &nbsp;&middot;&nbsp;
+            <span style="color:<?= $renewalUrgent ? '#dc2626' : '#666' ?>;font-weight:<?= $renewalUrgent ? '600' : 'normal' ?>;">
+              Renews <?= htmlspecialchars($renewalDate) ?>
+            </span>
           <?php endif; ?>
         </div>
       </div>
@@ -411,10 +420,10 @@ if (!$mustChange) {
               <span style="color:#1a7f37;font-weight:600;">&#10003; Paid</span>
             <?php elseif ($invToken): ?>
               <a href="billing-invoice.php?<?= htmlspecialchars(http_build_query(['building' => $building, 'invoice' => $inv['id'], 'token' => $invToken])) ?>"
-                 style="color:#b45309;font-weight:600;">Pay &rarr;</a>
+                 target="_blank" style="color:#b45309;font-weight:600;">Pay &rarr;</a>
             <?php elseif ($billingTokenPayUrl && ($billingTok['invoiceId'] ?? '') === $inv['id']): ?>
               <a href="<?= htmlspecialchars($billingTokenPayUrl) ?>"
-                 style="color:#b45309;font-weight:600;">Pay &rarr;</a>
+                 target="_blank" style="color:#b45309;font-weight:600;">Pay &rarr;</a>
             <?php else: ?>
               <span style="color:#b45309;font-weight:600;">Open</span>
             <?php endif; ?>
