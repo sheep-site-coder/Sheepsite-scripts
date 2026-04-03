@@ -26,16 +26,18 @@ if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 
   $page = 'home';
 }
 
-$cfg = $buildings[$building];
+// Site config comes from config/{building}.json (managed via building-detail.php)
+$cfgFile = __DIR__ . '/config/' . $building . '.json';
+$cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
 
-$displayName    = $cfg['displayName']           ?? $building;
-$headerImageUrl = $cfg['headerImageUrl']         ?? '';
-$calendarUrl    = $cfg['calendarUrl']            ?? '';
-$facebookUrl    = $cfg['facebookUrl']            ?? '';
-$pmName         = $cfg['propertyMgmt']['name']        ?? 'Property Management';
-$pmUrl          = $cfg['propertyMgmt']['url']         ?? '#';
-$pmPhone        = $cfg['propertyMgmt']['phone']       ?? '';
-$pmButtonLabel  = $cfg['propertyMgmt']['buttonLabel'] ?? 'Portal';
+$displayName    = $cfg['displayName']                  ?? $building;
+$headerImageUrl = $cfg['headerImageUrl']               ?? '';
+$calendarUrl    = $cfg['calendarUrl']                  ?? '';
+$facebookUrl    = $cfg['facebookUrl']                  ?? '';
+$pmName         = $cfg['propertyMgmt']['name']         ?? 'Property Management';
+$pmUrl          = $cfg['propertyMgmt']['url']          ?? '#';
+$pmPhone        = $cfg['propertyMgmt']['phone']        ?? '';
+$pmButtonLabel  = $cfg['propertyMgmt']['buttonLabel']  ?? 'Portal';
 
 $heroTitles = [
   'home'              => 'Welcome to ' . $displayName,

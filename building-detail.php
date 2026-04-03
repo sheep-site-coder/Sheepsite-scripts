@@ -174,6 +174,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     $message = 'Configuration saved.';
   }
 
+  // ---- Save website/site config ----
+  if ($action === 'save_site_config') {
+    $cfg = loadBuildingConfig($buildingKey);
+    $cfg['displayName']    = trim($_POST['display_name']    ?? '');
+    $cfg['headerImageUrl'] = trim($_POST['header_image_url'] ?? '');
+    $cfg['calendarUrl']    = trim($_POST['calendar_url']    ?? '');
+    $cfg['facebookUrl']    = trim($_POST['facebook_url']    ?? '');
+    $cfg['propertyMgmt']   = [
+      'name'        => trim($_POST['pm_name']         ?? ''),
+      'url'         => trim($_POST['pm_url']          ?? ''),
+      'phone'       => trim($_POST['pm_phone']        ?? ''),
+      'buttonLabel' => trim($_POST['pm_button_label'] ?? ''),
+    ];
+    saveBuildingConfig($buildingKey, $cfg);
+    $message = 'Website settings saved.';
+  }
+
   // ---- Save billing config (renewalDate + discountPct) ----
   if ($action === 'save_billing_config') {
     $cfg = loadBuildingConfig($buildingKey);
@@ -890,6 +907,66 @@ function esc(s) {
     </table>
     <p style="font-size:0.82rem;color:#888;margin-top:0.5rem;">These fields are set in <code>buildings.php</code> on the server.</p>
   </details>
+</div>
+
+<!-- Website -->
+<div class="section">
+  <h2>🌐 Website</h2>
+  <form method="post" action="building-detail.php?building=<?= urlencode($buildingKey) ?>">
+    <input type="hidden" name="action" value="save_site_config">
+
+    <div class="form-row">
+      <div style="flex:1;min-width:220px;">
+        <label>Association display name</label>
+        <input type="text" name="display_name" value="<?= htmlspecialchars($bldCfg['displayName'] ?? '') ?>"
+               placeholder="Lyndhurst H Condo" style="width:100%;">
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label>Header image URL</label>
+        <input type="text" name="header_image_url" value="<?= htmlspecialchars($bldCfg['headerImageUrl'] ?? '') ?>"
+               placeholder="https://sheepsite.com/Scripts/assets/Building-header.jpg" style="width:100%;">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div style="flex:1;min-width:220px;">
+        <label>Google Calendar URL</label>
+        <input type="text" name="calendar_url" value="<?= htmlspecialchars($bldCfg['calendarUrl'] ?? '') ?>"
+               placeholder="https://calendar.google.com/..." style="width:100%;">
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label>Facebook URL</label>
+        <input type="text" name="facebook_url" value="<?= htmlspecialchars($bldCfg['facebookUrl'] ?? '') ?>"
+               placeholder="https://facebook.com/groups/..." style="width:100%;">
+      </div>
+    </div>
+
+    <h3 style="margin:1.25rem 0 0.75rem;font-size:0.95rem;color:#555;">Property Management</h3>
+    <div class="form-row">
+      <div style="flex:1;min-width:160px;">
+        <label>Company name</label>
+        <input type="text" name="pm_name" value="<?= htmlspecialchars($bldCfg['propertyMgmt']['name'] ?? '') ?>"
+               placeholder="Seacrest" style="width:100%;">
+      </div>
+      <div style="flex:1;min-width:160px;">
+        <label>Phone</label>
+        <input type="text" name="pm_phone" value="<?= htmlspecialchars($bldCfg['propertyMgmt']['phone'] ?? '') ?>"
+               placeholder="1-888-828-6464" style="width:100%;">
+      </div>
+      <div style="flex:1;min-width:220px;">
+        <label>Portal URL</label>
+        <input type="text" name="pm_url" value="<?= htmlspecialchars($bldCfg['propertyMgmt']['url'] ?? '') ?>"
+               placeholder="https://home.seacrestservices.com/login" style="width:100%;">
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <label>Button label</label>
+        <input type="text" name="pm_button_label" value="<?= htmlspecialchars($bldCfg['propertyMgmt']['buttonLabel'] ?? '') ?>"
+               placeholder="Vantaca" style="width:100%;">
+      </div>
+    </div>
+
+    <button type="submit" class="btn">Save Website Settings</button>
+  </form>
 </div>
 
 <!-- Woolsy Credits -->
