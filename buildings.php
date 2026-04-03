@@ -32,9 +32,10 @@ return [
     'calendarUrl'     => '',   // Google Calendar URL for this building
     'facebookUrl'     => '',   // Facebook group/page URL for this building
     'propertyMgmt'    => [
-      'name'  => 'Seacrest',
-      'url'   => 'https://home.seacrestservices.com/login',
-      'phone' => '1-888-828-6464',
+      'name'        => 'Seacrest',
+      'url'         => 'https://home.seacrestservices.com/login',
+      'phone'       => '1-888-828-6464',
+      'buttonLabel' => 'Vantaca',
     ],
   ],
   'LyndhurstH' => [

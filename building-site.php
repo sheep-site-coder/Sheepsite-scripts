@@ -32,9 +32,10 @@ $displayName    = $cfg['displayName']           ?? $building;
 $headerImageUrl = $cfg['headerImageUrl']         ?? '';
 $calendarUrl    = $cfg['calendarUrl']            ?? '';
 $facebookUrl    = $cfg['facebookUrl']            ?? '';
-$pmName         = $cfg['propertyMgmt']['name']   ?? 'Property Management';
-$pmUrl          = $cfg['propertyMgmt']['url']    ?? '#';
-$pmPhone        = $cfg['propertyMgmt']['phone']  ?? '';
+$pmName         = $cfg['propertyMgmt']['name']        ?? 'Property Management';
+$pmUrl          = $cfg['propertyMgmt']['url']         ?? '#';
+$pmPhone        = $cfg['propertyMgmt']['phone']       ?? '';
+$pmButtonLabel  = $cfg['propertyMgmt']['buttonLabel'] ?? 'Portal';
 
 $heroTitles = [
   'home'              => 'Welcome to ' . $displayName,
@@ -436,12 +437,12 @@ $bldJs = json_encode($building);
     <!-- Work Order / Property Management -->
     <div class="resource-row">
       <div class="label">
-        Work Order (<?php echo htmlspecialchars($pmName); ?>)
+        Work Order
         <?php if ($pmPhone): ?>
           <br><span class="sublabel"><?php echo htmlspecialchars($pmPhone); ?></span>
         <?php endif; ?>
       </div>
-      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; Vantaca</a>
+      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; <?php echo htmlspecialchars($pmButtonLabel); ?></a>
     </div>
   </div>
 
