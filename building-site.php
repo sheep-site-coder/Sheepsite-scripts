@@ -31,7 +31,8 @@ $cfgFile = __DIR__ . '/config/' . $building . '.json';
 $cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
 
 $displayName    = $cfg['displayName']                  ?? $building;
-$headerImageUrl = $cfg['headerImageUrl']               ?? '';
+$headerImageFile = $cfg['headerImageUrl'] ?? '';
+$headerImageUrl  = $headerImageFile ? 'https://sheepsite.com/Scripts/assets/' . $headerImageFile : '';
 $calendarUrl    = $cfg['calendarUrl']                  ?? '';
 $facebookUrl    = $cfg['facebookUrl']                  ?? '';
 $pmName         = $cfg['propertyMgmt']['name']         ?? 'Property Management';

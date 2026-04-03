@@ -922,9 +922,9 @@ function esc(s) {
                placeholder="Lyndhurst H Condo" style="width:100%;">
       </div>
       <div style="flex:1;min-width:220px;">
-        <label>Header image URL</label>
+        <label>Header image filename <small style="color:#888;font-weight:normal;">(stored in Scripts/assets/)</small></label>
         <input type="text" name="header_image_url" value="<?= htmlspecialchars($bldCfg['headerImageUrl'] ?? '') ?>"
-               placeholder="https://sheepsite.com/Scripts/assets/Building-header.jpg" style="width:100%;">
+               placeholder="SampleSite-header.jpg" style="width:100%;">
       </div>
     </div>
 
