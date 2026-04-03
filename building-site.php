@@ -22,7 +22,7 @@ if (!$building || !isset($buildings[$building])) {
 }
 
 $page = preg_replace('/[^a-z-]/', '', $_GET['page'] ?? 'home');
-if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 'cenclub'])) {
+if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 'cenclub', 'social'])) {
   $page = 'home';
 }
 
@@ -31,6 +31,7 @@ $cfg = $buildings[$building];
 $displayName    = $cfg['displayName']           ?? $building;
 $headerImageUrl = $cfg['headerImageUrl']         ?? '';
 $calendarUrl    = $cfg['calendarUrl']            ?? '';
+$facebookUrl    = $cfg['facebookUrl']            ?? '';
 $pmName         = $cfg['propertyMgmt']['name']   ?? 'Property Management';
 $pmUrl          = $cfg['propertyMgmt']['url']    ?? '#';
 $pmPhone        = $cfg['propertyMgmt']['phone']  ?? '';
@@ -41,6 +42,7 @@ $heroTitles = [
   'resources-public'  => 'Resource Center',
   'resources-private' => 'Private Resources',
   'cenclub'           => 'CenClub',
+  'social'            => 'Social Links',
 ];
 $heroTitle = $heroTitles[$page] ?? 'Welcome';
 
@@ -194,7 +196,7 @@ $bldJs = json_encode($building);
   /* ---- HERO ---- */
   .hero {
     width: 100%;
-    height: 280px;
+    height: 252px;
     background-size: cover;
     background-position: center;
     background-color: #2d0050;
@@ -247,6 +249,9 @@ $bldJs = json_encode($building);
   .btn-report:hover   { background: #005f8e; }
   .btn-calendar { background: #f59e0b; color: #fff; }
   .btn-calendar:hover { background: #d97706; }
+  .btn-facebook { background: #1877f2; color: #fff; }
+  .btn-facebook:hover { background: #145dbf; }
+  .btn-disabled { background: #ccc; color: #888; cursor: not-allowed; }
   .btn-search {
     display: flex;
     width: 100%;
@@ -346,6 +351,11 @@ $bldJs = json_encode($building);
   .page-intro { color: #444; font-size: 0.95rem; line-height: 1.7; margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #faf5ff; border-left: 4px solid #BB0099; border-radius: 0 4px 4px 0; }
   .group-heading { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; color: #999; text-transform: uppercase; padding: 1.25rem 0 0.5rem; border-top: 1px solid #eee; margin-top: 0.5rem; }
   .group-heading:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .cenclub-block { margin-bottom: 2rem; }
+  .cenclub-block p { font-size: 0.97rem; margin-bottom: 0.6rem; color: #333; }
+  .cenclub-block ul { padding-left: 1.5rem; }
+  .cenclub-block ul li { margin-bottom: 0.3rem; font-size: 0.95rem; color: #444; }
+  .cenclub-red { color: #cc0000; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -366,6 +376,7 @@ $bldJs = json_encode($building);
         <a href="<?php echo navUrl('resources-public'); ?>"<?php echo isDropdownActive('resources-public'); ?>>Public</a>
         <a href="<?php echo navUrl('resources-private'); ?>"<?php echo isDropdownActive('resources-private'); ?>>Private</a>
         <a href="<?php echo navUrl('cenclub'); ?>"<?php echo isDropdownActive('cenclub'); ?>>CenClub</a>
+        <a href="<?php echo navUrl('social'); ?>"<?php echo isDropdownActive('social'); ?>>Social</a>
       </div>
     </div>
     <a href="#" onclick="openAdmin(); return false;">Site Admin</a>
@@ -444,18 +455,12 @@ $bldJs = json_encode($building);
 
 <?php elseif ($page === 'about'): ?>
 
-  <div style="position:relative;width:100%;height:75vh;border:1px solid #ddd;border-radius:4px;overflow:hidden;background:#f8f8f8;">
-    <div class="iframe-spinner" id="doc-loader">
-      <div class="spinner-ring"></div>
-      <p>Loading...</p>
-    </div>
-    <iframe
-      data-script="public-report"
-      data-page="board"
-      style="width:100%;height:100%;border:none;display:block;"
-      title="Board of Directors">
-    </iframe>
-  </div>
+  <iframe
+    data-script="public-report"
+    data-page="board"
+    style="width:100%;height:480px;border:1px solid #ddd;border-radius:4px;display:block;"
+    title="Board of Directors">
+  </iframe>
 
 <?php elseif ($page === 'resources-public'): ?>
 
@@ -538,10 +543,67 @@ $bldJs = json_encode($building);
     </div>
   </div>
 
+
 <?php elseif ($page === 'cenclub'): ?>
 
-  <div class="page-intro">
-    CenClub content coming soon.
+  <div style="text-align:center;margin-bottom:2.5rem;">
+    <a class="btn btn-primary" href="https://cenclub.com/services" target="_blank">&#127760; CenClub Resource Page</a>
+    <p style="margin-top:0.75rem;font-size:0.9rem;color:#666;">This Link will bring you to the CenClub web site.</p>
+  </div>
+
+  <div class="cenclub-block">
+    <p>Scroll down the page to <span class="cenclub-red">&ldquo;Staff Office Resources&rdquo;</span> for information on the following</p>
+    <ul>
+      <li>Important Phone Numbers</li>
+      <li>Seacrest Services</li>
+      <li>Comcast &amp; Xfinity</li>
+      <li>Homestead information &mdash; Broward County</li>
+    </ul>
+  </div>
+
+  <div class="cenclub-block">
+    <p>Scroll down the page to <span class="cenclub-red">&ldquo;I.D. Office Resources&rdquo;</span> for information on the following</p>
+    <ul>
+      <li>Property Transfer Application</li>
+      <li>Service/Support Animal Application</li>
+      <li>Companion Pass Request Form</li>
+      <li>Gate Pass Request</li>
+      <li>Guest Pass Request</li>
+      <li>Contractor Entry Request</li>
+      <li>Resident Emergency Information Form</li>
+    </ul>
+  </div>
+
+  <div class="cenclub-block">
+    <p>Scroll down the page to <span class="cenclub-red">&ldquo;Administration Office Resources&rdquo;</span> for information on the following</p>
+    <ul>
+      <li>Automatic Payment Form</li>
+      <li>CenClub &mdash; Payment Options Information</li>
+      <li>Cancellation of Direct Debit</li>
+    </ul>
+  </div>
+
+<?php elseif ($page === 'social'): ?>
+
+  <div style="max-width:480px;margin:0 auto;">
+
+    <div class="resource-row">
+      <span class="label">Facebook Group</span>
+      <?php if ($facebookUrl): ?>
+        <a class="btn btn-facebook" href="<?php echo htmlspecialchars($facebookUrl); ?>" target="_blank">&#128081; Facebook</a>
+      <?php else: ?>
+        <span class="btn btn-facebook" style="opacity:0.5;cursor:default;">&#128081; Facebook</span>
+      <?php endif; ?>
+    </div>
+
+    <div class="resource-row">
+      <div class="label">
+        Forum
+        <br><span class="sublabel">Coming soon</span>
+      </div>
+      <span class="btn btn-disabled">&#128172; Forum</span>
+    </div>
+
   </div>
 
 <?php endif; ?>
