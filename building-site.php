@@ -22,7 +22,7 @@ if (!$building || !isset($buildings[$building])) {
 }
 
 $page = preg_replace('/[^a-z-]/', '', $_GET['page'] ?? 'home');
-if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private'])) {
+if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 'cenclub'])) {
   $page = 'home';
 }
 
@@ -40,6 +40,7 @@ $heroTitles = [
   'about'             => 'About Us',
   'resources-public'  => 'Resource Center',
   'resources-private' => 'Private Resources',
+  'cenclub'           => 'CenClub',
 ];
 $heroTitle = $heroTitles[$page] ?? 'Welcome';
 
@@ -51,6 +52,14 @@ function navUrl($p) {
   return $qs;
 }
 function isActive($p) {
+  global $page;
+  return $page === $p ? ' class="active"' : '';
+}
+function isResourcesActive() {
+  global $page;
+  return in_array($page, ['resources-public', 'resources-private', 'cenclub']) ? ' class="active"' : '';
+}
+function isDropdownActive($p) {
   global $page;
   return $page === $p ? ' class="active"' : '';
 }
@@ -93,7 +102,7 @@ $bldJs = json_encode($building);
   }
   .nav-brand .palm { font-size: 1.6rem; line-height: 1; }
   .nav-links { display: flex; gap: 0.1rem; align-items: center; }
-  .nav-links a {
+  .nav-links > a, .nav-links > .dropdown > a {
     color: #ccc;
     text-decoration: none;
     padding: 0.45rem 0.9rem;
@@ -101,9 +110,86 @@ $bldJs = json_encode($building);
     font-size: 0.9rem;
     transition: color 0.15s;
     border-bottom: 2px solid transparent;
+    display: block;
+    cursor: pointer;
   }
-  .nav-links a:hover { color: #fff; }
-  .nav-links a.active { color: #4dd0e1; border-bottom-color: #4dd0e1; }
+  .nav-links > a:hover, .nav-links > .dropdown > a:hover { color: #fff; }
+  .nav-links > a.active, .nav-links > .dropdown > a.active { color: #4dd0e1; border-bottom-color: #4dd0e1; }
+
+  /* Dropdown */
+  .dropdown { position: relative; }
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #2a2a3e;
+    border-radius: 0 0 6px 6px;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 200;
+  }
+  .dropdown:hover .dropdown-menu { display: block; }
+  .dropdown-menu a {
+    display: block;
+    padding: 0.65rem 1.1rem;
+    color: #ccc;
+    font-size: 0.88rem;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .dropdown-menu a:last-child { border-bottom: none; }
+  .dropdown-menu a:hover { color: #fff; background: #3a3a50; }
+  .dropdown-menu a.active { color: #4dd0e1; }
+
+  /* Hamburger */
+  .hamburger {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    font-size: 1.7rem;
+    padding: 0.25rem;
+    line-height: 1;
+  }
+
+  /* Mobile nav */
+  @media (max-width: 768px) {
+    nav { padding: 0 1.25rem; }
+    .hamburger { display: block; }
+    .nav-links {
+      display: none;
+      position: absolute;
+      top: 62px;
+      left: 0;
+      right: 0;
+      background: #1a1a2e;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0.5rem 0 1rem;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+      z-index: 99;
+    }
+    .nav-links.open { display: flex; }
+    .nav-links > a, .nav-links > .dropdown > a {
+      padding: 0.75rem 1.5rem;
+      border-bottom: none;
+      border-radius: 0;
+    }
+    .dropdown { position: static; }
+    .dropdown:hover .dropdown-menu { display: none; }
+    .dropdown.open .dropdown-menu { display: block; }
+    .dropdown-menu {
+      position: static;
+      box-shadow: none;
+      background: #111120;
+      border-radius: 0;
+      min-width: 0;
+    }
+    .dropdown-menu a { padding: 0.65rem 2.5rem; }
+    .hero-title { font-size: 1.8rem; }
+  }
 
   /* ---- HERO ---- */
   .hero {
@@ -121,7 +207,7 @@ $bldJs = json_encode($building);
     content: '';
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.38);
+    background: rgba(0,0,0,0.18);
   }
   .hero-title {
     position: relative;
@@ -157,6 +243,8 @@ $bldJs = json_encode($building);
   .btn-primary:hover  { opacity: 0.88; }
   .btn-teal     { background: #00796b; color: #fff; }
   .btn-teal:hover     { background: #00695c; }
+  .btn-report   { background: #0077b6; color: #fff; }
+  .btn-report:hover   { background: #005f8e; }
   .btn-calendar { background: #f59e0b; color: #fff; }
   .btn-calendar:hover { background: #d97706; }
   .btn-search {
@@ -252,10 +340,12 @@ $bldJs = json_encode($building);
   .footer-left .copy    { font-size: 0.85rem; color: #444; }
   .footer-left .copy a  { color: #BB0099; text-decoration: none; }
   .footer-left .powered { font-style: italic; color: #BB0099; font-size: 0.88rem; margin-top: 2px; }
-  footer img { height: 48px; }
+  footer img { height: 72px; }
 
   /* ---- SECTION HEADING (Resources pages) ---- */
   .page-intro { color: #444; font-size: 0.95rem; line-height: 1.7; margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #faf5ff; border-left: 4px solid #BB0099; border-radius: 0 4px 4px 0; }
+  .group-heading { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; color: #999; text-transform: uppercase; padding: 1.25rem 0 0.5rem; border-top: 1px solid #eee; margin-top: 0.5rem; }
+  .group-heading:first-child { border-top: none; margin-top: 0; padding-top: 0; }
 </style>
 </head>
 <body>
@@ -266,11 +356,18 @@ $bldJs = json_encode($building);
     <span class="palm">🌴</span>
     <?php echo htmlspecialchars($displayName); ?>
   </a>
-  <div class="nav-links">
+  <button class="hamburger" id="hamburger" aria-label="Menu">&#9776;</button>
+  <div class="nav-links" id="nav-links">
     <a href="<?php echo navUrl('home'); ?>"<?php echo isActive('home'); ?>>Home</a>
     <a href="<?php echo navUrl('about'); ?>"<?php echo isActive('about'); ?>>About Us</a>
-    <a href="<?php echo navUrl('resources-public'); ?>"<?php echo isActive('resources-public'); ?>>Resources Public</a>
-    <a href="<?php echo navUrl('resources-private'); ?>"<?php echo isActive('resources-private'); ?>>Resources Private</a>
+    <div class="dropdown">
+      <a href="#"<?php echo isResourcesActive(); ?>>Resources &#9662;</a>
+      <div class="dropdown-menu">
+        <a href="<?php echo navUrl('resources-public'); ?>"<?php echo isDropdownActive('resources-public'); ?>>Public</a>
+        <a href="<?php echo navUrl('resources-private'); ?>"<?php echo isDropdownActive('resources-private'); ?>>Private</a>
+        <a href="<?php echo navUrl('cenclub'); ?>"<?php echo isDropdownActive('cenclub'); ?>>CenClub</a>
+      </div>
+    </div>
     <a href="#" onclick="openAdmin(); return false;">Site Admin</a>
   </div>
 </nav>
@@ -370,14 +467,6 @@ $bldJs = json_encode($building);
 
   <div class="section">
     <div class="resource-row">
-      <span class="label">Go to <?php echo htmlspecialchars($pmName); ?>&rsquo;s Vantaca</span>
-      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; Click to go</a>
-    </div>
-    <div class="resource-row">
-      <div class="label">Work Order<br><span class="sublabel"><?php echo htmlspecialchars($pmPhone); ?></span></div>
-      <a class="btn btn-teal" href="<?php echo htmlspecialchars($pmUrl); ?>" target="_blank">&#9962; Click to go</a>
-    </div>
-    <div class="resource-row">
       <span class="label">Root Folder &mdash; All Public Docs</span>
       <button class="btn btn-primary" onclick="openFolder()">&#128196; Click to open</button>
     </div>
@@ -397,14 +486,7 @@ $bldJs = json_encode($building);
       <span class="label">Incorporation Documents</span>
       <button class="btn btn-primary" onclick="openFolder('IncorporationDocs')">&#128196; Click to open</button>
     </div>
-    <div class="resource-row">
-      <span class="label">Owner Directory</span>
-      <button class="btn btn-primary" onclick="openReport('resident')">&#128196; List / Print</button>
-    </div>
-    <div class="resource-row">
-      <span class="label">Parking Spots</span>
-      <button class="btn btn-primary" onclick="openReport('parking')">&#128196; Click to open</button>
-    </div>
+
   </div>
 
 <?php elseif ($page === 'resources-private'): ?>
@@ -443,6 +525,23 @@ $bldJs = json_encode($building);
       <span class="label">Contracts</span>
       <button class="btn btn-primary" onclick="openPrivateFolder('Contracts')">&#128196; Click to open</button>
     </div>
+
+    <div class="group-heading">Reports</div>
+
+    <div class="resource-row">
+      <span class="label">Owner Directory</span>
+      <button class="btn btn-report" onclick="openReport('resident')">&#128196; Click to open</button>
+    </div>
+    <div class="resource-row">
+      <span class="label">Parking Spots</span>
+      <button class="btn btn-report" onclick="openReport('parking')">&#128196; Click to open</button>
+    </div>
+  </div>
+
+<?php elseif ($page === 'cenclub'): ?>
+
+  <div class="page-intro">
+    CenClub content coming soon.
   </div>
 
 <?php endif; ?>
@@ -451,11 +550,13 @@ $bldJs = json_encode($building);
 
 <!-- ===== FOOTER ===== -->
 <footer>
-  <div class="footer-left">
-    <div class="copy">&copy; 2025 <a href="https://sheepsite.com">SheepSite.com</a></div>
-    <div class="powered">Powered by Sheep</div>
+  <div style="display:flex;align-items:center;gap:1.2rem;">
+    <img src="https://sheepsite.com/Scripts/assets/Woolsy-original-transparent.png" alt="SheepSite">
+    <div class="footer-left">
+      <div class="copy">&copy; 2025 <a href="https://sheepsite.com">SheepSite.com</a></div>
+      <div class="powered">Powered by Sheep</div>
+    </div>
   </div>
-  <img src="https://sheepsite.com/Scripts/Woolsy-original-transparent.png" alt="SheepSite">
 </footer>
 
 <!-- ===== SCRIPTS ===== -->
@@ -542,6 +643,25 @@ function openDoc(subdir, filename) {
   if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
   window.open(url, '_blank');
 }
+
+// Hamburger toggle
+var hamburger = document.getElementById('hamburger');
+var navLinks  = document.getElementById('nav-links');
+if (hamburger) {
+  hamburger.addEventListener('click', function () {
+    navLinks.classList.toggle('open');
+  });
+}
+
+// Mobile dropdown: click to open/close (hover disabled on mobile via CSS)
+document.querySelectorAll('.dropdown > a').forEach(function (toggle) {
+  toggle.addEventListener('click', function (e) {
+    if (window.innerWidth <= 768) {
+      e.preventDefault();
+      this.closest('.dropdown').classList.toggle('open');
+    }
+  });
+});
 </script>
 
 <!-- Woolsy floating chatbot -->
