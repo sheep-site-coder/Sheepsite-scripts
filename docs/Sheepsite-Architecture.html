@@ -131,7 +131,7 @@ by Google Apps Script web apps &mdash; PHP never calls Google APIs directly
   <tr><td><code>/sheepsite.com/Scripts/</code></td><td>All PHP scripts, JS files, and GAS reference files</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/credentials/</code></td><td>Per-building JSON credential files (not in git, writable by PHP)</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/faqs/</code></td><td>Woolsy knowledge base files, document indexes, credit balances</td></tr>
-  <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin and resident manuals (HTML), this architecture doc</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin manual (<code>Sheepsite-Admin-Manual.html</code>), Resident manual (<code>Sheepsite-Resident-Manual.html</code>), Architecture manual. Built from <code>build-manual.py</code>, <code>build-resident.py</code>, <code>build-architecture.py</code> respectively. Manuals embed all images as base64. Resident manual linked from my-account.php and from the marketing get-started page.</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/sheets/</code></td><td>Google Apps Script source files (for reference; deployed via Google)</td></tr>
 </table>
 
@@ -238,6 +238,15 @@ new library version.</p>
       <td>Shared PHP template for all building websites. Renders all pages (Home, About Us, Resources, CenClub, Social) with per-building config loaded from <code>config/{building}.json</code>. Each building subdomain has one <code>index.php</code> that defines <code>BUILDING</code> and requires this file. Includes the Woolsy widget script, hamburger nav, and all button helpers.</td></tr>
 </table>
 
+<h3>Marketing Website</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>marketing/index.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>SheepSite company home page. Self-contained PHP/HTML marketing page deployed at <code>sheepsite.com/index.php</code>. Sections: sticky nav, hero (Florida 718 compliance badge), compliance banner, feature card grid, Woolsy AI spotlight, self-serve highlights, CTA. Includes a contact modal with a mailto form (Name, Association, Email, Phone, Message). All buttons link to <code>get-started.php</code>. No external dependencies — Woolsy images referenced from <code>sheepsite.com/Scripts/assets/</code>.</td></tr>
+  <tr><td><code>marketing/get-started.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Get Started page linked from the marketing home page. Three sections: (1) Live Demo — link to <code>samplesite.sheepsite.com</code> with resident and admin demo credentials displayed; (2) Two Experiences — side-by-side resident vs. admin feature comparison, each linking to the respective user manual; (3) Contact form — Name, Association, Email, Phone, Message fields, submitted via PHP <code>mail()</code> to <code>SheepSite@sheepsite.com</code>.</td></tr>
+</table>
+
 <h3>Public-Facing PHP Scripts</h3>
 <table>
   <tr><th>File</th><th>Description</th></tr>
@@ -251,10 +260,14 @@ new library version.</p>
       <td>Unauthenticated reports (board of directors). Same structure as protected-report.php minus auth. <code>?nav=0</code> hides the back bar when embedded as an iframe.</td></tr>
   <tr><td><code>get-doc-byname.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Looks up a file by name in Drive and redirects to a Google Docs preview URL. Used for document iframes on building sites.</td></tr>
+  <tr><td><code>my-account.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Resident account hub. Requires active <code>private_auth_{building}</code> session. Cards: My Unit Info (links to my-unit.php), Change Password (links to change-password.php), and Resident Manual (opens <code>Sheepsite-Resident-Manual.html</code> in a new tab). Also accessible from the Admin dropdown in the building site nav. Falls back to <code>siteURL</code> from config for the &ldquo;← Back to site&rdquo; link.</td></tr>
+  <tr><td><code>my-unit.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Shows the resident&rsquo;s unit information from the database. Provides a &ldquo;Request a Change&rdquo; form to notify the board by email.</td></tr>
   <tr><td><code>change-password.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Lets a logged-in resident change their own password. Handles <code>mustChange</code> enforcement. Accepts <code>redirect</code> param to return to origin page.</td></tr>
+      <td>Lets a logged-in resident change their own password. Handles <code>mustChange</code> enforcement. Accepts <code>redirect</code> param to return to origin page. Blocked entirely (form hidden, warning shown) when <code>testSite</code> is set in the building config.</td></tr>
   <tr><td><code>forgot-password.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Self-serve password reset. Owner flow: username lookup via GAS, email temp password, update credentials. Admin flow: validates President&rsquo;s unit number before sending. <code>?setup=1</code> bootstraps first-time admin credentials.</td></tr>
+      <td>Self-serve password reset. Owner flow: username lookup via GAS, email temp password, update credentials. Admin flow: validates President&rsquo;s unit number before sending. <code>?setup=1</code> bootstraps first-time admin credentials. Owner reset is blocked when <code>testSite</code> is set; admin reset (<code>?role=admin</code>) is unaffected.</td></tr>
 </table>
 
 <h3>Admin PHP Scripts</h3>
@@ -474,7 +487,7 @@ coverage without manual tracking.</p>
   <tr><td><code>faqs/{building}_rules.md</code> <span class="tag tag-data">data</span></td><td>Woolsy knowledge base for one building. Versioned. Has .bak backup.</td><td>No</td></tr>
   <tr><td><code>faqs/{building}_docindex.txt</code> <span class="tag tag-data">data</span></td><td>Document index for Woolsy system prompt.</td><td>No</td></tr>
   <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings.</td><td>No</td></tr>
-  <tr><td><code>config/{building}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>discountPct</code> (optional, applied to site fee on invoices), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code>, <code>storageLimit</code>, <code>storageUpdated</code> (ISO timestamp of last cron refresh), <code>tosAccepted</code>, <code>hasDomain</code>, <code>floorGrouping</code>. Billing threshold fields: <code>storageLimitEmailSent</code> (bool), <code>woolsyBillingEmailSent</code> (bool), <code>billingToken</code> ({token, type, expires, invoiceId}) — set when threshold email fires, cleared on payment.</td><td>No</td></tr>
+  <tr><td><code>config/{building}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>discountPct</code> (optional, applied to site fee on invoices), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code>, <code>storageLimit</code>, <code>storageUpdated</code> (ISO timestamp of last cron refresh), <code>tosAccepted</code>, <code>hasDomain</code>, <code>floorGrouping</code>, <code>testSite</code> (bool — set by master admin via building-detail.php; puts the site in demo mode: amber banner on admin dashboard, Woolsy knowledge base updates blocked, and resident password changes/resets disabled so demo credentials stay intact). Billing threshold fields: <code>storageLimitEmailSent</code> (bool), <code>woolsyBillingEmailSent</code> (bool), <code>billingToken</code> ({token, type, expires, invoiceId}) — set when threshold email fires, cleared on payment.</td><td>No</td></tr>
   <tr><td><code>invoices/{building}/{id}.json</code> <span class="tag tag-data">data</span></td><td>One JSON file per invoice. Core fields: <code>id</code> (e.g. LyndhurstH-0001), <code>seq</code>, <code>building</code>, <code>date</code>, <code>dueDate</code>, <code>status</code> (unpaid/paid), <code>lineItems</code>, <code>total</code>, <code>paidDate</code>, <code>paymentMethod</code> (check/stripe — set when marked paid), <code>generatedBy</code> (manual/cron/auto). Type-specific fields: <code>invoiceType</code> (renewal/storage/woolsy), <code>newBytes</code> (storage invoices — the new limit to apply on payment), <code>creditsToAdd</code> (woolsy invoices — credits to add on payment). Folder is protected by .htaccess.</td><td>No</td></tr>
   <tr><td><code>config/stripe.json</code> <span class="tag tag-data">data</span></td><td>Stripe API keys: <code>{"secretKey":"sk_live_...","webhookSecret":"whsec_..."}</code>. Read by billing.php and billing-webhook.php.</td><td>No</td></tr>
   <tr><td><code>config/processed_payments.json</code> <span class="tag tag-data">data</span></td><td>Idempotency log for Stripe webhooks. Maps <code>paymentIntentId</code> to building/type/processed timestamp. Prevents double-fulfilment if Stripe retries the webhook. Created automatically on first payment.</td><td>No</td></tr>
