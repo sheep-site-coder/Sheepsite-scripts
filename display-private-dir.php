@@ -50,7 +50,7 @@ $baseURL    = '?building=' . urlencode($building) . ($returnURL ? '&return=' . u
 // -------------------------------------------------------
 if (isset($_GET['logout'])) {
   unset($_SESSION[$sessionKey]);
-  header('Location: ' . $baseURL);
+  header('Location: ' . ($returnURL ?: $baseURL));
   exit;
 }
 

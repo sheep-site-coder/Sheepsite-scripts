@@ -71,7 +71,7 @@ if (!$returnURL) {
       <a href="<?= htmlspecialchars($returnURL) ?>">← Back to site</a>
     <?php endif; ?>
     <a href="display-private-dir.php?building=<?= urlencode($building) ?>">Private files</a>
-    <a href="display-private-dir.php?building=<?= urlencode($building) ?>&logout=1">Log out</a>
+    <a href="display-private-dir.php?building=<?= urlencode($building) ?>&logout=1<?= $returnURL ? '&return=' . urlencode($returnURL) : '' ?>">Log out</a>
   </div>
 </div>
 <div class="subtitle">Welcome, <?= htmlspecialchars($username) ?></div>
