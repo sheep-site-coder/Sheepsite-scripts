@@ -798,5 +798,68 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: April 3, 2026 (session 26 — billing UX polish, invoice email fixes, large file quarantine)*
+---
+
+## Session 27 — Marketing Site, Manual Redesigns, Demo Site Restrictions
+
+### Marketing Website (NEW — `marketing/` folder)
+- **`marketing/index.php`** — SheepSite company home page; replaces Website Builder site at `sheepsite.com/index.php`:
+  - Sticky nav, hero with Florida 718 compliance badge, amber compliance banner, 9 feature cards,
+    Woolsy AI spotlight section, self-serve highlights with stat boxes, CTA section, contact modal
+  - Contact modal: Name, Association, Email, Phone, Message → `mailto:SheepSite@sheepsite.com`
+  - All CTA buttons link to `get-started.php`; no external dependencies (Woolsy images from Scripts/assets/)
+- **`marketing/get-started.php`** — Get Started page:
+  - Live Demo section: link to `samplesite.sheepsite.com` with resident (SampleSite/Testdrive) and
+    admin (admin/admintest) demo credentials displayed in styled credential boxes
+  - Two Experiences: side-by-side resident (green) vs admin (blue) feature comparison, each with
+    link to respective user manual
+  - Contact form: Name, Association, Email, Phone, Message → PHP `mail()` to `SheepSite@sheepsite.com`
+  - Upload both files to sheepsite.com root folder
+
+### Resident Manual (`docs/build-resident.py` + `Sheepsite-Resident-Manual.html`)
+- **Woolsy-original-transparent.png** logo (90px) at top of page with "POWERED BY SHEEP" caption
+- **Woolsy_Working on it.png** icon in white rounded box on every section header (blue bar)
+- Section 3 (Logging In): updated to "Admin dropdown → Resources Private" for login nav
+- Section 6 (Ask Woolsy): updated to describe inline floating panel (not popup); login form
+  embedded in panel; Woolsy logo image in text (not emoji)
+- Section 7 (My Account): updated to reference Admin nav dropdown (not just Resource Center)
+- Section 9 (Getting Help): Woolsy logo image in text (not emoji)
+
+### Admin Manual (`docs/build-manual.py` + `Sheepsite-Admin-Manual.html`)
+- Same logo/header treatment as resident manual
+- **Sections restructured:**
+  - Section 3: Manage Residents/Owners (moved from old Section 7)
+  - Section 4: Manage User Accounts (was 3); cross-ref updated to Section 3
+  - Section 5: Managing Files (rewrite of old Section 4 — "Primary Method" concept removed,
+    old resource center screenshots removed; new content added)
+  - Sections 6–7: Tag Management and Storage Report renumbered
+  - Section 9: Renamed to "Woolsy AI Assistant" (was "Woolsy Knowledge Base")
+- **Section 5 new content:**
+  - Storage exceeded: explains deselect-to-fit option OR click Add Storage to go to billing
+  - Large files (>30 MB): new-tab BigUploads flow, Quarantine section must be used to publish
+- Section 1: old placeholder image removed; admin access updated to "Admin dropdown → Site Admin"
+
+### `my-account.php`
+- "Ask Woolsy" card replaced with **Resident Manual** card (opens Sheepsite-Resident-Manual.html
+  in new tab); icon changed from Woolsy-standing to Woolsy-original-transparent
+
+### `building-site.php`
+- About Us (Board of Directors) iframe height increased from 480px → 600px for up to 7 board members
+
+### Demo Site Restrictions (`testSite` flag)
+- **`change-password.php`**: loads building config; if `testSite` set — shows warning banner,
+  hides form entirely; POST handler skipped
+- **`forgot-password.php`**: if `testSite` set for owner flow — shows "resets disabled" message,
+  hides form; admin reset (`?role=admin`) is unaffected
+
+### Architecture Doc (`docs/build-architecture.py`)
+- Added Marketing Website section (index.php, get-started.php) to File Inventory
+- Added `my-account.php` and `my-unit.php` entries (were missing)
+- Updated change-password.php and forgot-password.php descriptions with testSite info
+- Added `testSite` field to `config/{building}.json` field list
+- Expanded `docs/` path description to name all three manuals and build scripts
+
+---
+
+*Snapshot updated: April 4, 2026 (session 27 — marketing site, manual redesigns, demo site restrictions)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
