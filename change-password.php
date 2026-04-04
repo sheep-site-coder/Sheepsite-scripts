@@ -34,6 +34,11 @@ if (empty($_SESSION[$sessionKey])) {
 
 $currentUser  = $_SESSION[$sessionKey];
 $mustChange   = isset($_GET['mustchange']);
+
+// Block password changes on demo/test sites
+$configFile = __DIR__ . '/config/' . $building . '.json';
+$bldCfg     = file_exists($configFile) ? (json_decode(file_get_contents($configFile), true) ?? []) : [];
+$isTestSite = !empty($bldCfg['testSite']);
 $redirectURL  = $_GET['redirect'] ?? '';
 // Only allow relative redirects to our own scripts
 if ($redirectURL && !preg_match('/^[a-zA-Z0-9_\-\.]+\.php[\?&]/', $redirectURL)) $redirectURL = '';
@@ -63,7 +68,10 @@ function saveUsers(string $building, array $users): bool {
 $message     = '';
 $messageType = 'ok';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($isTestSite) {
+  $message     = 'Password changes are disabled on this demo site.';
+  $messageType = 'warn';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $currentPass = $_POST['current_password'] ?? '';
   $newPass     = $_POST['new_password']     ?? '';
   $confirmPass = $_POST['confirm_password'] ?? '';
@@ -112,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $messageType = 'error';
     }
   }
-}
+} // end elseif POST
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -153,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <div class="message <?= $messageType ?>"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>
 
-<?php if ($messageType !== 'ok' || !$message): ?>
+<?php if (!$isTestSite && ($messageType !== 'ok' || !$message)): ?>
 <form method="post">
   <label for="current_password">Current password</label>
   <input type="password" id="current_password" name="current_password" autocomplete="current-password" autofocus>

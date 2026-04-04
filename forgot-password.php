@@ -24,6 +24,11 @@ $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
 $isAdminReset   = ($_GET['role'] ?? '') === 'admin';
 $isAdminSetup   = $isAdminReset && isset($_GET['setup']);
 
+// Block owner password resets on demo/test sites (admin reset is unaffected)
+$configFile = __DIR__ . '/config/' . $building . '.json';
+$bldCfg     = file_exists($configFile) ? (json_decode(file_get_contents($configFile), true) ?? []) : [];
+$isTestSite = !empty($bldCfg['testSite']) && !$isAdminReset;
+
 // Login URL included in reset email so owner knows where to go
 $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
@@ -61,7 +66,10 @@ function saveUsers(string $building, array $users): bool {
 $message     = '';
 $messageType = 'ok';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($isTestSite) {
+  $message     = 'Password resets are disabled on this demo site.';
+  $messageType = 'error';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $username = $isAdminReset ? 'admin' : strtolower(trim($_POST['username'] ?? ''));
 
   if (!$isAdminReset && (!$username || !preg_match('/^[a-z][a-z0-9]*$/', $username))) {
@@ -133,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     }
   }
-}
+} // end elseif POST
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -188,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit" class="reset-btn">Send temporary password</button>
       </form>
     <?php else: ?>
+      <?php if (!$isTestSite): ?>
       <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
         Enter your username (first letter of your first name + last name, e.g. <strong>jsmith</strong>).
         If we have an email address on file for your account, we'll send you a temporary password.
@@ -199,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
         <button type="submit" class="reset-btn">Send temporary password</button>
       </form>
+      <?php endif; ?>
     <?php endif; ?>
   <?php endif; ?>
 </body>

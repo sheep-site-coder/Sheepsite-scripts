@@ -96,12 +96,12 @@ if (!$returnURL) {
   </div>
 </a>
 
-<a href="chatbot-page.php?building=<?= urlencode($building) ?>" class="card">
-  <div class="card-icon"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="36" alt="Woolsy" style="display:block;"></div>
+<a href="https://sheepsite.com/Scripts/docs/Sheepsite-Resident-Manual.html" target="_blank" class="card">
+  <div class="card-icon"><img src="https://sheepsite.com/Scripts/assets/Woolsy-original-transparent.png" height="36" alt="Woolsy" style="display:block;"></div>
   <div>
-    <div class="card-title">Ask Woolsy</div>
+    <div class="card-title">Resident Manual</div>
     <div class="card-desc">
-      Get answers to your condo questions from Woolsy, the building's AI assistant.
+      Your guide to using the building website &mdash; login, documents, Woolsy, and your account.
     </div>
   </div>
 </a>

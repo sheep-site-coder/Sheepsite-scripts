@@ -7,6 +7,8 @@ Run from the docs/ folder: python3 build-resident.py
 import base64, os
 
 IMG_DIR = "../Sharefolder/SheepSite User Manual/images"
+WOOLSY_LOGO = "../test/Woolsy-original-transparent.png"
+WOOLSY_WORKING = "../Sharefolder/Woolsy_Working on it.png"
 
 def img_tag(filename, alt="", width="100%", style=""):
     if os.path.isabs(filename):
@@ -23,13 +25,18 @@ def img_tag(filename, alt="", width="100%", style=""):
     w = f' width="{width}"' if width else ""
     return f'<img src="data:{mime};base64,{data}" alt="{alt}"{w}{s}>'
 
+def woolsy_logo(height=22):
+    return img_tag(WOOLSY_LOGO, "Woolsy", width="", style=f"height:{height}px; vertical-align:middle; display:inline;")
+
+def woolsy_section_icon():
+    img = img_tag(WOOLSY_WORKING, "Woolsy", width="", style="height:34px; display:block;")
+    return f'<span style="background:#fff; border-radius:4px; padding:2px 4px; display:inline-flex; align-items:center; margin-right:10px; flex-shrink:0;">{img}</span>'
+
 def divider():
-    return f'''
-<div style="text-align:center; margin: 2em 0;">
-  {img_tag("image2.jpg", "SheepSite", "80px")}
-</div>
-<hr>
-'''
+    return ""
+
+def section(title):
+    return f'<h2>{woolsy_section_icon()}{title}</h2>'
 
 html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -47,7 +54,7 @@ html = f"""<!DOCTYPE html>
   h1 {{ font-size: 1.8em; margin-bottom: 0.1em; }}
   .subtitle {{ font-size: 1.1em; color: #555; margin-top: 0; }}
   .version {{ font-size: 0.9em; color: #888; margin-top: 0.3em; }}
-  h2 {{ font-size: 1.2em; margin-top: 2.5em; background: #2a5a8a; color: #fff; padding: 6px 12px; border-radius: 3px; }}
+  h2 {{ font-size: 1.2em; margin-top: 2.5em; background: #2a5a8a; color: #fff; padding: 6px 12px; border-radius: 3px; display: flex; align-items: center; }}
   h3 {{ font-size: 1em; margin-top: 1.8em; margin-bottom: 0.3em; border-bottom: 1px solid #ddd; padding-bottom: 3px; }}
   h4 {{ font-size: 0.95em; margin-top: 1.2em; margin-bottom: 0.2em; color: #444; }}
   p {{ margin: 0.6em 0; }}
@@ -102,6 +109,11 @@ html = f"""<!DOCTYPE html>
 </head>
 <body>
 
+<div style="text-align:center; margin-bottom: 1.5em;">
+  {img_tag(WOOLSY_LOGO, "Woolsy", width="", style="height:90px;")}
+  <div style="font-size:0.85em; color:#888; margin-top:0.4em; letter-spacing:0.05em;">POWERED BY SHEEP</div>
+</div>
+
 <h1>Welcome to Your Building Website</h1>
 <p class="subtitle">A Guide for Residents &amp; Unit Owners</p>
 <p class="version">Version 2.0 &nbsp;&middot;&nbsp; March 2026</p>
@@ -123,7 +135,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 1 &mdash; What Is the Building Website?</h2>
+{section("Section 1 &mdash; What Is the Building Website?")}
 
 <p>Your building has a website that gives residents access to important documents, reports, and community information &mdash; anytime, from any device.</p>
 <p>The site has two areas:</p>
@@ -134,7 +146,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 2 &mdash; Public Resources</h2>
+{section("Section 2 &mdash; Public Resources")}
 
 <p>The following resources are available to anyone visiting the site &mdash; no account needed:</p>
 
@@ -149,7 +161,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 3 &mdash; Logging In</h2>
+{section("Section 3 &mdash; Logging In")}
 
 <h3>Your Credentials</h3>
 <p>When you were added to the system, the board sent you an email with your login credentials. If you did not receive this email, check your spam folder or contact your board &mdash; the address registered with the association may need to be updated.</p>
@@ -173,7 +185,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 4 &mdash; Private Resources</h2>
+{section("Section 4 &mdash; Private Resources")}
 
 <p>Once logged in, you have access to the following owner-only resources:</p>
 
@@ -195,7 +207,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 5 &mdash; Finding Documents with Search</h2>
+{section("Section 5 &mdash; Finding Documents with Search")}
 
 <h3>How Search Works</h3>
 <p>The website has a built-in search that looks across <em>all</em> documents at once &mdash; public and private &mdash; so you don&rsquo;t need to know which folder something is in. It also searches tags that the board has added to documents, so you can find files even when the exact filename isn&rsquo;t obvious.</p>
@@ -216,11 +228,11 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 6 &mdash; Ask Woolsy &mdash; Your Building Assistant</h2>
+{section("Section 6 &mdash; Ask Woolsy &mdash; Your Building Assistant")}
 
 <h3>What Is Woolsy?</h3>
-<p>Woolsy is the AI assistant built into your building website. Look for the 🐑 button floating in the corner of the page &mdash; click it to open a chat window where you can ask questions about the building in plain language.</p>
-<p>Woolsy is available to everyone on the public website, no login required. Logged-in owners get a full chat interface with conversation history.</p>
+<p>Woolsy is the AI assistant built into your building website. Look for the {woolsy_logo()} button floating in the corner of every page &mdash; click it to open the Woolsy chat panel where you can ask questions about the building in plain language.</p>
+<p>Woolsy is available to everyone on the public website, no login required. If you are not yet logged in, Woolsy will offer a login form right inside the panel &mdash; no need to navigate away. Logged-in owners get a full chat interface with conversation history.</p>
 
 <h3>What Woolsy Can Help With</h3>
 <p>Woolsy is trained on your building&rsquo;s governing documents &mdash; the Declaration of Condominium, Bylaws, Rules and Regulations, and Board guidelines. It can answer questions like:</p>
@@ -245,10 +257,10 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 7 &mdash; My Account</h2>
+{section("Section 7 &mdash; My Account")}
 
 <h3>Your Account Hub</h3>
-<p>When you are logged in, the <strong>My Account</strong> link in the Resource Center takes you to your personal account page. From there you can:</p>
+<p>When you are logged in, open <strong>My Account</strong> from the <strong>Admin</strong> menu in the navigation bar. You can also find it in the Resource Center. From there you can:</p>
 <ul>
   <li><strong>My Unit Info</strong> &mdash; view what the association has on file for your unit (residents, vehicles, emergency contacts). If anything is incorrect, use the <strong>Request a Change</strong> button to notify the board &mdash; they will update the database.</li>
   <li><strong>Change Password</strong> &mdash; update your login password at any time</li>
@@ -257,7 +269,7 @@ html = f"""<!DOCTYPE html>
 
 <h3>Changing Your Password</h3>
 <ol>
-  <li>Go to <strong>My Account</strong> in the Resource Center</li>
+  <li>Open the <strong>Admin</strong> menu in the navigation bar and click <strong>My Account</strong></li>
   <li>Click the <strong>Change Password</strong> card</li>
   <li>Enter your current password, then your new password twice</li>
   <li>Click <strong>Save</strong></li>
@@ -268,7 +280,7 @@ html = f"""<!DOCTYPE html>
 <h3>Requesting a Change to Your Unit Information</h3>
 <p>If your name, email, phone number, vehicle, or any other detail on file is incorrect:</p>
 <ol>
-  <li>Go to <strong>My Account &rarr; My Unit Info</strong></li>
+  <li>Open the <strong>Admin</strong> menu and click <strong>My Account</strong>, then <strong>My Unit Info</strong></li>
   <li>Review the information shown for your unit</li>
   <li>Click <strong>Request a Change</strong> and describe what needs to be updated</li>
   <li>The board will receive your request by email and update the database</li>
@@ -277,7 +289,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 8 &mdash; Forgot Your Password?</h2>
+{section("Section 8 &mdash; Forgot Your Password?")}
 
 
 <p>If you can&rsquo;t remember your password:</p>
@@ -293,17 +305,17 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 9 &mdash; Getting Help</h2>
+{section("Section 9 &mdash; Getting Help")}
 
 
-<p>Before contacting the board, try <strong>Woolsy</strong> &mdash; the 🐑 chat assistant on the website. Many common questions about rules, procedures, and building policies can be answered instantly.</p>
+<p>Before contacting the board, try <strong>Woolsy</strong> &mdash; click the {woolsy_logo()} button in the corner of the website. Many common questions about rules, procedures, and building policies can be answered instantly.</p>
 
 <p>If you still need help, the website is managed by your board:</p>
 <table>
   <tr><th>Issue</th><th>What to Do</th></tr>
   <tr><td>Can&rsquo;t log in / password issues</td><td>Use the <strong>Forgot Password</strong> link, or contact your board</td></tr>
   <tr><td>Never received login credentials</td><td>Contact your board &mdash; your email address may need to be updated in the association database</td></tr>
-  <tr><td>Question about a building rule</td><td>Ask Woolsy first &mdash; click the 🐑 button on the website</td></tr>
+  <tr><td>Question about a building rule</td><td>Ask Woolsy first &mdash; click the {woolsy_logo()} button in the corner of the website</td></tr>
   <tr><td>Missing document</td><td>Contact your board; they may need to upload it</td></tr>
   <tr><td>Wrong information in the resident directory</td><td>Contact your board to have the database updated</td></tr>
   <tr><td>Technical issues with the website</td><td>Your board can contact SheepSite support</td></tr>

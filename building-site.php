@@ -471,7 +471,7 @@ $bldJs = json_encode($building);
   <iframe
     data-script="public-report"
     data-page="board"
-    style="width:100%;height:480px;border:1px solid #ddd;border-radius:4px;display:block;"
+    style="width:100%;height:600px;border:1px solid #ddd;border-radius:4px;display:block;"
     title="Board of Directors">
   </iframe>
 

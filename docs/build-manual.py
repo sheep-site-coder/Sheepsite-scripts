@@ -7,6 +7,8 @@ Run from the docs/ folder: python3 build-manual.py
 import base64, os, re
 
 IMG_DIR = "../Sharefolder/SheepSite User Manual/images"
+WOOLSY_LOGO = "../test/Woolsy-original-transparent.png"
+WOOLSY_WORKING = "../Sharefolder/Woolsy_Working on it.png"
 
 def img_tag(filename, alt="", width="100%", style=""):
     if os.path.isabs(filename):
@@ -23,13 +25,15 @@ def img_tag(filename, alt="", width="100%", style=""):
     w = f' width="{width}"' if width else ""
     return f'<img src="data:{mime};base64,{data}" alt="{alt}"{w}{s}>'
 
+def woolsy_section_icon():
+    img = img_tag(WOOLSY_WORKING, "Woolsy", width="", style="height:34px; display:block;")
+    return f'<span style="background:#fff; border-radius:4px; padding:2px 4px; display:inline-flex; align-items:center; margin-right:10px; flex-shrink:0;">{img}</span>'
+
+def section(title):
+    return f'<h2>{woolsy_section_icon()}{title}</h2>'
+
 def divider():
-    return f'''
-<div style="text-align:center; margin: 2em 0;">
-  {img_tag("image2.jpg", "SheepSite", "80px")}
-</div>
-<hr>
-'''
+    return ""
 
 NNBSP = "\u202f"  # narrow no-break space used by macOS in screenshot filenames
 public_folders_img  = img_tag(f"../Sharefolder/Screenshot 2026-03-14 at 12.33.49{NNBSP}PM.png", "Public folder structure",  "100%", "border:1px solid #ccc; border-radius:4px;")
@@ -51,7 +55,7 @@ html = f"""<!DOCTYPE html>
   h1 {{ font-size: 1.8em; margin-bottom: 0.1em; }}
   .subtitle {{ font-size: 1.1em; color: #555; margin-top: 0; }}
   .version {{ font-size: 0.9em; color: #888; margin-top: 0.3em; }}
-  h2 {{ font-size: 1.2em; margin-top: 2.5em; background: #333; color: #fff; padding: 6px 12px; border-radius: 3px; }}
+  h2 {{ font-size: 1.2em; margin-top: 2.5em; background: #333; color: #fff; padding: 6px 12px; border-radius: 3px; display: flex; align-items: center; }}
   h3 {{ font-size: 1em; margin-top: 1.8em; margin-bottom: 0.3em; border-bottom: 1px solid #ddd; padding-bottom: 3px; }}
   h4 {{ font-size: 0.95em; margin-top: 1.2em; margin-bottom: 0.2em; color: #444; }}
   p {{ margin: 0.6em 0; }}
@@ -116,6 +120,11 @@ html = f"""<!DOCTYPE html>
 </head>
 <body>
 
+<div style="text-align:center; margin-bottom: 1.5em;">
+  {img_tag(WOOLSY_LOGO, "Woolsy", width="", style="height:90px;")}
+  <div style="font-size:0.85em; color:#888; margin-top:0.4em; letter-spacing:0.05em;">POWERED BY SHEEP</div>
+</div>
+
 <h1>SheepSite Admin Manual</h1>
 <p class="subtitle">For Board Members Managing the Building Website</p>
 <p class="version">Version 2.0 &nbsp;&middot;&nbsp; March 2026</p>
@@ -125,13 +134,13 @@ html = f"""<!DOCTYPE html>
   <ol>
     <li>Getting Started</li>
     <li>The Admin Dashboard</li>
-    <li>Managing User Accounts</li>
-    <li>Managing Documents</li>
+    <li>Manage Residents/Owners</li>
+    <li>Manage User Accounts</li>
+    <li>Managing Files</li>
     <li>Tag Management</li>
     <li>Storage Report</li>
-    <li>The Owner &amp; Resident Database</li>
     <li>Search &mdash; Training Your Residents</li>
-    <li>Woolsy Knowledge Base</li>
+    <li>Woolsy AI Assistant</li>
     <li>Billing &amp; Invoices</li>
     <li>Appendix: Sample Introduction Email</li>
   </ol>
@@ -139,21 +148,12 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 1 &mdash; Getting Started</h2>
+{section("Section 1 &mdash; Getting Started")}
 
-<div style="display:flex; gap:1.5em; align-items:flex-start; margin: 1em 0;">
-  <div style="flex:1;">
-    {img_tag("image16.jpg", "Get Started", "100%", "border-radius:6px;")}
-  </div>
-  <div style="flex:2;">
-    <h3 style="margin-top:0;">Who This Manual Is For</h3>
-    <p>This manual is for board members responsible for administering the building website &mdash; managing documents, adding or removing owner accounts, and keeping the site content current.</p>
-    <p>For a guide on how residents use the site, see the separate <strong>Resident User Manual</strong>.</p>
-  </div>
-</div>
+<h3>Who This Manual Is For</h3>
+<p>This manual is for board members responsible for administering the building website &mdash; managing documents, adding or removing owner accounts, and keeping the site content current.</p>
+<p>For a guide on how residents use the site, see the separate <strong>Resident User Manual</strong>.</p>
 
-<h3>The Website</h3>
-{img_tag("image9.png", "Website home page", "100%", "border:1px solid #ccc; border-radius:4px; margin:0.5em 0;")}
 
 <h3>What You Need</h3>
 <ul>
@@ -162,7 +162,7 @@ html = f"""<!DOCTYPE html>
 </ul>
 
 <h3>Accessing the Admin Area</h3>
-<p>The admin area is accessed directly from the building website. In the site menu, go to <strong>Resources Private &rarr; Admin</strong>. Log in with your admin credentials. If this is your first login, you will be prompted to set a permanent password.</p>
+<p>The admin area is accessed directly from the building website. In the site menu, open the <strong>Admin</strong> dropdown and select <strong>Site Admin</strong>. Log in with your admin credentials. If this is your first login, you will be prompted to set a permanent password.</p>
 
 <blockquote><strong>Forgot your password?</strong> Click the &ldquo;Forgot password?&rdquo; link on the login page. The system will email a temporary password to the President. Enter the <strong>President&rsquo;s unit number</strong> as the security verification.</blockquote>
 
@@ -176,7 +176,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 2 &mdash; The Admin Dashboard</h2>
+{section("Section 2 &mdash; The Admin Dashboard")}
 
 <p>After logging in, you will see the Admin Dashboard with the following options:</p>
 
@@ -187,14 +187,66 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>File Management</strong></td><td>Upload, organize, rename, and delete documents in the public and private folders.</td></tr>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
-  <tr><td><strong>Woolsy Knowledge Base</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
+  <tr><td><strong>Woolsy AI Assistant</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
   <tr><td><strong>Building Settings</strong></td><td>Update the building contact email address, used for resident change requests and system notifications. The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
 
 {divider()}
 
-<h2>Section 3 &mdash; Managing User Accounts</h2>
+{section("Section 3 &mdash; Manage Residents/Owners")}
+
+<h3>Overview</h3>
+<p>All owner and resident data is managed from the Admin Dashboard via <strong>Manage Residents/Owners</strong>. This gives you a full in-site editor for every unit &mdash; no need to open a spreadsheet for day-to-day changes.</p>
+
+<h3>The Unit View</h3>
+<p>Units are grouped by floor. Click any unit to expand it and see three tabs:</p>
+<table>
+  <tr><th>Tab</th><th>What it contains</th></tr>
+  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time), email, phones, insurance, appliance dates</td></tr>
+  <tr><td><strong>Vehicle &amp; Parking</strong></td><td>Car make/model/color, license plate, parking spot, notes</td></tr>
+  <tr><td><strong>Emergency</strong></td><td>Emergency contacts and condo sitters &mdash; name, email, phones</td></tr>
+</table>
+
+<h3>Adding a Resident</h3>
+<ol>
+  <li>Click the unit to expand it, then click <strong>+ Add Resident</strong></li>
+  <li>Fill in at minimum First Name, Last Name, and Unit # &mdash; all other fields are optional</li>
+  <li>If you provide an email address, a web login is created automatically and a welcome email with a temporary password is sent to the resident</li>
+  <li>If no email is provided, only the database record is created. You can add the email later &mdash; the login will be created at that point</li>
+</ol>
+
+<h3>Editing or Deleting a Resident</h3>
+<p>Expand the unit, click <strong>Edit</strong> on the person card to update their details, or <strong>Delete</strong> to remove them from the database and revoke their web login at the same time.</p>
+
+<h3>Bulk Import from CSV</h3>
+<p>When onboarding a new community, use the CSV import to add all residents at once rather than one at a time.</p>
+<ol>
+  <li>Export a CSV from your property management system. The file must have at minimum a <strong>First Name</strong> and <strong>Last Name</strong> column. Unit #, Email, and Phone columns are also recognized if present</li>
+  <li>From <strong>Manage Residents/Owners</strong>, click <strong>&#x2913; Import from CSV</strong> in the toolbar</li>
+  <li>Drag the CSV file onto the drop zone, or click to browse. A preview table appears showing the rows to be imported</li>
+  <li>Click <strong>Import</strong>. Rows already in the database (matched by First + Last Name) are skipped &mdash; safe to re-run</li>
+  <li>After import, go to <strong>Manage User Accounts &rarr; Sync</strong> to create web logins for all newly imported residents</li>
+</ol>
+
+<div class="tip"><strong>Tip:</strong> The CSV importer is flexible &mdash; it recognizes common column name variations from most property management systems (e.g. &ldquo;First&rdquo;, &ldquo;Given Name&rdquo;, &ldquo;Apt&rdquo;, &ldquo;Cell&rdquo;, etc.). Extra columns are ignored.</div>
+
+<h3>Copying All Resident Emails</h3>
+<p>Click <strong>Get Email List</strong> in the toolbar to copy all resident email addresses to your clipboard. Paste into the <strong>BCC</strong> field of your email client to send a community-wide message.</p>
+
+<h3>Automated Reports</h3>
+<p>The following reports are generated automatically from the resident database within about a minute of any change:</p>
+<table>
+  <tr><th>Report</th><th>Access</th></tr>
+  <tr><td>Resident List</td><td>Private (residents only)</td></tr>
+  <tr><td>Elevator List</td><td>Private (residents only)</td></tr>
+  <tr><td>Parking List</td><td>Private (residents only)</td></tr>
+  <tr><td>Board of Directors</td><td>Public</td></tr>
+</table>
+
+{divider()}
+
+{section("Section 4 &mdash; Manage User Accounts")}
 
 <div style="display:flex; gap:1.5em; align-items:flex-start; margin: 1em 0 1.5em 0;">
   <div style="flex:2;">
@@ -202,7 +254,7 @@ html = f"""<!DOCTYPE html>
     <p>Each resident gets their own individual login account for the private Resource Center. Accounts are tied to a person, not a unit &mdash; when a resident moves in or out, you add or remove their account accordingly.</p>
     <p>Web login accounts are managed separately from resident data. The recommended workflow is:</p>
     <ol>
-      <li>Add residents to the database via <strong>Manage Residents/Owners</strong> (see Section 7)</li>
+      <li>Add residents to the database via <strong>Manage Residents/Owners</strong> (see Section 3)</li>
       <li>Run <strong>Sync</strong> from <strong>Manage User Accounts</strong> to create web logins for everyone in the database</li>
     </ol>
   </div>
@@ -244,7 +296,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 4 &mdash; Managing Documents</h2>
+{section("Section 5 &mdash; Managing Files")}
 
 <h3>How Publishing Works</h3>
 <p>Files uploaded through the File Management card <strong>automatically appear on the website</strong> &mdash; there is no publish button or sync step required.</p>
@@ -253,19 +305,8 @@ html = f"""<!DOCTYPE html>
   <li><strong>Private folder</strong> &mdash; visible only to logged-in owners</li>
 </ul>
 
-<div style="display:flex; gap:1em; margin:1em 0;">
-  <div style="flex:1; text-align:center;">
-    {img_tag("image15.png", "Resource Center public page", "100%", "border:1px solid #ccc; border-radius:4px;")}
-    <p style="font-size:0.85em; color:#555; margin-top:4px;">Public Resource Center</p>
-  </div>
-  <div style="flex:1; text-align:center;">
-    {img_tag("image19.png", "Association Documents private page", "100%", "border:1px solid #ccc; border-radius:4px;")}
-    <p style="font-size:0.85em; color:#555; margin-top:4px;">Private Association Documents</p>
-  </div>
-</div>
-
-<h3>The File Manager (Primary Method)</h3>
-<p>The built-in file manager is the easiest way to manage documents without leaving the website. Access it from the Admin Dashboard via the <strong>File Management</strong> card, or directly from any document browser page on your site.</p>
+<h3>The File Manager</h3>
+<p>The built-in file manager lets you upload, organize, and delete documents without leaving the website. Access it from the Admin Dashboard via the <strong>File Management</strong> card, or directly from any document browser page on your site.</p>
 
 <h4>Uploading Files</h4>
 <ul>
@@ -274,6 +315,18 @@ html = f"""<!DOCTYPE html>
   <li><strong>Multiple files at once</strong> &mdash; both methods support selecting several files in a single operation</li>
   <li><strong>Replace prompt</strong> &mdash; if a file with the same name already exists in the folder, you will be asked whether you want to replace it before the upload proceeds. Any tags assigned to the original file are automatically carried over to the new version &mdash; you do not need to re-tag it.</li>
 </ul>
+
+<h4>Storage Limit &mdash; When an Upload Would Exceed Available Space</h4>
+<p>Before uploading, the file manager checks whether the selected files fit within your remaining storage. If they do not, a warning is displayed showing the overage. You have two options:</p>
+<ul>
+  <li><strong>Deselect files</strong> &mdash; uncheck one or more of the selected files to bring the total size within your limit, then proceed with the reduced selection</li>
+  <li><strong>Add storage</strong> &mdash; click the <strong>Add Storage</strong> link in the warning to go directly to the billing page, where you can choose a storage upgrade tier and pay online. The new limit takes effect immediately after payment and you can then proceed with your upload.</li>
+</ul>
+
+<h4>Large Files (over 30 MB)</h4>
+<p>Files larger than 30 MB cannot be uploaded through the standard file manager. When one or more selected files exceed this threshold, the file manager will open a <strong>new browser tab</strong> pointing to the building&rsquo;s large-file upload area (BigUploads folder). Upload your file there directly.</p>
+<p>Once the upload is complete, return to the admin site and open the <strong>Quarantine</strong> section in the file manager. Files uploaded via the large-file area land in Quarantine first and are <strong>not yet visible on the website</strong>. Review each file, then click <strong>Publish</strong> to move it to the correct folder and make it visible to residents, or <strong>Delete</strong> to remove it.</p>
+<blockquote><strong>Note:</strong> Always come back to Quarantine after a large-file upload &mdash; files left there are not accessible to residents until published.</blockquote>
 
 <h4>Organizing Files</h4>
 <ul>
@@ -332,7 +385,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 5 &mdash; Tag Management</h2>
+{section("Section 6 &mdash; Tag Management")}
 
 <p>Tags are keywords you assign to individual files to make them easier for residents to find through search. A document named <em>2026-03-minutes.pdf</em> might not appear when a resident searches for &ldquo;board meeting&rdquo; &mdash; but if you tag it with <em>board meeting</em> and <em>minutes</em>, it will.</p>
 <p>Access Tag Management from the Admin Dashboard via the <strong>Tag Management</strong> card.</p>
@@ -370,7 +423,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 6 &mdash; Storage Report</h2>
+{section("Section 7 &mdash; Storage Report")}
 
 <div style="display:flex; gap:1.5em; align-items:center; margin:1em 0;">
   <div style="flex:1;">
@@ -394,59 +447,7 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 7 &mdash; The Owner &amp; Resident Database</h2>
-
-<h3>Overview</h3>
-<p>All owner and resident data is managed from the Admin Dashboard via <strong>Manage Residents/Owners</strong>. This gives you a full in-site editor for every unit &mdash; no need to open a spreadsheet for day-to-day changes. The data is stored in your building&rsquo;s Google Sheet and feeds the website&rsquo;s resident reports automatically.</p>
-
-<h3>The Unit View</h3>
-<p>Units are grouped by floor. Click any unit to expand it and see three tabs:</p>
-<table>
-  <tr><th>Tab</th><th>What it contains</th></tr>
-  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time), email, phones, insurance, appliance dates</td></tr>
-  <tr><td><strong>Vehicle &amp; Parking</strong></td><td>Car make/model/color, license plate, parking spot, notes</td></tr>
-  <tr><td><strong>Emergency</strong></td><td>Emergency contacts and condo sitters &mdash; name, email, phones</td></tr>
-</table>
-
-<h3>Adding a Resident</h3>
-<ol>
-  <li>Click the unit to expand it, then click <strong>+ Add Resident</strong></li>
-  <li>Fill in at minimum First Name, Last Name, and Unit # &mdash; all other fields are optional</li>
-  <li>If you provide an email address, a web login is created automatically and a welcome email with a temporary password is sent to the resident</li>
-  <li>If no email is provided, only the database record is created. You can add the email later &mdash; the login will be created at that point</li>
-</ol>
-
-<h3>Editing or Deleting a Resident</h3>
-<p>Expand the unit, click <strong>Edit</strong> on the person card to update their details, or <strong>Delete</strong> to remove them from the database and revoke their web login at the same time.</p>
-
-<h3>Bulk Import from CSV</h3>
-<p>When onboarding a new community, use the CSV import to add all residents at once rather than one at a time.</p>
-<ol>
-  <li>Export a CSV from your property management system. The file must have at minimum a <strong>First Name</strong> and <strong>Last Name</strong> column. Unit #, Email, and Phone columns are also recognized if present</li>
-  <li>From <strong>Manage Residents/Owners</strong>, click <strong>&#x2913; Import from CSV</strong> in the toolbar</li>
-  <li>Drag the CSV file onto the drop zone, or click to browse. A preview table appears showing the rows to be imported</li>
-  <li>Click <strong>Import</strong>. Rows already in the database (matched by First + Last Name) are skipped &mdash; safe to re-run</li>
-  <li>After import, go to <strong>Manage User Accounts &rarr; Sync</strong> to create web logins for all newly imported residents</li>
-</ol>
-
-<div class="tip"><strong>Tip:</strong> The CSV importer is flexible &mdash; it recognizes common column name variations from most property management systems (e.g. &ldquo;First&rdquo;, &ldquo;Given Name&rdquo;, &ldquo;Apt&rdquo;, &ldquo;Cell&rdquo;, etc.). Extra columns are ignored.</div>
-
-<h3>Copying All Resident Emails</h3>
-<p>Click <strong>Get Email List</strong> in the toolbar to copy all resident email addresses to your clipboard. Paste into the <strong>BCC</strong> field of your email client to send a community-wide message.</p>
-
-<h3>Automated Reports</h3>
-<p>The following reports are generated automatically from the resident database within about a minute of any change:</p>
-<table>
-  <tr><th>Report</th><th>Access</th></tr>
-  <tr><td>Resident List</td><td>Private (residents only)</td></tr>
-  <tr><td>Elevator List</td><td>Private (residents only)</td></tr>
-  <tr><td>Parking List</td><td>Private (residents only)</td></tr>
-  <tr><td>Board of Directors</td><td>Public</td></tr>
-</table>
-
-{divider()}
-
-<h2>Section 8 &mdash; Search: Training Your Residents</h2>
+{section("Section 8 &mdash; Search: Training Your Residents")}
 
 <h3>What Search Does</h3>
 <p>The website includes a full-text search feature that lets owners find any document across the entire document store &mdash; both public and private &mdash; with a single search. It also searches tags, so a file tagged &ldquo;budget&rdquo; will appear even if that word isn&rsquo;t in the filename. Residents do not need to know which folder a document is in.</p>
@@ -476,14 +477,14 @@ html = f"""<!DOCTYPE html>
 
 {divider()}
 
-<h2>Section 9 &mdash; Woolsy Knowledge Base</h2>
+{section("Section 9 &mdash; Woolsy AI Assistant")}
 
 <h3>What Is Woolsy?</h3>
 <p>Woolsy is the AI assistant built into your building website. Residents can ask it questions about the building &mdash; parking rules, pet policy, renovation procedures, and more &mdash; and receive accurate answers drawn directly from your governing documents.</p>
 <p>Woolsy&rsquo;s answers are grounded in a <strong>knowledge base</strong> specific to your building. This knowledge base is a summary of your governing documents (Articles of Incorporation, Bylaws, Declaration of Condominium, Board rules) that you set up once and update whenever your documents change.</p>
 
 <h3>The Woolsy Card on Your Dashboard</h3>
-<p>The Admin Dashboard always shows a <strong>Woolsy Knowledge Base</strong> card. It tells you the current status at a glance:</p>
+<p>The Admin Dashboard always shows a <strong>Woolsy AI Assistant</strong> card. It tells you the current status at a glance:</p>
 <table>
   <tr><th>Status</th><th>What It Means</th></tr>
   <tr><td><strong>Not set up</strong></td><td>Woolsy has no knowledge of your specific building rules yet. Click &ldquo;Set up now&rdquo; to begin.</td></tr>
@@ -577,7 +578,7 @@ For maintenance requests, contact ABC Management at 555-123-4567 or manager@abcm
 
 {divider()}
 
-<h2>Section 10 &mdash; Billing &amp; Invoices</h2>
+{section("Section 10 &mdash; Billing &amp; Invoices")}
 
 <h3>Overview</h3>
 <p>Your Admin Dashboard includes a <strong>Billing</strong> section that shows your invoice history. Invoices are created automatically when a service limit is reached (storage or Woolsy credits) or when your annual subscription is due for renewal. You can view each invoice by clicking its ID, and pay online via the <strong>Pay &rarr;</strong> link if available.</p>
@@ -600,7 +601,7 @@ For maintenance requests, contact ABC Management at 555-123-4567 or manager@abcm
 
 {divider()}
 
-<h2>Appendix &mdash; Sample Introduction Email</h2>
+{section("Appendix &mdash; Sample Introduction Email")}
 
 <div style="display:flex; gap:1.5em; align-items:flex-start;">
   <div style="flex:2;">
