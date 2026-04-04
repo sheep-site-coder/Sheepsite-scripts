@@ -87,9 +87,12 @@ html = f"""<!DOCTYPE html>
 </ul>
 
 <p>All server-side logic lives in PHP scripts hosted at <code>sheepsite.com/Scripts/</code>. Building websites
-are hosted separately (typically on Namecheap Website Builder) and integrate with SheepSite by pasting
-a footer script. Google Drive and Sheets access is handled by Google Apps Script web apps &mdash;
-PHP never calls Google APIs directly (see <a href="#gas">Section 4</a> for why).</p>
+are served as subdomains of sheepsite.com (e.g., <code>LyndhurstH.sheepsite.com</code>) using a shared PHP
+template &mdash; <code>building-site.php</code> &mdash; with per-building configuration stored in
+<code>config/{{building}}.json</code>. Each subdomain&rsquo;s <code>index.php</code> simply defines the
+<code>BUILDING</code> constant and requires the shared template. Google Drive and Sheets access is handled
+by Google Apps Script web apps &mdash; PHP never calls Google APIs directly
+(see <a href="#gas">Section 4</a> for why).</p>
 
 {divider()}
 
@@ -151,10 +154,19 @@ PHP never calls Google APIs directly (see <a href="#gas">Section 4</a> for why).
   <tr><td>Google Sheets (one per building)</td><td>Owner database, car data, generates elevator/parking/resident/board reports</td></tr>
 </table>
 
-<h3>Building Websites (one per building, e.g., Namecheap Website Builder)</h3>
-<p>Each building has its own website hosted independently. SheepSite integrates via a footer script
-pasted into the site&rsquo;s &ldquo;After &lt;body&gt;&rdquo; section. The only thing that changes
-per site is <code>BUILDING_NAME</code> at the top of that script.</p>
+<h3>Building Websites (subdomains of sheepsite.com)</h3>
+<p>Each building website is served as a subdomain (e.g., <code>LyndhurstH.sheepsite.com</code>).
+The subdomain&rsquo;s document root contains a single <code>index.php</code>:</p>
+<pre>&lt;?php
+define('BUILDING', 'LyndhurstH');
+require '/home/account/sheepsite.com/Scripts/building-site.php';</pre>
+<p>All pages, navigation, styling, and integrations are rendered by the shared
+<code>building-site.php</code> template. Per-building configuration (display name, header image,
+calendar URL, Facebook URL, property management contact) is stored in
+<code>config/{{building}}.json</code> and managed via <code>building-detail.php</code>.</p>
+<p>Because the building site and all Scripts are on the same domain, PHP sessions are shared across
+pages &mdash; no cross-domain cookie issues. The Woolsy widget, private file browser, and resident
+portal all operate with the same session.</p>
 
 {divider()}
 
@@ -229,6 +241,13 @@ new library version.</p>
 
 <h2 id="files">5. File Inventory</h2>
 
+<h3>Building Website Template</h3>
+<table>
+  <tr><th>File</th><th>Description</th></tr>
+  <tr><td><code>building-site.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Shared PHP template for all building websites. Renders all pages (Home, About Us, Resources, CenClub, Social) with per-building config loaded from <code>config/{{building}}.json</code>. Each building subdomain has one <code>index.php</code> that defines <code>BUILDING</code> and requires this file. Includes the Woolsy widget script, hamburger nav, and all button helpers.</td></tr>
+</table>
+
 <h3>Public-Facing PHP Scripts</h3>
 <table>
   <tr><th>File</th><th>Description</th></tr>
@@ -252,7 +271,7 @@ new library version.</p>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{{building}}</code> session.</td></tr>
+      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{{building}}</code> session. Shows &ldquo;← Back to site&rdquo; link on both the login page and the dashboard when <code>siteURL</code> is configured in the building config.</td></tr>
   <tr><td><code>manage-users.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Add, remove, and reset passwords for resident accounts. Import owners from Google Sheet. Supports both building admin and master admin login.</td></tr>
   <tr><td><code>storage-report.php</code> <span class="tag tag-php">PHP</span></td>
@@ -299,20 +318,22 @@ new library version.</p>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>chatbot-widget.js</code> <span class="tag tag-js">JS</span></td>
-      <td>Loaded on building websites. Creates the floating 🐑 FAB button and public chat overlay. Public mode: cheeky deflections, keyword-aware, zero API cost. Resident mode: opens chatbot-page.php in a popup with <code>?q=</code> carrying the question. Requires <code>window.BUILDING_NAME</code> to be set by the footer script.</td></tr>
+      <td>Loaded on building websites. Creates the floating Woolsy FAB button. On click, calls <code>chatbot-auth.php?action=whoami</code> to check session state. <strong>Public mode</strong> (not logged in): cheeky deflections, keyword-aware, zero API cost; deflection messages include an inline &ldquo;Log in to chat&rdquo; button that opens a mini login form inside the widget panel. <strong>Resident mode</strong> (logged in): full inline chat — questions sent via fetch to <code>chatbot.php</code>, answers rendered inside the floating panel; conversation history maintained in JS; logout button clears session via <code>chatbot-auth.php?action=logout</code>. The question that prompted login is stored and auto-sent after successful authentication. Requires <code>window.BUILDING_NAME</code> to be set by the page.</td></tr>
+  <tr><td><code>chatbot-auth.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Session helper for the Woolsy widget. Three actions: <code>whoami</code> (GET — returns <code>{{loggedIn, username}}</code>), <code>login</code> (POST — verifies credentials against <code>credentials/{{building}}.json</code>, sets <code>private_auth_{{building}}</code> session, returns <code>{{ok, username}}</code> or <code>{{ok:false, error}}</code>), <code>logout</code> (GET — clears session, returns <code>{{ok}}</code>). All responses are JSON. No page navigation required — the widget handles auth entirely in-panel.</td></tr>
   <tr><td><code>chatbot-page.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Resident chat popup UI. If not logged in: shows login form. If logged in: renders full chat interface. On load, reads <code>?q=</code> from URL via JS <code>URLSearchParams</code> and auto-sends the question. Login redirect preserves <code>?q=</code>.</td></tr>
+      <td>Standalone resident chat page. Reuses the <code>private_auth_{{building}}</code> session. If not logged in: shows login form. If logged in: renders full chat interface backed by <code>chatbot.php</code>. Accessible directly (e.g., for bookmarking). The widget no longer opens this as a popup &mdash; it handles chat inline.</td></tr>
   <tr><td><code>chatbot.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Chat API endpoint. Receives question + history from chatbot-page.php. Checks credits, loads building rules (<code>faqs/{{building}}_rules.md</code>) and document index (<code>faqs/{{building}}_docindex.txt</code>), calls Claude Haiku API, deducts actual token cost from credits, returns answer JSON.</td></tr>
+      <td>Chat API endpoint. Receives question + history (POST JSON). Checks credits, loads building rules (<code>faqs/{{building}}_rules.md</code>) and document index (<code>faqs/{{building}}_docindex.txt</code>), calls Claude Haiku API, deducts actual token cost from credits, returns answer JSON. Called by both the inline widget and chatbot-page.php.</td></tr>
 </table>
 
 <h3>Shared / Config Files</h3>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>buildings.php</code> <span class="tag tag-php">PHP</span></td>
-      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code> (the building&rsquo;s Sheets web app URL).</td></tr>
+      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code> (Sheets web app URL), <code>state</code> (two-letter state code for Woolsy FAQ layer), <code>community</code> (optional community name for shared FAQ layer, e.g. <code>CVE</code>).</td></tr>
   <tr><td><code>footer-for-sites.js</code> <span class="tag tag-js">JS</span></td>
-      <td>Reference document (not served directly). Contains the complete footer script to paste into each building website, plus button/iframe HTML snippets. Change only <code>BUILDING_NAME</code> per site. Includes the <code>&lt;script src=&quot;chatbot-widget.js&quot;&gt;</code> tag.</td></tr>
+      <td>Reference document (not served directly). Legacy reference for the footer script pattern. New buildings use <code>building-site.php</code> which embeds all helpers directly. Documents button/iframe HTML snippets and helper functions (<code>openFolder</code>, <code>openPrivateFolder</code>, <code>openAdmin</code>, etc.).</td></tr>
 </table>
 
 <h3>Google Apps Script Files</h3>
@@ -384,21 +405,36 @@ the credential file &mdash; no code changes.</p>
 <h2 id="woolsy">7. Woolsy Chatbot Stack</h2>
 
 <h3>Architecture</h3>
-<pre>Building Website
-  └─ chatbot-widget.js (public floating widget, deflections only)
-       └─ window.open → chatbot-page.php?building=X&q=QUESTION (popup)
-            └─ POST → chatbot.php (API endpoint)
+<pre>Building Website (e.g., LyndhurstH.sheepsite.com)
+  └─ chatbot-widget.js (floating Woolsy FAB)
+       │
+       ├─ GET chatbot-auth.php?action=whoami   ← checks session on every open
+       │
+       ├─ [not logged in] Public mode: deflections + inline login form
+       │    └─ POST chatbot-auth.php?action=login  ← verifies credentials, sets session
+       │
+       └─ [logged in] Resident mode: inline chat panel
+            └─ POST chatbot.php  ← question + history
                  ├─ faqs/{{building}}_rules.md (governing doc knowledge base)
                  ├─ faqs/{{building}}_docindex.txt (document/form directory)
                  └─ Anthropic API (Claude Haiku) → answer JSON</pre>
 
-<h3>Public Widget (chatbot-widget.js)</h3>
-<p>Runs on the building website. Zero API cost &mdash; public questions get cheeky deflections
-with keyword-aware responses (pets, parking, noise, etc.) and a &ldquo;Open Resident Chat&rdquo;
-button. The question is preserved in the popup URL (<code>?q=</code>) and auto-sent after login.</p>
+<p>Because building sites are served from the same domain as Scripts (<code>sheepsite.com</code>),
+the <code>private_auth_{{building}}</code> session set by <code>chatbot-auth.php</code> is shared
+with <code>display-private-dir.php</code>, <code>protected-report.php</code>, and all other
+resident-facing pages &mdash; a single login covers the entire resident portal.</p>
 
-<h3>Resident Chat (chatbot-page.php + chatbot.php)</h3>
-<p>chatbot-page.php handles the UI and login gate. chatbot.php is the API endpoint that:</p>
+<h3>Public Widget (chatbot-widget.js)</h3>
+<p>Runs on the building website. Calls <code>chatbot-auth.php?action=whoami</code> (with
+<code>cache: no-store</code>) each time the FAB is clicked to get fresh session state. If not
+logged in, shows cheeky keyword-aware deflections and a &ldquo;Log in to chat&rdquo; button.
+Clicking that button opens a mini login form <em>inside the floating panel</em> &mdash; no page
+navigation, no popup window. The question that triggered the deflection is stored and automatically
+sent once login succeeds.</p>
+
+<h3>Resident Chat (chatbot-widget.js + chatbot.php)</h3>
+<p>When logged in, the widget renders a full chat panel. Questions are sent via <code>fetch</code>
+POST to <code>chatbot.php</code>, which:</p>
 <ol>
   <li>Checks credits (<code>faqs/woolsy_credits.json</code>) &mdash; blocks if exhausted</li>
   <li>Loads the building&rsquo;s rules file and document index into the system prompt</li>
@@ -406,6 +442,9 @@ button. The question is preserved in the popup URL (<code>?q=</code>) and auto-s
   <li>Calculates actual token cost and deducts from credits</li>
   <li>Returns the answer as JSON</li>
 </ol>
+<p>Conversation history is maintained in JS (up to 12 messages). A logout button in the widget
+header calls <code>chatbot-auth.php?action=logout</code> and drops back to public deflector mode
+without any page reload.</p>
 
 <h3>Knowledge Base Files</h3>
 <table>
