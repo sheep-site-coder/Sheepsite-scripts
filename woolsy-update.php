@@ -66,6 +66,16 @@ if (empty($_SESSION[$sessionKey])) {
     exit;
 }
 
+// Block access in Test Site mode
+$_wuCfg = file_exists(__DIR__ . '/config/' . $building . '.json')
+    ? (json_decode(file_get_contents(__DIR__ . '/config/' . $building . '.json'), true) ?? [])
+    : [];
+if (!empty($_wuCfg['testSite'])) {
+    header('Location: admin.php?building=' . urlencode($building));
+    exit;
+}
+unset($_wuCfg);
+
 $publicFolderId = $buildings[$building]['publicFolderId'];
 
 // -------------------------------------------------------

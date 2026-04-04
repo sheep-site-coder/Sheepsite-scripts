@@ -170,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
     $cfg['siteURL']      = rtrim(trim($_POST['site_url']      ?? ''), '/');
     $cfg['contactEmail'] = trim($_POST['contact_email'] ?? '');
     $cfg['hasDomain']    = isset($_POST['has_domain']);
+    $cfg['testSite']     = isset($_POST['test_site']);
     saveBuildingConfig($buildingKey, $cfg);
     $message = 'Configuration saved.';
   }
@@ -890,6 +891,10 @@ function esc(s) {
     <div class="checkbox-row">
       <input type="checkbox" id="has_domain" name="has_domain" <?= !empty($bldCfg['hasDomain']) ? 'checked' : '' ?>>
       <label for="has_domain" style="margin:0;font-weight:normal;">This building has its own domain (billed for domain renewal)</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="test_site" name="test_site" <?= !empty($bldCfg['testSite']) ? 'checked' : '' ?>>
+      <label for="test_site" style="margin:0;font-weight:normal;">Test Site mode — disables admin password change, contact email, and Woolsy KB rebuild</label>
     </div>
     <button type="submit" class="btn">Save Configuration</button>
   </form>

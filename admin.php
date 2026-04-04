@@ -192,12 +192,18 @@ $adminCred  = json_decode(file_get_contents($adminCredFile), true);
 $mustChange = !empty($adminCred['mustChange']);
 
 // -------------------------------------------------------
+// Load config early — needed for testSite check before POST handling
+// -------------------------------------------------------
+$bldCfg     = loadBuildingConfig($building);
+$isTestSite = !empty($bldCfg['testSite']);
+
+// -------------------------------------------------------
 // Handle admin password change
 // -------------------------------------------------------
 $pwMessage     = '';
 $pwMessageType = 'ok';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass'])) {
+if (!$isTestSite && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass'])) {
   $currentPass = $_POST['current_pass'] ?? '';
   $newPass     = $_POST['new_pass']     ?? '';
   $confirmPass = $_POST['confirm_pass'] ?? '';
@@ -227,8 +233,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass']))
   }
 }
 // -------------------------------------------------------
-// Load building config, pricing, and invoices for storage + billing cards
-$bldCfg      = loadBuildingConfig($building);
+// Load pricing, and invoices for storage + billing cards
+// (bldCfg already loaded above)
+$bldCfg      = loadBuildingConfig($building); // reload after any saves
 $pricingFile = CONFIG_DIR . 'pricing.json';
 $pricing     = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
 $storageUsed  = (int)($bldCfg['storageUsed']  ?? 0);
@@ -309,6 +316,12 @@ if (!$mustChange) {
     <a href="admin.php?building=<?= urlencode($building) ?>&logout=1" class="logout">Log out</a>
   </div>
 </div>
+
+<?php if ($isTestSite): ?>
+  <div style="background:#fef9c3;border:1px solid #fbbf24;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1.5rem;font-size:0.9rem;color:#92400e;">
+    <strong>Demo Site</strong> — You are viewing a demonstration site. Password changes, contact email, and Woolsy knowledge base rebuilds are disabled. Contact <a href="https://sheepsite.com" style="color:#92400e;">SheepSite</a> to activate your full account.
+  </div>
+<?php endif; ?>
 
 <?php if ($mustChange): ?>
   <div class="message error" style="margin-bottom:2rem;">
@@ -519,7 +532,8 @@ if (!$mustChange) {
         <input type="text" id="contact_email" name="contact_email"
                value="<?= $contactEmail ?>"
                placeholder="board@example.com"
-               style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+               <?= $isTestSite ? 'disabled title="Not available in demo mode"' : '' ?>
+               style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;<?= $isTestSite ? 'background:#f5f5f5;color:#999;' : '' ?>">
       </div>
       <div style="flex:1;min-width:220px;">
         <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
@@ -531,7 +545,8 @@ if (!$mustChange) {
           <span style="font-size:0.9rem;color:#999;">Not set — configure in Master Admin</span>
         <?php endif; ?>
       </div>
-      <button type="submit" name="save_building_settings" class="save-btn" style="white-space:nowrap;">Save</button>
+      <button type="submit" name="save_building_settings" class="save-btn" style="white-space:nowrap;"
+              <?= $isTestSite ? 'disabled title="Not available in demo mode"' : '' ?>>Save</button>
     </form>
     <p style="font-size:0.78rem;color:#999;margin:0.1rem 0 0;">
       Website URL enables "Back to site" links in welcome emails and resident pages.
@@ -543,6 +558,10 @@ if (!$mustChange) {
 <?php endif; ?>
 
 <h2>Change Admin Password</h2>
+
+<?php if ($isTestSite): ?>
+  <p style="color:#999;font-size:0.9rem;font-style:italic;">Password changes are disabled in demo mode.</p>
+<?php else: ?>
 
 <?php if ($pwMessage): ?>
   <div class="message <?= $pwMessageType ?>"><?= htmlspecialchars($pwMessage) ?></div>
@@ -560,6 +579,7 @@ if (!$mustChange) {
 
   <button type="submit" name="change_admin_pass" class="save-btn">Update password</button>
 </form>
+<?php endif; ?>
 
 
 </body>
