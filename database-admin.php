@@ -42,7 +42,9 @@ function gasGet(string $url, array $params): array {
   $ctx     = stream_context_create(['http' => ['timeout' => 30]]);
   $body    = @file_get_contents($fullUrl, false, $ctx);
   if ($body === false) return ['error' => 'Could not reach Apps Script'];
-  return json_decode($body, true) ?? ['error' => 'Invalid response'];
+  $decoded = json_decode($body, true);
+  if ($decoded === null) return ['error' => 'Invalid response', 'raw' => substr($body, 0, 500)];
+  return $decoded;
 }
 
 function gasPost(string $url, array $data): array {
