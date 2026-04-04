@@ -109,6 +109,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_pass'])) {
 }
 
 // -------------------------------------------------------
+// Load config early so login page can show Back to site link
+// -------------------------------------------------------
+$loginPageConfig = loadBuildingConfig($building);
+$loginSiteURL    = htmlspecialchars($loginPageConfig['siteURL'] ?? '');
+
+// -------------------------------------------------------
 // Show login form if not authenticated
 // -------------------------------------------------------
 if (empty($_SESSION[$sessionKey])) {
@@ -134,6 +140,9 @@ if (empty($_SESSION[$sessionKey])) {
   </style>
 </head>
 <body>
+  <?php if ($loginSiteURL): ?>
+    <p style="margin-bottom:1.5rem;"><a href="<?= $loginSiteURL ?>" style="color:#0070f3;text-decoration:none;font-size:0.9rem;">← Back to site</a></p>
+  <?php endif; ?>
   <h1><?= htmlspecialchars($buildLabel) ?> – Admin</h1>
   <div class="subtitle">Administrator login required</div>
 
