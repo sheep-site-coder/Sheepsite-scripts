@@ -97,7 +97,7 @@ if (!$returnURL) {
 </a>
 
 <a href="chatbot-page.php?building=<?= urlencode($building) ?>" class="card">
-  <div class="card-icon">🐑</div>
+  <div class="card-icon"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="36" alt="Woolsy" style="display:block;"></div>
   <div>
     <div class="card-title">Ask Woolsy</div>
     <div class="card-desc">

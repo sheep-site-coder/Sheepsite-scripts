@@ -976,7 +976,7 @@ function esc(s) {
 
 <!-- Woolsy Credits -->
 <div class="section">
-  <h2>🐑 Woolsy Credits</h2>
+  <h2><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="28" alt="Woolsy" style="vertical-align:middle;margin-right:0.4rem;"> Woolsy Credits</h2>
   <div class="stat-row" style="margin-bottom:0.5rem;">
     <div>
       <div class="stat-label">Allocated</div>
