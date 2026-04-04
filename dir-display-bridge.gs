@@ -434,6 +434,10 @@ function handleSetupBuildingFolders(e) {
     publicFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   }
 
+  // Create BigUploads folder and set to "Anyone with the link can edit"
+  const bigUploads = buildingFolder.createFolder('BigUploads');
+  bigUploads.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
+
   // Copy the template Owner DB sheet into the building folder (if provided)
   var sheetId  = null;
   var sheetUrl = null;
@@ -450,6 +454,7 @@ function handleSetupBuildingFolders(e) {
       buildingFolderId: buildingFolder.getId(),
       publicFolderId:   publicFolder  ? publicFolder.getId()  : null,
       privateFolderId:  privateFolder ? privateFolder.getId() : null,
+      bigUploadsFolderId: bigUploads.getId(),
       sheetId:          sheetId,
       sheetUrl:         sheetUrl
     }))
@@ -846,9 +851,10 @@ function handleSetupBigUploadFolder(e) {
 
   const buildingRoot = DriveApp.getFolderById(publicFolderId).getParents().next();
 
-  // Get or create BigUploads root
-  const buIter   = buildingRoot.getFoldersByName('BigUploads');
+  // Get or create BigUploads root; ensure sharing is set either way
+  const buIter     = buildingRoot.getFoldersByName('BigUploads');
   const bigUploads = buIter.hasNext() ? buIter.next() : buildingRoot.createFolder('BigUploads');
+  bigUploads.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
 
   // Walk/create path segments
   let current = bigUploads;
