@@ -250,6 +250,51 @@
         white-space: nowrap;
         cursor: pointer;
       }
+      #ss-login-body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 20px 16px;
+      }
+      #ss-login-body input {
+        padding: 9px 11px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 13px;
+        outline: none;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #ss-login-error {
+        color: #c0392b;
+        font-size: 12px;
+        min-height: 16px;
+      }
+      #ss-login-buttons {
+        display: flex;
+        gap: 8px;
+      }
+      #ss-login-cancel {
+        flex: 1;
+        padding: 9px;
+        background: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      #ss-login-submit {
+        flex: 2;
+        padding: 9px;
+        background: #2c5f8a;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: bold;
+      }
+      #ss-login-submit:disabled { opacity: .6; cursor: default; }
       #ss-chat-bubble::after {
         content: '';
         position: absolute;
@@ -318,15 +363,85 @@
     addMessage('user', escapeHtml(question));
 
     const deflection = getDeflection(question);
-    const loginUrl   = `${SCRIPTS_URL}/display-private-dir.php?building=${encodeURIComponent(building)}`;
 
     addMessage('bot',
       escapeHtml(deflection) +
-      `<br><a class="ss-login-btn" href="${loginUrl}" target="_blank">Log in to chat →</a>`
+      `<br><button class="ss-login-btn" onclick="window._ssShowLogin()">Log in to chat →</button>`
     );
 
     button.disabled = false;
     document.getElementById('ss-chat-input').focus();
+  }
+
+  // --- Login form mode ---
+  function showLoginMode(building) {
+    widgetMode = 'login';
+    const widget = getOrCreateWidget();
+    widget.className = '';
+    widget.innerHTML = `
+      <div id="ss-chat-header">
+        <span>Woolsy — Resident Login</span>
+        <div id="ss-chat-header-right">
+          <button id="ss-chat-close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div id="ss-login-body">
+        <input id="ss-login-user" type="text"     placeholder="Username" autocomplete="username" />
+        <input id="ss-login-pass" type="password" placeholder="Password" autocomplete="current-password" />
+        <div id="ss-login-error"></div>
+        <div id="ss-login-buttons">
+          <button id="ss-login-cancel">Cancel</button>
+          <button id="ss-login-submit">Log in</button>
+        </div>
+      </div>
+    `;
+    widget.style.display = 'flex';
+
+    document.getElementById('ss-chat-close').onclick  = closeChatbot;
+    document.getElementById('ss-login-cancel').onclick = () => showPublicMode(building);
+    document.getElementById('ss-login-submit').onclick = () => submitLogin(building);
+    document.getElementById('ss-login-pass').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitLogin(building);
+    });
+    document.getElementById('ss-login-user').focus();
+  }
+
+  async function submitLogin(building) {
+    const userEl  = document.getElementById('ss-login-user');
+    const passEl  = document.getElementById('ss-login-pass');
+    const errorEl = document.getElementById('ss-login-error');
+    const btn     = document.getElementById('ss-login-submit');
+
+    const username = userEl.value.trim();
+    const password = passEl.value;
+
+    errorEl.textContent = '';
+    btn.disabled        = true;
+    btn.textContent     = 'Logging in…';
+
+    try {
+      const res  = await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=login&building=${encodeURIComponent(building)}`, {
+        method:      'POST',
+        credentials: 'same-origin',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        showResidentMode(data.username, building);
+      } else {
+        errorEl.textContent = data.error || 'Login failed.';
+        btn.disabled        = false;
+        btn.textContent     = 'Log in';
+        passEl.value        = '';
+        passEl.focus();
+      }
+    } catch {
+      errorEl.textContent = 'Could not connect. Please try again.';
+      btn.disabled        = false;
+      btn.textContent     = 'Log in';
+    }
   }
 
   // --- Resident (full chat) mode ---
@@ -485,7 +600,11 @@
     }
   }
 
-  window.openChatbot = openChatbot;
+  window.openChatbot  = openChatbot;
+  window._ssShowLogin = function () {
+    const building = window.BUILDING_NAME || '';
+    showLoginMode(building);
+  };
 
   // Auto-init: show FAB on page load
   window.addEventListener('load', function () {
