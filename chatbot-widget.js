@@ -56,7 +56,10 @@
   // --- Session helpers ---
   async function whoami(building) {
     try {
-      const res  = await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=whoami&building=${encodeURIComponent(building)}`);
+      const res  = await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=whoami&building=${encodeURIComponent(building)}`, {
+        credentials: 'same-origin',
+        cache:       'no-store',
+      });
       const data = await res.json();
       return data.loggedIn ? data.username : null;
     } catch {
