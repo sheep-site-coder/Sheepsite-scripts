@@ -1,7 +1,7 @@
 // chatbot-widget.js — FAQ chatbot widget for building sites
 //
 // Public mode  : cheeky deflections, zero API cost, login CTA
-// Resident mode: opens chatbot-page.php in an iframe overlay (session-aware)
+// Resident mode: full inline chat backed by chatbot.php (session-aware)
 //
 // Requires BUILDING_NAME to be set by the footer script before this loads.
 // Add openChatbot() to any button, or the floating bubble appears automatically.
@@ -10,7 +10,10 @@
   const SCRIPTS_URL = 'https://sheepsite.com/Scripts';
   const WIDGET_ID   = 'ss-chatbot';
 
-  // Cheeky deflections — picked randomly, optionally keyword-nudged
+  let chatHistory = [];
+  let widgetMode  = null; // 'public' | 'resident'
+
+  // --- Cheeky deflections ---
   const DEFLECTIONS = [
     "Great question! Log in as a resident and I'll have a proper answer for you right away.",
     "Oh, I know exactly where to find that — just log in and I'll pull it up!",
@@ -50,6 +53,23 @@
     return DEFLECTIONS[Math.floor(Math.random() * DEFLECTIONS.length)];
   }
 
+  // --- Session helpers ---
+  async function whoami(building) {
+    try {
+      const res  = await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=whoami&building=${encodeURIComponent(building)}`);
+      const data = await res.json();
+      return data.loggedIn ? data.username : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function logout(building) {
+    try {
+      await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=logout&building=${encodeURIComponent(building)}`);
+    } catch { /* ignore */ }
+  }
+
   // --- Styles ---
   function injectStyles() {
     if (document.getElementById('ss-chatbot-styles')) return;
@@ -72,6 +92,9 @@
         flex-direction: column;
         overflow: hidden;
       }
+      #ss-chatbot.ss-resident {
+        width: 380px;
+      }
       #ss-chat-header {
         background: #2c5f8a;
         color: #fff;
@@ -80,7 +103,28 @@
         justify-content: space-between;
         align-items: center;
         font-weight: bold;
+        flex-shrink: 0;
       }
+      #ss-chat-header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #ss-chat-username {
+        font-size: 12px;
+        font-weight: normal;
+        opacity: 0.85;
+      }
+      #ss-chat-logout {
+        background: none;
+        border: 1px solid rgba(255,255,255,.5);
+        color: #fff;
+        padding: 3px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+      }
+      #ss-chat-logout:hover { background: rgba(255,255,255,.15); }
       #ss-chat-close {
         background: none;
         border: none;
@@ -88,6 +132,7 @@
         font-size: 16px;
         cursor: pointer;
         line-height: 1;
+        padding: 0;
       }
       #ss-chat-messages {
         flex: 1;
@@ -97,6 +142,9 @@
         flex-direction: column;
         gap: 10px;
         max-height: 320px;
+      }
+      #ss-chatbot.ss-resident #ss-chat-messages {
+        max-height: 400px;
       }
       .ss-msg {
         max-width: 88%;
@@ -118,6 +166,14 @@
         color: #222;
         border-bottom-left-radius: 3px;
       }
+      #ss-chatbot.ss-resident .ss-msg-bot {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+      }
+      .ss-msg-thinking {
+        color: #999;
+        font-style: italic;
+      }
       .ss-login-btn {
         display: inline-block;
         margin-top: 8px;
@@ -137,6 +193,7 @@
         border-top: 1px solid #ddd;
         padding: 8px;
         gap: 6px;
+        flex-shrink: 0;
       }
       #ss-chat-input {
         flex: 1;
@@ -174,7 +231,6 @@
         align-items: center;
         justify-content: center;
       }
-
       #ss-chat-bubble {
         position: fixed;
         bottom: 28px;
@@ -201,23 +257,33 @@
         border-style: solid;
         border-color: transparent transparent transparent #fff;
       }
-
     `;
     document.head.appendChild(style);
   }
 
-  // --- Public widget (cheeky deflector) ---
-  function createPublicWidget() {
-    if (document.getElementById(WIDGET_ID)) return;
+  // --- Widget shell ---
+  function getOrCreateWidget() {
+    let w = document.getElementById(WIDGET_ID);
+    if (!w) {
+      w = document.createElement('div');
+      w.id = WIDGET_ID;
+      document.body.appendChild(w);
+    }
+    return w;
+  }
 
-    injectStyles();
-
-    const widget = document.createElement('div');
-    widget.id = WIDGET_ID;
+  // --- Public (deflector) mode ---
+  function showPublicMode(building) {
+    widgetMode = 'public';
+    chatHistory = [];
+    const widget = getOrCreateWidget();
+    widget.className = '';
     widget.innerHTML = `
       <div id="ss-chat-header">
         <span>Woolsy</span>
-        <button id="ss-chat-close" aria-label="Close">✕</button>
+        <div id="ss-chat-header-right">
+          <button id="ss-chat-close" aria-label="Close">✕</button>
+        </div>
       </div>
       <div id="ss-chat-messages"></div>
       <div id="ss-chat-input-row">
@@ -225,33 +291,121 @@
         <button id="ss-chat-send">Send</button>
       </div>
     `;
-    document.body.appendChild(widget);
-
-    // Floating button + speech bubble
-    if (!document.getElementById('ss-chat-fab')) {
-      const fab = document.createElement('button');
-      fab.id = 'ss-chat-fab';
-      fab.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;background:#fff;border-radius:50%;"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="38" alt="Woolsy" style="display:block;"></span>';
-      fab.title = 'Woolsy';
-      fab.onclick = openChatbot;
-      document.body.appendChild(fab);
-
-      const bubble = document.createElement('div');
-      bubble.id = 'ss-chat-bubble';
-      bubble.textContent = 'Ask Woolsy!';
-      bubble.onclick = openChatbot;
-      document.body.appendChild(bubble);
-    }
+    widget.style.display = 'flex';
 
     document.getElementById('ss-chat-close').onclick = closeChatbot;
-    document.getElementById('ss-chat-send').onclick  = handleSend;
+    document.getElementById('ss-chat-send').onclick  = () => handlePublicSend(building);
     document.getElementById('ss-chat-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') handleSend();
+      if (e.key === 'Enter') handlePublicSend(building);
     });
 
     addMessage('bot', 'Hi! I\'m Woolsy, your community assistant. What would you like to know?');
+    document.getElementById('ss-chat-input').focus();
   }
 
+  function handlePublicSend(building) {
+    const input    = document.getElementById('ss-chat-input');
+    const button   = document.getElementById('ss-chat-send');
+    const question = input.value.trim();
+    if (!question) return;
+
+    input.value     = '';
+    button.disabled = true;
+
+    addMessage('user', escapeHtml(question));
+
+    const deflection = getDeflection(question);
+    const loginUrl   = `${SCRIPTS_URL}/display-private-dir.php?building=${encodeURIComponent(building)}`;
+
+    addMessage('bot',
+      escapeHtml(deflection) +
+      `<br><a class="ss-login-btn" href="${loginUrl}" target="_blank">Log in to chat →</a>`
+    );
+
+    button.disabled = false;
+    document.getElementById('ss-chat-input').focus();
+  }
+
+  // --- Resident (full chat) mode ---
+  function showResidentMode(username, building) {
+    widgetMode  = 'resident';
+    chatHistory = [];
+    const widget = getOrCreateWidget();
+    widget.className = 'ss-resident';
+    widget.innerHTML = `
+      <div id="ss-chat-header">
+        <span>Woolsy</span>
+        <div id="ss-chat-header-right">
+          <span id="ss-chat-username">${escapeHtml(username)}</span>
+          <button id="ss-chat-logout">Log out</button>
+          <button id="ss-chat-close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div id="ss-chat-messages"></div>
+      <div id="ss-chat-input-row">
+        <input id="ss-chat-input" type="text" placeholder="Ask anything about your community…" autocomplete="off" />
+        <button id="ss-chat-send">Send</button>
+      </div>
+    `;
+    widget.style.display = 'flex';
+
+    document.getElementById('ss-chat-close').onclick  = closeChatbot;
+    document.getElementById('ss-chat-logout').onclick = () => handleLogout(building);
+    document.getElementById('ss-chat-send').onclick   = () => handleResidentSend(building);
+    document.getElementById('ss-chat-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleResidentSend(building);
+    });
+
+    const greeting = `Hi ${escapeHtml(capitalize(username))}! I\'m Woolsy, your community assistant. Ask me anything about your community — rules, procedures, documents, amenities.`;
+    addMessage('bot', greeting);
+    document.getElementById('ss-chat-input').focus();
+  }
+
+  async function handleResidentSend(building) {
+    const input = document.getElementById('ss-chat-input');
+    const btn   = document.getElementById('ss-chat-send');
+    const q     = input.value.trim();
+    if (!q) return;
+
+    input.value  = '';
+    btn.disabled = true;
+
+    addMessage('user', escapeHtml(q));
+    const thinking = addMessage('bot', '…');
+    thinking.classList.add('ss-msg-thinking');
+
+    try {
+      const res  = await fetch(`${SCRIPTS_URL}/chatbot.php`, {
+        method:      'POST',
+        credentials: 'same-origin',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify({ building, question: q, history: chatHistory }),
+      });
+      const data   = await res.json();
+      const answer = data.answer || 'Sorry, I couldn\'t get a response. Please try again.';
+
+      thinking.textContent = answer;
+      thinking.classList.remove('ss-msg-thinking');
+
+      chatHistory.push({ role: 'user',      content: q      });
+      chatHistory.push({ role: 'assistant', content: answer });
+      if (chatHistory.length > 12) chatHistory = chatHistory.slice(-12);
+
+    } catch {
+      thinking.textContent = 'Something went wrong. Please try again.';
+      thinking.classList.remove('ss-msg-thinking');
+    }
+
+    btn.disabled = false;
+    document.getElementById('ss-chat-input')?.focus();
+  }
+
+  async function handleLogout(building) {
+    await logout(building);
+    showPublicMode(building);
+  }
+
+  // --- Shared helpers ---
   function addMessage(role, html) {
     const messages = document.getElementById('ss-chat-messages');
     const div = document.createElement('div');
@@ -262,75 +416,79 @@
     return div;
   }
 
-  function handleSend() {
-    const input    = document.getElementById('ss-chat-input');
-    const button   = document.getElementById('ss-chat-send');
-    const question = input.value.trim();
-    if (!question) return;
-
-    input.value      = '';
-    button.disabled  = true;
-
-    addMessage('user', escapeHtml(question));
-
-    const deflection = getDeflection(question);
-    const building   = window.BUILDING_NAME || '';
-    const chatUrl    = `${SCRIPTS_URL}/chatbot-page.php?building=${encodeURIComponent(building)}&q=${encodeURIComponent(question)}`;
-
-    addMessage('bot',
-      escapeHtml(deflection) +
-      `<br><button class="ss-login-btn" onclick="window._ssChatOpenResident('${escapeAttr(chatUrl)}')">
-        Open Resident Chat →
-      </button>`
-    );
-
-    button.disabled = false;
-    input.focus();
-  }
-
-
   function escapeHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function escapeAttr(str) {
-    return str.replace(/'/g, "\\'");
-  }
-
-  // Called by the login button inside the message bubble
-  window._ssChatOpenResident = function (url) {
-    openResidentChat(url);
-  };
-
-  function openResidentChat(url) {
-    closeChatbot();
-    window.open(url, 'woolsy-chat', 'width=440,height=620,resizable=yes');
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  // --- Public API ---
-  window.openChatbot = function () {
-    createPublicWidget();
-    document.getElementById(WIDGET_ID).style.display = 'flex';
-    const fab = document.getElementById('ss-chat-fab');
-    if (fab) fab.style.display = 'none';
+  function capitalize(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+  }
+
+  // --- FAB ---
+  function createFab() {
+    if (document.getElementById('ss-chat-fab')) return;
+
+    const fab = document.createElement('button');
+    fab.id      = 'ss-chat-fab';
+    fab.title   = 'Ask Woolsy';
+    fab.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;background:#fff;border-radius:50%;"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="38" alt="Woolsy" style="display:block;"></span>';
+    fab.onclick = openChatbot;
+    document.body.appendChild(fab);
+
+    const bubble = document.createElement('div');
+    bubble.id      = 'ss-chat-bubble';
+    bubble.textContent = 'Ask Woolsy!';
+    bubble.onclick = openChatbot;
+    document.body.appendChild(bubble);
+  }
+
+  function hideFab() {
+    const fab    = document.getElementById('ss-chat-fab');
     const bubble = document.getElementById('ss-chat-bubble');
+    if (fab)    fab.style.display    = 'none';
     if (bubble) bubble.style.display = 'none';
-    document.getElementById('ss-chat-input').focus();
-  };
+  }
+
+  function showFab() {
+    const fab    = document.getElementById('ss-chat-fab');
+    const bubble = document.getElementById('ss-chat-bubble');
+    if (fab)    fab.style.display    = 'flex';
+    if (bubble) bubble.style.display = 'block';
+  }
 
   function closeChatbot() {
     const w = document.getElementById(WIDGET_ID);
     if (w) w.style.display = 'none';
-    const fab = document.getElementById('ss-chat-fab');
-    if (fab) fab.style.display = 'flex';
-    const bubble = document.getElementById('ss-chat-bubble');
-    if (bubble) bubble.style.display = 'block';
+    showFab();
   }
 
-  // Auto-init: show the floating sheep button on page load
+  // --- Public API ---
+  async function openChatbot() {
+    injectStyles();
+    createFab();
+    hideFab();
+
+    const building  = window.BUILDING_NAME || '';
+    const username  = await whoami(building);
+
+    if (username) {
+      showResidentMode(username, building);
+    } else {
+      showPublicMode(building);
+    }
+  }
+
+  window.openChatbot = openChatbot;
+
+  // Auto-init: show FAB on page load
   window.addEventListener('load', function () {
-    createPublicWidget();
-    const fab = document.getElementById('ss-chat-fab');
-    if (fab) fab.style.display = 'flex';
+    injectStyles();
+    createFab();
+    showFab();
   });
 
 })();
