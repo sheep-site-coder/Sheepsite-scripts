@@ -512,7 +512,7 @@ $pageTitle  = match($mode) {
     h1               { margin: 0; font-size: 1.4rem; }
     .back-link       { font-size: 0.9rem; color: #0070f3; text-decoration: none; white-space: nowrap; }
     .back-link:hover { text-decoration: underline; }
-    .page-title      { font-size: 1.15rem; font-weight: bold; margin-bottom: 0.4rem; }
+    .page-title      { font-size: 1.15rem; font-weight: bold; margin-bottom: 0.4rem; display: flex; align-items: center; }
     .page-desc       { font-size: 0.9rem; color: #555; margin-bottom: 1.5rem; line-height: 1.5; }
     .muted           { color: #888; }
     .progress-msg    { font-size: 0.95rem; color: #555; margin-bottom: 1rem; line-height: 1.6; }
@@ -574,7 +574,7 @@ $pageTitle  = match($mode) {
   <h1><?= htmlspecialchars($buildLabel) ?> – Woolsy</h1>
 </div>
 
-<div class="page-title">🐑 <?= htmlspecialchars($pageTitle) ?></div>
+<div class="page-title"><img src="https://sheepsite.com/Scripts/assets/Woolsy-standing-transparent.png" height="32" alt="Woolsy" style="vertical-align:middle;margin-right:0.4rem;"> <?= htmlspecialchars($pageTitle) ?></div>
 <div class="page-desc">
   <?php if ($mode === 'setup'): ?>
     Woolsy will read the governing documents in your Public folder and build a knowledge base
