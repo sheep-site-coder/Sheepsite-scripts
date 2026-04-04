@@ -21,6 +21,9 @@ if (!$building || !isset($buildings[$building])) {
   exit('<h2 style="font-family:sans-serif;padding:2rem;">Building not found.</h2>');
 }
 
+$buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
+require __DIR__ . '/suspension.php';
+
 $page = preg_replace('/[^a-z-]/', '', $_GET['page'] ?? 'home');
 if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 'cenclub', 'social'])) {
   $page = 'home';
