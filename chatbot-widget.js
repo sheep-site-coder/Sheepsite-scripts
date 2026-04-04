@@ -364,10 +364,11 @@
     addMessage('user', escapeHtml(question));
 
     const deflection = getDeflection(question);
+    pendingQuestion  = question;
 
     addMessage('bot',
       escapeHtml(deflection) +
-      `<br><button class="ss-login-btn" onclick="window._ssShowLogin(${JSON.stringify(question)})">Log in to chat →</button>`
+      `<br><button class="ss-login-btn" onclick="window._ssShowLogin()">Log in to chat →</button>`
     );
 
     button.disabled = false;
@@ -608,9 +609,8 @@
   }
 
   window.openChatbot  = openChatbot;
-  window._ssShowLogin = function (question) {
-    const building  = window.BUILDING_NAME || '';
-    pendingQuestion = question || null;
+  window._ssShowLogin = function () {
+    const building = window.BUILDING_NAME || '';
     showLoginMode(building);
   };
 
