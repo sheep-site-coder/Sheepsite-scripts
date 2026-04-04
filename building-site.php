@@ -383,7 +383,13 @@ $bldJs = json_encode($building);
         <a href="<?php echo navUrl('social'); ?>"<?php echo isDropdownActive('social'); ?>>Social</a>
       </div>
     </div>
-    <a href="#" onclick="openAdmin(); return false;">Site Admin</a>
+    <div class="dropdown">
+      <a href="#">Admin &#9662;</a>
+      <div class="dropdown-menu">
+        <a href="#" onclick="openMyAccount(); return false;">My Account</a>
+        <a href="#" onclick="openAdmin(); return false;">Site Admin</a>
+      </div>
+    </div>
   </div>
 </nav>
 
@@ -695,6 +701,10 @@ function openPublicReport(reportPage) {
 }
 function openAdmin() {
   window.location.href = 'https://sheepsite.com/Scripts/admin.php'
+    + '?building=' + encodeURIComponent(BUILDING_NAME);
+}
+function openMyAccount() {
+  window.location.href = 'https://sheepsite.com/Scripts/my-account.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME);
 }
 function openSearch() {
