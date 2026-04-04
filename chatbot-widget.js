@@ -10,8 +10,9 @@
   const SCRIPTS_URL = 'https://sheepsite.com/Scripts';
   const WIDGET_ID   = 'ss-chatbot';
 
-  let chatHistory = [];
-  let widgetMode  = null; // 'public' | 'resident'
+  let chatHistory   = [];
+  let widgetMode    = null; // 'public' | 'resident' | 'login'
+  let pendingQuestion = null;
 
   // --- Cheeky deflections ---
   const DEFLECTIONS = [
@@ -366,7 +367,7 @@
 
     addMessage('bot',
       escapeHtml(deflection) +
-      `<br><button class="ss-login-btn" onclick="window._ssShowLogin()">Log in to chat →</button>`
+      `<br><button class="ss-login-btn" onclick="window._ssShowLogin(${JSON.stringify(question)})">Log in to chat →</button>`
     );
 
     button.disabled = false;
@@ -430,6 +431,12 @@
 
       if (data.ok) {
         showResidentMode(data.username, building);
+        if (pendingQuestion) {
+          const q = pendingQuestion;
+          pendingQuestion = null;
+          document.getElementById('ss-chat-input').value = q;
+          handleResidentSend(building);
+        }
       } else {
         errorEl.textContent = data.error || 'Login failed.';
         btn.disabled        = false;
@@ -601,8 +608,9 @@
   }
 
   window.openChatbot  = openChatbot;
-  window._ssShowLogin = function () {
-    const building = window.BUILDING_NAME || '';
+  window._ssShowLogin = function (question) {
+    const building  = window.BUILDING_NAME || '';
+    pendingQuestion = question || null;
     showLoginMode(building);
   };
 
