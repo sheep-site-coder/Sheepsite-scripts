@@ -293,7 +293,12 @@ if (!$mustChange) {
 
 <div class="top-bar">
   <h1><?= htmlspecialchars($buildLabel) ?> – Admin</h1>
-  <a href="admin.php?building=<?= urlencode($building) ?>&logout=1" class="logout">Log out</a>
+  <div style="display:flex;align-items:center;gap:1.5rem;">
+    <?php if (!empty($bldCfg['siteURL'])): ?>
+      <a href="<?= htmlspecialchars($bldCfg['siteURL']) ?>" style="font-size:0.9rem;color:#555;text-decoration:none;">← Back to site</a>
+    <?php endif; ?>
+    <a href="admin.php?building=<?= urlencode($building) ?>&logout=1" class="logout">Log out</a>
+  </div>
 </div>
 
 <?php if ($mustChange): ?>
@@ -482,9 +487,8 @@ if (!$mustChange) {
   <?php endif; ?>
 
   <?php
-    $bldConfig    = loadBuildingConfig($building);
-    $contactEmail = htmlspecialchars($bldConfig['contactEmail'] ?? '');
-    $siteURL      = htmlspecialchars($bldConfig['siteURL']      ?? '');
+    $contactEmail = htmlspecialchars($bldCfg['contactEmail'] ?? '');
+    $siteURL      = htmlspecialchars($bldCfg['siteURL']      ?? '');
   ?>
   <div class="card" style="flex-direction:column;gap:0.5rem;cursor:default;">
     <div style="display:flex;gap:1.25rem;align-items:flex-start;">
