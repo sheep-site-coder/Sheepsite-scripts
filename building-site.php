@@ -529,15 +529,15 @@ $bldJs = json_encode($building);
     </div>
     <div class="resource-row">
       <span class="label">Financial Statements</span>
-      <button class="btn btn-primary" onclick="openPrivateFolder('FinancialStatements')">&#128196; Click to open</button>
+      <button class="btn btn-primary" onclick="openPrivateFolder('FinancialDocs/FinancialStatements')">&#128196; Click to open</button>
     </div>
     <div class="resource-row">
       <span class="label">Budgets</span>
-      <button class="btn btn-primary" onclick="openPrivateFolder('Budgets')">&#128196; Click to open</button>
+      <button class="btn btn-primary" onclick="openPrivateFolder('FinancialDocs/BudgetDocs')">&#128196; Click to open</button>
     </div>
     <div class="resource-row">
       <span class="label">SIRs Documents</span>
-      <button class="btn btn-primary" onclick="openPrivateFolder('SIRsDocs')">&#128196; Click to open</button>
+      <button class="btn btn-primary" onclick="openPrivateFolder('FinancialDocs/SIRSDocs')">&#128196; Click to open</button>
     </div>
     <div class="resource-row">
       <span class="label">Contracts</span>

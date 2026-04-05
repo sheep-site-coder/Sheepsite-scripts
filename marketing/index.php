@@ -372,7 +372,7 @@
 <!-- ── HERO ── -->
 <div class="hero">
   <div class="hero-inner">
-    <div class="hero-badge">Florida Section 718 Compliant</div>
+    <div class="hero-badge">Florida Statutes Chapter 718 Compliant</div>
     <h1>Your Association Website,<br><span>Built and Ready to Go</span></h1>
     <p>A complete, fully hosted condo association website — documents, owner accounts, AI assistant, and more — delivered ready to use. No technical skills required.</p>
     <div class="hero-actions">
@@ -388,7 +388,7 @@
 
 <!-- ── COMPLIANCE BANNER ── -->
 <div class="compliance-bar">
-  <strong>Florida Law Reminder:</strong> As of January 1, 2026, per Section 718 of the Florida Statutes, all condo associations with 25 or more units are required to maintain a website and publish governing documents online.
+  <strong>Florida Law Reminder:</strong> As of January 1, 2026, per Chapter 718 of the Florida Statutes, all condo associations with 25 or more units are required to maintain a website and publish governing documents online.
 </div>
 
 <!-- ── FEATURES ── -->
@@ -409,7 +409,7 @@
       <div class="feature-card">
         <div class="feature-icon">📋</div>
         <h3>Florida 718 Compliance Built In</h3>
-        <p>Your site is structured to meet all current Florida Statutes Section 718 requirements for condo association websites. Stay compliant without lifting a finger.</p>
+        <p>Your site is structured to meet all current Florida Statutes Chapter 718 requirements for condo association websites. Stay compliant without lifting a finger.</p>
       </div>
 
       <div class="feature-card">
@@ -466,7 +466,7 @@
       <h2 class="section-title">Your Building's AI Assistant</h2>
       <p class="section-intro">Woolsy is the AI chat assistant built into every SheepSite building website. Residents ask questions in plain language — Woolsy answers instantly, 24/7.</p>
       <ul class="woolsy-features">
-        <li>Fully trained on Florida Statutes Section 718 — Woolsy knows condo law</li>
+        <li>Fully trained on Florida Statutes Chapter 718 — Woolsy knows condo law</li>
         <li>Trained on your community's own Declaration, Bylaws, and Rules &amp; Regulations</li>
         <li>Answers questions like: pet rules, renovation approvals, parking policy, guest rules, and more</li>
         <li>Residents log in directly inside the chat panel — no separate login page</li>

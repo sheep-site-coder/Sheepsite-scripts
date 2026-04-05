@@ -861,5 +861,26 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: April 4, 2026 (session 27 — marketing site, manual redesigns, demo site restrictions)*
+## Session 28 — Bug fixes, cron diagnosis, marketing copy
+
+- **building-site.php** — Fixed private folder button paths:
+  - `FinancialStatements` → `FinancialDocs/FinancialStatements`
+  - `Budgets` → `FinancialDocs/BudgetDocs`
+  - `SIRsDocs` → `FinancialDocs/SIRSDocs`
+  - Board Minutes and Contracts were already correct
+
+- **marketing/index.php** — Corrected "Section 718" → "Chapter 718" in all 3 occurrences:
+  - Hero badge
+  - Florida Law Reminder banner
+  - Feature card description
+  - Woolsy bullet point
+
+- **storage-cron.php diagnosis** — Cron was not running because cPanel path was wrong:
+  - Was: `/home/sheepsite/sheepsite.com/Scripts/storage-cron.php`
+  - Correct: `/home/qgscrmoq/sheepsite/Scripts/storage-cron.php`
+  - Invoice generation confirmed working via manual HTTP trigger — SampleSite-0009 generated for $476.29
+
+---
+
+*Snapshot updated: April 5, 2026 (session 28 — private folder paths, marketing copy, cron path fix)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
