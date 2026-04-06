@@ -29,13 +29,26 @@ if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 
   $page = 'home';
 }
 
+// Compute the base URL for the Scripts directory.
+// In test mode (direct URL access) this auto-derives from the request host.
+// In production (via index.php on a standalone domain), index.php should
+// define SCRIPTS_BASE before requiring this file, e.g.:
+//   define('SCRIPTS_BASE', 'https://sheepsite.com/Scripts/');
+if (defined('SCRIPTS_BASE')) {
+  $scriptsBase = SCRIPTS_BASE;
+} else {
+  $scheme      = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+  $host        = $_SERVER['HTTP_HOST'] ?? 'sheepsite.com';
+  $scriptsBase = $scheme . '://' . $host . '/Scripts/';
+}
+
 // Site config comes from config/{building}.json (managed via building-detail.php)
 $cfgFile = __DIR__ . '/config/' . $building . '.json';
 $cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
 
 $displayName    = $cfg['displayName']                  ?? $building;
 $headerImageFile = $cfg['headerImageUrl'] ?? '';
-$headerImageUrl  = $headerImageFile ? 'https://sheepsite.com/Scripts/assets/' . $headerImageFile : '';
+$headerImageUrl  = $headerImageFile ? $scriptsBase . 'assets/' . $headerImageFile : '';
 $calendarUrl    = $cfg['calendarUrl']                  ?? '';
 $facebookUrl    = $cfg['facebookUrl']                  ?? '';
 $pmName         = $cfg['propertyMgmt']['name']         ?? 'Property Management';
@@ -626,7 +639,7 @@ $bldJs = json_encode($building);
 <!-- ===== FOOTER ===== -->
 <footer>
   <div style="display:flex;align-items:center;gap:1.2rem;">
-    <img src="https://sheepsite.com/Scripts/assets/Woolsy-original-transparent.png" alt="SheepSite">
+    <img src="<?php echo htmlspecialchars($scriptsBase); ?>assets/Woolsy-original-transparent.png" alt="SheepSite">
     <div class="footer-left">
       <div class="copy">&copy; 2025 <a href="https://sheepsite.com">SheepSite.com</a></div>
       <div class="powered">Powered by Sheep</div>
@@ -637,10 +650,11 @@ $bldJs = json_encode($building);
 <!-- ===== SCRIPTS ===== -->
 <script>
 const BUILDING_NAME = <?php echo $bldJs; ?>;
+const SCRIPTS_BASE  = <?php echo json_encode($scriptsBase); ?>;
 window.BUILDING_NAME = BUILDING_NAME;
 
 document.addEventListener('DOMContentLoaded', function () {
-  var SCRIPTS = 'https://sheepsite.com/Scripts/';
+  var SCRIPTS = SCRIPTS_BASE;
 
   // Admin links
   document.querySelectorAll('a[href*="admin.php"]').forEach(function (link) {
@@ -677,46 +691,46 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function openFolder(subdir) {
-  var url = 'https://sheepsite.com/Scripts/display-public-dir.php'
+  var url = SCRIPTS_BASE + 'display-public-dir.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&return='   + encodeURIComponent(window.location.href);
   if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
   window.location.href = url;
 }
 function openPrivateFolder(subdir) {
-  var url = 'https://sheepsite.com/Scripts/display-private-dir.php'
+  var url = SCRIPTS_BASE + 'display-private-dir.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&return='   + encodeURIComponent(window.location.href);
   if (subdir) url += '&path=' + encodeURIComponent(subdir);
   window.location.href = url;
 }
 function openReport(reportPage) {
-  window.location.href = 'https://sheepsite.com/Scripts/protected-report.php'
+  window.location.href = SCRIPTS_BASE + 'protected-report.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&page='     + encodeURIComponent(reportPage)
     + '&return='   + encodeURIComponent(window.location.href);
 }
 function openPublicReport(reportPage) {
-  window.location.href = 'https://sheepsite.com/Scripts/public-report.php'
+  window.location.href = SCRIPTS_BASE + 'public-report.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&page='     + encodeURIComponent(reportPage)
     + '&return='   + encodeURIComponent(window.location.href);
 }
 function openAdmin() {
-  window.location.href = 'https://sheepsite.com/Scripts/admin.php'
+  window.location.href = SCRIPTS_BASE + 'admin.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME);
 }
 function openMyAccount() {
-  window.location.href = 'https://sheepsite.com/Scripts/my-account.php'
+  window.location.href = SCRIPTS_BASE + 'my-account.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME);
 }
 function openSearch() {
-  window.location.href = 'https://sheepsite.com/Scripts/search.php'
+  window.location.href = SCRIPTS_BASE + 'search.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&return='   + encodeURIComponent(window.location.href);
 }
 function openDoc(subdir, filename) {
-  var url = 'https://sheepsite.com/Scripts/get-doc-byname.php'
+  var url = SCRIPTS_BASE + 'get-doc-byname.php'
     + '?building=' + encodeURIComponent(BUILDING_NAME)
     + '&filename=' + encodeURIComponent(filename);
   if (subdir) url += '&subdir=' + encodeURIComponent(subdir);
@@ -744,7 +758,7 @@ document.querySelectorAll('.dropdown > a').forEach(function (toggle) {
 </script>
 
 <!-- Woolsy floating chatbot -->
-<script src="https://sheepsite.com/Scripts/chatbot-widget.js"></script>
+<script src="<?php echo htmlspecialchars($scriptsBase); ?>chatbot-widget.js"></script>
 
 </body>
 </html>
