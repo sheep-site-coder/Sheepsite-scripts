@@ -555,7 +555,7 @@ $users = loadUsers($building);
     </ul>
     <p>You will review and confirm all changes before anything is modified.</p>
     <div class="modal-actions">
-      <form method="post">
+      <form method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
         <button type="submit" name="sync_only" class="btn-proceed"
                 onclick="this.disabled=true;this.textContent='Checking\u2026'">Proceed</button>
       </form>
