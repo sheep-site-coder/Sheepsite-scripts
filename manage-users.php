@@ -9,9 +9,7 @@
 // The master credentials can access any building.
 // Change all passwords before deploying.
 // -------------------------------------------------------
-file_put_contents(__DIR__ . '/mu-debug.log', date('H:i:s') . " method=" . $_SERVER['REQUEST_METHOD'] . " post_keys=" . implode(',', array_keys($_POST)) . "\n", FILE_APPEND);
 session_start();
-file_put_contents(__DIR__ . '/mu-debug.log', date('H:i:s') . " after session_start\n", FILE_APPEND);
 
 define('CREDENTIALS_DIR',    __DIR__ . '/credentials/');
 define('OWNER_IMPORT_TOKEN', 'QRF*!v2r2KgJEesq&P');  // must match building-script.gs
@@ -56,29 +54,6 @@ if (isset($_GET['dismiss_orphans'])) {
 if (isset($_GET['dismiss_missing'])) {
   unset($_SESSION['sync_missing_' . $building]);
   header('Location: manage-users.php?building=' . urlencode($building));
-  exit;
-}
-
-// -------------------------------------------------------
-// Temporary debug endpoint — remove after testing
-// ?building=QGscratch&debug=1
-// -------------------------------------------------------
-if (isset($_GET['debug'])) {
-  header('Content-Type: text/plain');
-  echo "useLocalDB: " . ($useLocalDB ? 'YES' : 'NO') . "\n";
-  echo "db.php exists: " . (file_exists(CREDENTIALS_DIR . '../db/db.php') ? 'YES' : 'NO') . "\n";
-  echo "db.json exists: " . (file_exists(CREDENTIALS_DIR . 'db.json') ? 'YES' : 'NO') . "\n";
-  if ($useLocalDB) {
-    try {
-      $pdo = getDB();
-      echo "DB connection: OK\n";
-      $stmt = $pdo->prepare('SELECT COUNT(*) as n FROM residents WHERE building=?');
-      $stmt->execute([$building]);
-      echo "Residents in DB: " . $stmt->fetch()['n'] . "\n";
-    } catch (Exception $e) {
-      echo "DB error: " . $e->getMessage() . "\n";
-    }
-  }
   exit;
 }
 
@@ -309,18 +284,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   elseif (isset($_POST['sync_only'])) {
-    file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " start useLocalDB=" . ($useLocalDB ? '1' : '0') . "\n", FILE_APPEND);
     if ($useLocalDB) {
-      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " calling dbListDatabase\n", FILE_APPEND);
       $dbResult = dbListDatabase($building);
-      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " dbListDatabase returned " . count($dbResult['rows'] ?? []) . " rows\n", FILE_APPEND);
       $owners = array_map(fn($r) => [
         'firstName' => $r['First Name'],
         'lastName'  => $r['Last Name'],
       ], $dbResult['rows'] ?? []);
       $data = ['owners' => $owners];
       $syncError = false;
-      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " DB path complete owners=" . count($owners) . "\n", FILE_APPEND);
     } else {
       $webAppURL = $buildings[$building]['webAppURL'] ?? '';
       if (!$webAppURL) {
@@ -346,12 +317,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     }
-    file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " syncError=" . var_export($syncError ?? null, true) . "\n", FILE_APPEND);
     if (!($syncError ?? false)) {
-      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " loading users\n", FILE_APPEND);
       $users    = loadUsers($building);
       $existing = array_column($users, 'user');
-      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " loaded " . count($users) . " users\n", FILE_APPEND);
 
       // Orphans: web accounts with no matching database record
       $orphans = [];
@@ -382,7 +350,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
       if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
       $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
-      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " done message=" . $message . "\n", FILE_APPEND);
     }
   }
 
