@@ -251,7 +251,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    . '&building=' . urlencode($building)
                    . '&tmppw='    . urlencode($pass)
                    . '&loginurl=' . urlencode($loginURL);
-        $response  = @file_get_contents($resetURL);
+        $ctx       = stream_context_create(['http' => ['timeout' => 10]]);
+        $response  = @file_get_contents($resetURL, false, $ctx);
         if ($response !== false) {
           $data      = json_decode($response, true);
           $emailSent = ($data['status'] ?? '') === 'ok';
@@ -287,7 +288,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $messageType = 'error';
     } else {
       $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
-      $response = @file_get_contents($url);
+      $ctx      = stream_context_create(['http' => ['timeout' => 30]]);
+      $response = @file_get_contents($url, false, $ctx);
       if ($response === false) {
         $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
         $messageType = 'error';
@@ -361,7 +363,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     . '&building=' . urlencode($building)
                     . '&tmppw='    . urlencode($tmpPw)
                     . '&loginurl=' . urlencode($loginURL);
-          $resp = @file_get_contents($resetURL);
+          $ctx  = stream_context_create(['http' => ['timeout' => 10]]);
+          $resp = @file_get_contents($resetURL, false, $ctx);
           if ($resp !== false && (json_decode($resp, true)['status'] ?? '') === 'ok') {
             $emailed++;
           }
@@ -545,6 +548,9 @@ $users = loadUsers($building);
 </p>
 <button type="button" class="add-btn" onclick="document.getElementById('sync-modal').style.display='flex'">Sync Now</button>
 
+<form id="sync-form" method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
+  <input type="hidden" name="sync_only" value="1">
+</form>
 <div id="sync-modal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <h3>Sync Web Accounts with Database</h3>
@@ -555,10 +561,7 @@ $users = loadUsers($building);
     </ul>
     <p>You will review and confirm all changes before anything is modified.</p>
     <div class="modal-actions">
-      <form method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
-        <button type="submit" name="sync_only" class="btn-proceed"
-                onclick="this.disabled=true;this.textContent='Checking\u2026'">Proceed</button>
-      </form>
+      <button type="button" class="btn-proceed" onclick="document.getElementById('sync-modal').style.display='none';document.getElementById('sync-form').submit()">Proceed</button>
       <button type="button" class="btn-cancel" onclick="document.getElementById('sync-modal').style.display='none'">Cancel</button>
     </div>
   </div>
@@ -587,7 +590,8 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
   <h2>Sync Check — <?= count($syncOrphans) ?> account(s) not in database</h2>
   <p>The following web accounts have no matching resident in the association database.
      Check the ones you want to remove, then click Remove. Uncheck anyone you want to keep.</p>
-  <form method="post">
+  <form method="post" onsubmit="this.querySelector('.remove-checked-btn').disabled=true;this.querySelector('.remove-checked-btn').textContent='Removing\u2026'">
+    <input type="hidden" name="remove_orphans" value="1">
     <ul class="sync-list">
       <?php foreach ($syncOrphans as $orphan): ?>
       <li>
@@ -597,8 +601,7 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
-      <button type="submit" name="remove_orphans" class="remove-checked-btn"
-              onclick="this.disabled=true;this.textContent='Removing\u2026'">Remove checked</button>
+      <button type="submit" class="remove-checked-btn">Remove checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_orphans=1" class="keep-all-link">Keep all / dismiss</a>
     </div>
   </form>
@@ -614,7 +617,8 @@ if ($syncMissing !== null && count($syncMissing) > 0):
 <div class="sync-panel" style="border-color:#93c5fd;background:#eff6ff;">
   <h2 style="color:#1e40af;">Missing Accounts — <?= count($syncMissing) ?> resident(s) in database with no web account</h2>
   <p style="color:#1e40af;">These residents exist in the association database but have no web login. This may be due to an accidental deletion or a resident added without an email address. Check the ones you want to recreate — a temporary password will be generated automatically and a welcome email sent to each resident.</p>
-  <form method="post">
+  <form method="post" onsubmit="this.querySelector('.recreate-btn').disabled=true;this.querySelector('.recreate-btn').textContent='Creating accounts\u2026'">
+    <input type="hidden" name="recreate_missing" value="1">
     <ul class="sync-list" style="border-color:#bfdbfe;">
       <?php foreach ($syncMissing as $m): ?>
       <li style="border-color:#bfdbfe;">
@@ -628,8 +632,7 @@ if ($syncMissing !== null && count($syncMissing) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
-      <button type="submit" name="recreate_missing" class="add-btn" style="background:#1d4ed8;"
-              onclick="this.disabled=true;this.textContent='Creating accounts\u2026'">Recreate checked</button>
+      <button type="submit" class="add-btn recreate-btn" style="background:#1d4ed8;">Recreate checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_missing=1" class="keep-all-link">Dismiss</a>
     </div>
   </form>
