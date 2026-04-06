@@ -341,6 +341,16 @@ if ($action) {
       exit;
     }
 
+    // --- Write: unit info row ---
+    case 'editUnitRow': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode(gasPost($webAppURL, array_merge($body, [
+        'action' => 'editUnitRow',
+        'token'  => OWNER_IMPORT_TOKEN,
+      ])));
+      exit;
+    }
+
     // --- Write: emergency rows ---
     case 'addEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -772,12 +782,13 @@ async function toggleUnit(row, unit) {
 // Unit detail rendering
 // -------------------------------------------------------
 function renderUnitDetail(container, data) {
-  const { unit, residents, car, emergency } = data;
+  const { unit, residents, car, unitInfo, emergency } = data;
   container.innerHTML = `
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab(this, 'tab-residents-${esc(unit)}')">
         Residents (${residents.length})
       </button>
+      <button class="tab-btn" onclick="switchTab(this, 'tab-unitinfo-${esc(unit)}')">Unit Info</button>
       <button class="tab-btn" onclick="switchTab(this, 'tab-car-${esc(unit)}')">Vehicle &amp; Parking</button>
       <button class="tab-btn" onclick="switchTab(this, 'tab-emergency-${esc(unit)}')">
         Emergency (${emergency.length})
@@ -786,6 +797,9 @@ function renderUnitDetail(container, data) {
 
     <div class="tab-panel active" id="tab-residents-${esc(unit)}">
       ${renderResidentTab(unit, residents)}
+    </div>
+    <div class="tab-panel" id="tab-unitinfo-${esc(unit)}">
+      ${renderUnitInfoTab(unit, unitInfo)}
     </div>
     <div class="tab-panel" id="tab-car-${esc(unit)}">
       ${renderCarTab(unit, car)}
@@ -829,10 +843,6 @@ function residentCardHtml(unit, r) {
       ${fieldPair('Email',  r['eMail'])}
       ${fieldPair('Phone 1', r['Phone #1'])}
       ${fieldPair('Phone 2', r['Phone #2'])}
-      ${fieldPair('Insurance', r['Insurance'])}
-      ${fieldPair('Policy #', r['Policy #'])}
-      ${fieldPair('A/C Replaced', r['AC Replaced'])}
-      ${fieldPair('Water Heater', r['Water Tank'])}
     </div>
     <div class="person-actions">
       <button class="btn btn-secondary btn-sm"
@@ -864,10 +874,6 @@ function editResidentFormHtml(unit, r) {
       <div><label>Email</label><input type="text" id="ef-email-${id}" value="${esc(r['eMail'])}"></div>
       <div><label>Phone #1</label><input type="text" id="ef-ph1-${id}" value="${esc(r['Phone #1'])}"></div>
       <div><label>Phone #2</label><input type="text" id="ef-ph2-${id}" value="${esc(r['Phone #2'])}"></div>
-      <div><label>Insurance</label><input type="text" id="ef-ins-${id}" value="${esc(r['Insurance'])}"></div>
-      <div><label>Policy #</label><input type="text" id="ef-pol-${id}" value="${esc(r['Policy #'])}"></div>
-      <div><label>A/C Replaced</label><input type="date" id="ef-ac-${id}" value="${esc(r['AC Replaced'])}"></div>
-      <div><label>Water Heater</label><input type="date" id="ef-wt-${id}" value="${esc(r['Water Tank'])}"></div>
       <div><label>Board Role</label>
         <select id="ef-board-${id}">
           ${BOARD_ROLES.map(role => `<option value="${esc(role)}"${r['Board'] === role ? ' selected' : ''}>${esc(role) || '—'}</option>`).join('')}
@@ -901,10 +907,6 @@ function addPersonFormHtml(unit) {
       <div><label>Email <span style="color:#888;font-weight:400;font-size:0.75rem;">(required for web access)</span></label><input type="text" id="ap-email-${esc(unit)}"></div>
       <div><label>Phone #1</label><input type="text" id="ap-ph1-${esc(unit)}"></div>
       <div><label>Phone #2</label><input type="text" id="ap-ph2-${esc(unit)}"></div>
-      <div><label>Insurance</label><input type="text" id="ap-ins-${esc(unit)}"></div>
-      <div><label>Policy #</label><input type="text" id="ap-pol-${esc(unit)}"></div>
-      <div><label>A/C Replaced</label><input type="date" id="ap-ac-${esc(unit)}"></div>
-      <div><label>Water Heater</label><input type="date" id="ap-wt-${esc(unit)}"></div>
       <div><label>Board Role</label>
         <select id="ap-board-${esc(unit)}">
           ${BOARD_ROLES.map(role => `<option value="${esc(role)}">${esc(role) || '—'}</option>`).join('')}
@@ -964,6 +966,61 @@ function renderCarTab(unit, car) {
       </div>
     </div>
   </div>`;
+}
+
+// -------------------------------------------------------
+// Unit Info tab
+// -------------------------------------------------------
+function renderUnitInfoTab(unit, u) {
+  u = u || {};
+  return `<div class="person-card">
+    <div class="field-grid">
+      ${fieldPair('Insurance',    u['Insurance'])}
+      ${fieldPair('Policy #',     u['Policy #'])}
+      ${fieldPair('A/C Replaced', u['AC Replaced'])}
+      ${fieldPair('Water Heater', u['Water Tank'])}
+    </div>
+    <div class="person-actions">
+      <button class="btn btn-secondary btn-sm" onclick="showEditUnitInfo('${esc(unit)}')">Edit</button>
+    </div>
+    <div id="unitinfo-edit-${esc(unit)}" style="display:none;">
+      <div class="edit-form" style="margin-top:0.75rem;">
+        <div class="field-grid">
+          <div><label>Insurance</label><input type="text" id="ui-ins-${esc(unit)}" value="${esc(u['Insurance'])}"></div>
+          <div><label>Policy #</label><input type="text" id="ui-pol-${esc(unit)}" value="${esc(u['Policy #'])}"></div>
+          <div><label>A/C Replaced</label><input type="date" id="ui-ac-${esc(unit)}" value="${esc(u['AC Replaced'])}"></div>
+          <div><label>Water Heater</label><input type="date" id="ui-wt-${esc(unit)}" value="${esc(u['Water Tank'])}"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveUnitInfoRow('${esc(unit)}')">Save</button>
+          <button class="btn btn-secondary btn-sm"
+            onclick="document.getElementById('unitinfo-edit-${esc(unit)}').style.display='none'">Cancel</button>
+        </div>
+        <div id="ui-msg-${esc(unit)}" style="margin-top:0.5rem;"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function showEditUnitInfo(unit) {
+  document.getElementById('unitinfo-edit-' + unit).style.display = 'block';
+}
+
+async function saveUnitInfoRow(unit) {
+  const msgEl   = document.getElementById('ui-msg-' + unit);
+  showMsg(msgEl, 'Saving…', 'info');
+  const unitData = {
+    'Unit #':      unit,
+    'Insurance':   document.getElementById('ui-ins-' + unit).value.trim(),
+    'Policy #':    document.getElementById('ui-pol-' + unit).value.trim(),
+    'AC Replaced': document.getElementById('ui-ac-'  + unit).value,
+    'Water Tank':  document.getElementById('ui-wt-'  + unit).value,
+  };
+  const res = await apiPost('editUnitRow', unitData);
+  if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
+  if (unitCache[unit]) unitCache[unit].unitInfo = unitData;
+  refreshUnitDetail(unit);
+  toast('✓ Unit info saved.');
 }
 
 // -------------------------------------------------------
@@ -1127,10 +1184,6 @@ async function saveAddPerson(unit) {
     'eMail':       document.getElementById('ap-email-' + unit).value.trim(),
     'Phone #1':    document.getElementById('ap-ph1-'   + unit).value.trim(),
     'Phone #2':    document.getElementById('ap-ph2-'   + unit).value.trim(),
-    'Insurance':   document.getElementById('ap-ins-'   + unit).value.trim(),
-    'Policy #':    document.getElementById('ap-pol-'   + unit).value.trim(),
-    'AC Replaced': document.getElementById('ap-ac-'    + unit).value,
-    'Water Tank':  document.getElementById('ap-wt-'    + unit).value,
     'Board':       document.getElementById('ap-board-' + unit).value,
     'Full Time':   document.getElementById('ap-ft-'    + unit).checked,
     'Resident':    document.getElementById('ap-res-'   + unit).checked,
@@ -1171,10 +1224,6 @@ async function saveEditResident(unit, origFirst, origLast, id) {
     'eMail':       document.getElementById('ef-email-' + id).value.trim(),
     'Phone #1':    document.getElementById('ef-ph1-'   + id).value.trim(),
     'Phone #2':    document.getElementById('ef-ph2-'   + id).value.trim(),
-    'Insurance':   document.getElementById('ef-ins-'   + id).value.trim(),
-    'Policy #':    document.getElementById('ef-pol-'   + id).value.trim(),
-    'AC Replaced': document.getElementById('ef-ac-'    + id).value,
-    'Water Tank':  document.getElementById('ef-wt-'    + id).value,
     'Board':       document.getElementById('ef-board-' + id).value,
     'Full Time':   document.getElementById('ef-ft-'    + id).checked,
     'Resident':    document.getElementById('ef-res-'   + id).checked,

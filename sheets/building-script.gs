@@ -104,6 +104,7 @@ function doPost(e) {
     case 'editDatabaseRow':   return DatabaseSheetMaster.doEditDatabaseRow(data,   OWNER_IMPORT_TOKEN);
     case 'deleteDatabaseRow': return DatabaseSheetMaster.doDeleteDatabaseRow(data, OWNER_IMPORT_TOKEN);
     case 'editCarRow':        return DatabaseSheetMaster.doEditCarRow(data,        OWNER_IMPORT_TOKEN);
+    case 'editUnitRow':       return DatabaseSheetMaster.doEditUnitRow(data,       OWNER_IMPORT_TOKEN);
     case 'addEmergencyRow':   return DatabaseSheetMaster.doAddEmergencyRow(data,   OWNER_IMPORT_TOKEN);
     case 'editEmergencyRow':  return DatabaseSheetMaster.doEditEmergencyRow(data,  OWNER_IMPORT_TOKEN);
     case 'deleteEmergencyRow':return DatabaseSheetMaster.doDeleteEmergencyRow(data,OWNER_IMPORT_TOKEN);

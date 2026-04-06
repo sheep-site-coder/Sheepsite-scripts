@@ -18,11 +18,15 @@
 //   POST { action: 'sendChangeRequest', token, unit, residentName, reqType, firstName, lastName, notes, buildingName, contactEmail }
 // ---------------------------------------------------------------------------
 
-// Database tab columns exposed via the API (deprecated car columns excluded)
+// Database tab columns exposed via the API
 const DB_COLS_ = [
   'Unit #', 'Full Time', 'Resident', 'Owner',
-  'First Name', 'Last Name', 'eMail', 'Phone #1', 'Phone #2',
-  'Insurance', 'Policy #', 'Board', 'AC Replaced', 'Water Tank'
+  'First Name', 'Last Name', 'eMail', 'Phone #1', 'Phone #2', 'Board'
+];
+
+// UnitDB tab columns — unit-level data (one row per unit)
+const UNITDB_COLS_ = [
+  'Unit #', 'Insurance', 'Policy #', 'AC Replaced', 'Water Tank'
 ];
 
 const CAR_COLS_ = [
@@ -123,6 +127,14 @@ function doGetUnit(params, expectedToken) {
     car = rows.find(r => String(r['Unit #']).trim() === unit) || null;
   }
 
+  // UnitDB row for this unit
+  const unitDbSheet = ss.getSheetByName('UnitDB');
+  let unitInfo = null;
+  if (unitDbSheet && unitDbSheet.getLastRow() >= 2) {
+    const { rows } = readSheet_(unitDbSheet, UNITDB_COLS_);
+    unitInfo = rows.find(r => String(r['Unit #']).trim() === unit) || null;
+  }
+
   // Emergency rows for this unit
   const emSheet = ss.getSheetByName(EMERGENCY_TAB_);
   let emergency = [];
@@ -131,7 +143,7 @@ function doGetUnit(params, expectedToken) {
     emergency = rows.filter(r => String(r['Unit #']).trim() === unit);
   }
 
-  return jsonOut_({ unit, residents, car, emergency });
+  return jsonOut_({ unit, residents, car, unitInfo, emergency });
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +463,49 @@ function doDeleteEmergencyRow(data, expectedToken) {
   if (rowIdx < 0) return jsonError_('Row not found');
 
   sheet.deleteRow(rowIdx + 2);
+  return jsonOut_({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// editUnitRow — upsert a row in the UnitDB tab for a given unit
+// ---------------------------------------------------------------------------
+function doEditUnitRow(data, expectedToken) {
+  if (data.token !== expectedToken) return jsonError_('Unauthorized');
+
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('UnitDB');
+  if (!sheet) return jsonError_('No "UnitDB" tab found');
+
+  const headers = dbHeaders_(sheet);
+  const iUnit   = col_(headers, 'Unit #');
+  if (iUnit < 0) return jsonError_('No "Unit #" column in UnitDB');
+
+  const unit = String(data['Unit #'] || '').trim();
+  if (!unit) return jsonError_('Missing Unit #');
+
+  const lastRow = sheet.getLastRow();
+  let rowIdx = -1;
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    rowIdx = values.findIndex(r => String(r[iUnit]).trim() === unit);
+  }
+
+  if (rowIdx < 0) {
+    const newRow = new Array(sheet.getLastColumn()).fill('');
+    UNITDB_COLS_.forEach(col => {
+      const idx = col_(headers, col);
+      if (idx >= 0 && data[col] !== undefined) newRow[idx] = data[col];
+    });
+    sheet.appendRow(newRow);
+  } else {
+    const sheetRow = rowIdx + 2;
+    UNITDB_COLS_.forEach(col => {
+      const idx = col_(headers, col);
+      if (idx >= 0 && data[col] !== undefined) {
+        sheet.getRange(sheetRow, idx + 1).setValue(data[col]);
+      }
+    });
+  }
   return jsonOut_({ ok: true });
 }
 
