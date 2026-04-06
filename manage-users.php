@@ -568,12 +568,7 @@ $users = loadUsers($building);
 <form id="sync-form" method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
   <input type="hidden" name="sync_only" value="1">
 </form>
-<button type="button" class="add-btn" onclick="showConfirm(
-  'Sync accounts?',
-  'Compares web accounts against the database in both directions.<br><br>Orphaned accounts and missing accounts will be listed for your review. <strong>Nothing is changed until you confirm.</strong>',
-  'Proceed',
-  function() { document.getElementById(\'sync-form\').submit(); }
-)">Sync Now</button>
+<button type="button" class="add-btn" onclick="openSyncConfirm()">Sync Now</button>
 
 <div id="mu-confirm-overlay" class="modal-overlay" style="display:none;">
   <div class="modal-box">
@@ -703,6 +698,18 @@ if ($syncMissing !== null && count($syncMissing) > 0):
 <?php endif; ?>
 
 <script>
+// ---- Sync ----
+function openSyncConfirm() {
+  showConfirm(
+    'Sync accounts?',
+    'Compares web accounts against the database in both directions.<br><br>' +
+    'Orphaned and missing accounts will be listed for review. ' +
+    '<strong>Nothing is changed until you confirm.</strong>',
+    'Proceed',
+    function() { document.getElementById('sync-form').submit(); }
+  );
+}
+
 // ---- Confirm modal ----
 var confirmCb = null;
 function showConfirm(title, bodyHtml, proceedLabel, onProceed, proceedColor) {
