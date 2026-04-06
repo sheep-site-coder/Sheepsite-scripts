@@ -28,6 +28,9 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 $sessionKey = 'manage_auth_' . $building;
 
+$useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
+
 // Load per-building admin credentials
 $adminCredFile = CREDENTIALS_DIR . $building . '_admin.json';
 if (!file_exists($adminCredFile)) {
@@ -281,56 +284,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   elseif (isset($_POST['sync_only'])) {
-    $webAppURL = $buildings[$building]['webAppURL'] ?? '';
-    if (!$webAppURL) {
-      $message = 'No webAppURL configured for this building.';
-      $messageType = 'error';
+    if ($useLocalDB) {
+      $dbResult = dbListDatabase($building);
+      $owners = array_map(fn($r) => [
+        'firstName' => $r['First Name'],
+        'lastName'  => $r['Last Name'],
+      ], $dbResult['rows'] ?? []);
+      $data = ['owners' => $owners];
+      $syncError = false;
     } else {
-      $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
-      $response = @file_get_contents($url);
-      if ($response === false) {
-        $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
+      $webAppURL = $buildings[$building]['webAppURL'] ?? '';
+      if (!$webAppURL) {
+        $message = 'No webAppURL configured for this building.';
         $messageType = 'error';
+        $syncError = true;
       } else {
-        $data = json_decode($response, true);
-        if (!empty($data['error'])) {
-          $message = 'Sheet error: ' . $data['error'];
+        $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
+        $response = @file_get_contents($url);
+        if ($response === false) {
+          $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
           $messageType = 'error';
+          $syncError = true;
         } else {
-          $users   = loadUsers($building);
-          $existing = array_column($users, 'user');
-
-          // Orphans: web accounts with no matching database record
-          $orphans = [];
-          foreach ($users as $u) {
-            if (!isLinkedToDatabase($u['user'], $data['owners'])) {
-              $orphans[] = $u['user'];
-            }
+          $data = json_decode($response, true);
+          if (!empty($data['error'])) {
+            $message = 'Sheet error: ' . $data['error'];
+            $messageType = 'error';
+            $syncError = true;
+          } else {
+            $syncError = false;
           }
-          $_SESSION['sync_orphans_' . $building] = $orphans;
-
-          // Missing: database residents with no web account
-          $missing = [];
-          $taken   = [];
-          foreach ($data['owners'] as $owner) {
-            $firstName = $owner['firstName'] ?? '';
-            $lastName  = $owner['lastName']  ?? '';
-            if (!$lastName) continue;
-            $base = makeUsername($firstName, $lastName);
-            $taken[$base] = ($taken[$base] ?? 0) + 1;
-            $uname = $taken[$base] === 1 ? $base : $base . $taken[$base];
-            if (!in_array($uname, $existing)) {
-              $missing[] = ['user' => $uname, 'firstName' => $firstName, 'lastName' => $lastName];
-            }
-          }
-          $_SESSION['sync_missing_' . $building] = $missing;
-
-          $parts = [];
-          if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
-          if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
-          $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
         }
       }
+    }
+    if (!($syncError ?? false)) {
+      $users    = loadUsers($building);
+      $existing = array_column($users, 'user');
+
+      // Orphans: web accounts with no matching database record
+      $orphans = [];
+      foreach ($users as $u) {
+        if (!isLinkedToDatabase($u['user'], $data['owners'])) {
+          $orphans[] = $u['user'];
+        }
+      }
+      $_SESSION['sync_orphans_' . $building] = $orphans;
+
+      // Missing: database residents with no web account
+      $missing = [];
+      $taken   = [];
+      foreach ($data['owners'] as $owner) {
+        $firstName = $owner['firstName'] ?? '';
+        $lastName  = $owner['lastName']  ?? '';
+        if (!$lastName) continue;
+        $base = makeUsername($firstName, $lastName);
+        $taken[$base] = ($taken[$base] ?? 0) + 1;
+        $uname = $taken[$base] === 1 ? $base : $base . $taken[$base];
+        if (!in_array($uname, $existing)) {
+          $missing[] = ['user' => $uname, 'firstName' => $firstName, 'lastName' => $lastName];
+        }
+      }
+      $_SESSION['sync_missing_' . $building] = $missing;
+
+      $parts = [];
+      if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
+      if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
+      $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
+    }
     }
   }
 
