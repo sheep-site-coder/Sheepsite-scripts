@@ -9,6 +9,8 @@
 //
 // DELETE THIS FILE after import is confirmed.
 // -------------------------------------------------------
+set_time_limit(0);
+ini_set('output_buffering', 'off');
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 define('OWNER_IMPORT_TOKEN', 'QRF*!v2r2KgJEesq&P');
@@ -37,13 +39,29 @@ function gasGet(string $url, array $params): array {
   return json_decode($body, true) ?? ['error' => 'Invalid response'];
 }
 
-$log   = [];
+function out(string $msg): void {
+  echo $msg . "<br>\n";
+  if (ob_get_level()) ob_flush();
+  flush();
+}
+
+?><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Import to DB</title>
+  <style>body { font-family: monospace; max-width: 700px; margin: 2rem auto; padding: 0 1rem; font-size: 0.95rem; }</style>
+</head>
+<body>
+<h2>Importing <?= htmlspecialchars($building) ?> → MySQL</h2>
+<?php
+
 $errors = [];
 
 // -------------------------------------------------------
 // Step 1: Import residents
 // -------------------------------------------------------
-$log[] = '<strong>Step 1: Residents</strong>';
+out('<strong>Step 1: Residents</strong>');
 $dbRes = gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN]);
 if (!empty($dbRes['error'])) {
   die('<p style="color:red;">Failed to fetch residents: ' . htmlspecialchars($dbRes['error']) . '</p>');
@@ -75,15 +93,16 @@ foreach ($rows as $r) {
     $errors[] = 'Resident ' . $first . ' ' . $last . ': ' . $e->getMessage();
   }
 }
-$log[] = "Added $resAdded residents, skipped $resSkipped duplicates.";
+out("Added $resAdded residents, skipped $resSkipped duplicates.");
 
 // -------------------------------------------------------
 // Step 2: Cars, Unit Info, Emergency — one getUnit per unit
 // -------------------------------------------------------
-$log[]     = '<strong>Step 2: Cars, Unit Info &amp; Emergency contacts</strong>';
+out('<strong>Step 2: Cars, Unit Info &amp; Emergency contacts</strong>');
 $carAdded  = 0; $unitAdded = 0; $emAdded = 0;
 
 foreach (array_keys($units) as $unit) {
+  out("  Unit $unit...");
   $res = gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $unit]);
   if (!empty($res['error'])) {
     $errors[] = "Unit $unit getUnit error: " . $res['error'];
@@ -127,46 +146,15 @@ foreach (array_keys($units) as $unit) {
   usleep(200000); // 0.2s pause between units to avoid Apps Script rate limits
 }
 
-$log[] = "Cars: $carAdded upserted. Unit info: $unitAdded upserted. Emergency contacts: $emAdded added.";
+out("Cars: $carAdded upserted. Unit info: $unitAdded upserted. Emergency contacts: $emAdded added.");
 
+if ($errors) {
+  out('<strong style="color:red">' . count($errors) . ' error(s):</strong>');
+  foreach ($errors as $e) out('&nbsp;&nbsp;⚠ ' . htmlspecialchars($e));
+}
+
+out('<br><strong style="color:green">✓ Import complete.</strong>');
+out('<br><span style="color:#92400e">Remember to delete <code>import-sheet-to-db.php</code> from the server.</span>');
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Import to DB — <?= htmlspecialchars($building) ?></title>
-  <style>
-    body { font-family: sans-serif; max-width: 700px; margin: 3rem auto; padding: 0 1rem; }
-    h1   { font-size: 1.4rem; }
-    .ok  { color: #166534; background: #dcfce7; border: 1px solid #bbf7d0; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
-    .err { color: #991b1b; background: #fee2e2; border: 1px solid #fecaca; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
-    ul   { margin: 0.5rem 0 0; padding-left: 1.5rem; }
-    p    { margin: 0.4rem 0; }
-    .warn { color: #92400e; background: #fef3c7; border: 1px solid #fde68a; padding: 1rem; border-radius: 6px; margin-top: 1.5rem; }
-  </style>
-</head>
-<body>
-<h1>Import: <?= htmlspecialchars($building) ?> → MySQL</h1>
-
-<div class="ok">
-  <?php foreach ($log as $line): ?>
-    <p><?= $line ?></p>
-  <?php endforeach; ?>
-</div>
-
-<?php if ($errors): ?>
-<div class="err">
-  <strong><?= count($errors) ?> error(s):</strong>
-  <ul>
-    <?php foreach ($errors as $e): ?>
-      <li><?= htmlspecialchars($e) ?></li>
-    <?php endforeach; ?>
-  </ul>
-</div>
-<?php endif; ?>
-
-<div class="warn">
-  <strong>Remember:</strong> Delete <code>import-sheet-to-db.php</code> from the server once the import looks correct.
-</div>
 </body>
 </html>
