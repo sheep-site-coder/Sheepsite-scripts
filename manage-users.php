@@ -594,7 +594,7 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
   <h2>Sync Check — <?= count($syncOrphans) ?> account(s) not in database</h2>
   <p>The following web accounts have no matching resident in the association database.
      Check the ones you want to remove, then click Remove. Uncheck anyone you want to keep.</p>
-  <form method="post">
+  <form method="post" onsubmit="this.querySelector('.remove-checked-btn').disabled=true;this.querySelector('.remove-checked-btn').textContent='Removing\u2026'">
     <ul class="sync-list">
       <?php foreach ($syncOrphans as $orphan): ?>
       <li>
@@ -605,8 +605,7 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
     </ul>
     <div class="sync-actions">
       <input type="hidden" name="remove_orphans" value="1">
-      <button type="submit" class="remove-checked-btn"
-              onclick="this.disabled=true;this.textContent='Removing\u2026'">Remove checked</button>
+      <button type="submit" class="remove-checked-btn">Remove checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_orphans=1" class="keep-all-link">Keep all / dismiss</a>
     </div>
   </form>
@@ -622,7 +621,7 @@ if ($syncMissing !== null && count($syncMissing) > 0):
 <div class="sync-panel" style="border-color:#93c5fd;background:#eff6ff;">
   <h2 style="color:#1e40af;">Missing Accounts — <?= count($syncMissing) ?> resident(s) in database with no web account</h2>
   <p style="color:#1e40af;">These residents exist in the association database but have no web login. This may be due to an accidental deletion or a resident added without an email address. Check the ones you want to recreate — a temporary password will be generated automatically and a welcome email sent to each resident.</p>
-  <form method="post">
+  <form method="post" onsubmit="this.querySelector('.recreate-btn').disabled=true;this.querySelector('.recreate-btn').textContent='Creating accounts\u2026'">
     <ul class="sync-list" style="border-color:#bfdbfe;">
       <?php foreach ($syncMissing as $m): ?>
       <li style="border-color:#bfdbfe;">
@@ -637,8 +636,7 @@ if ($syncMissing !== null && count($syncMissing) > 0):
     </ul>
     <div class="sync-actions">
       <input type="hidden" name="recreate_missing" value="1">
-      <button type="submit" class="add-btn" style="background:#1d4ed8;"
-              onclick="this.disabled=true;this.textContent='Creating accounts\u2026'">Recreate checked</button>
+      <button type="submit" class="add-btn recreate-btn" style="background:#1d4ed8;">Recreate checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_missing=1" class="keep-all-link">Dismiss</a>
     </div>
   </form>
