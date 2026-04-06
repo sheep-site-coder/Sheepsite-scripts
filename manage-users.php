@@ -254,7 +254,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    . '&building=' . urlencode($building)
                    . '&tmppw='    . urlencode($pass)
                    . '&loginurl=' . urlencode($loginURL);
-        $response  = @file_get_contents($resetURL);
+        $ctx       = stream_context_create(['http' => ['timeout' => 10]]);
+        $response  = @file_get_contents($resetURL, false, $ctx);
         if ($response !== false) {
           $data      = json_decode($response, true);
           $emailSent = ($data['status'] ?? '') === 'ok';
@@ -300,7 +301,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $syncError = true;
       } else {
         $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
-        $response = @file_get_contents($url);
+        $ctx      = stream_context_create(['http' => ['timeout' => 30]]);
+        $response = @file_get_contents($url, false, $ctx);
         if ($response === false) {
           $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
           $messageType = 'error';
