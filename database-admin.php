@@ -25,6 +25,11 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildingConfig = $buildings[$building];
 $webAppURL      = $buildingConfig['webAppURL'];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+
+// Use local MySQL DB if credentials/db.json exists (QGscratch and future deployments).
+// Falls back to Apps Script (gasGet/gasPost) when db.json is absent.
+$useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
 $sessionKey     = 'manage_auth_' . $building;
 
 $adminCredFile  = CREDENTIALS_DIR . $building . '_admin.json';
@@ -129,47 +134,49 @@ if ($action) {
     // --- Bulk import: CSV rows into Database tab ---
     case 'importResidents': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'importResidents',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      if ($useLocalDB) {
+        echo json_encode(dbImportResidents($building, $body['rows'] ?? []));
+      } else {
+        echo json_encode(gasPost($webAppURL, array_merge($body, [
+          'action' => 'importResidents',
+          'token'  => OWNER_IMPORT_TOKEN,
+        ])));
+      }
       exit;
     }
 
     // --- Read: unit list ---
     case 'listDatabase':
-      echo json_encode(gasGet($webAppURL, [
-        'page'  => 'listDatabase',
-        'token' => OWNER_IMPORT_TOKEN,
-      ]));
+      echo json_encode($useLocalDB
+        ? dbListDatabase($building)
+        : gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN])
+      );
       exit;
 
     // --- Read: single unit detail ---
     case 'getUnit':
       $unit = trim($_GET['unit'] ?? '');
-      echo json_encode(gasGet($webAppURL, [
-        'page'  => 'getUnit',
-        'token' => OWNER_IMPORT_TOKEN,
-        'unit'  => $unit,
-      ]));
+      echo json_encode($useLocalDB
+        ? dbGetUnit($building, $unit)
+        : gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $unit])
+      );
       exit;
 
     // --- Read: all emails ---
     case 'getAllEmails':
-      echo json_encode(gasGet($webAppURL, [
-        'page'  => 'getAllEmails',
-        'token' => OWNER_IMPORT_TOKEN,
-      ]));
+      echo json_encode($useLocalDB
+        ? dbGetAllEmails($building)
+        : gasGet($webAppURL, ['page' => 'getAllEmails', 'token' => OWNER_IMPORT_TOKEN])
+      );
       exit;
 
-    // --- Write: add resident (GAS row + web account) ---
+    // --- Write: add resident (DB/GAS row + web account) ---
     case 'addDatabaseRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      // 1. Write to Google Sheet
-      $gasResult = gasPost($webAppURL, array_merge($body, [
-        'action' => 'addDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ]));
+      // 1. Write to DB or Google Sheet
+      $gasResult = $useLocalDB
+        ? dbAddResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'addDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
       // 2. Create web account only if resident has an email address
@@ -215,13 +222,12 @@ if ($action) {
       exit;
     }
 
-    // --- Write: edit resident (GAS row + optional username rename) ---
+    // --- Write: edit resident (DB/GAS row + optional username rename) ---
     case 'editDatabaseRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      $gasResult = gasPost($webAppURL, array_merge($body, [
-        'action' => 'editDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ]));
+      $gasResult = $useLocalDB
+        ? dbEditResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
       // Handle username rename if name changed
@@ -307,13 +313,12 @@ if ($action) {
       exit;
     }
 
-    // --- Write: delete resident (GAS row + web credential) ---
+    // --- Write: delete resident (DB/GAS row + web credential) ---
     case 'deleteDatabaseRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      $gasResult = gasPost($webAppURL, array_merge($body, [
-        'action' => 'deleteDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ]));
+      $gasResult = $useLocalDB
+        ? dbDeleteResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'deleteDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
       // Remove web credential
@@ -334,48 +339,48 @@ if ($action) {
     // --- Write: car row ---
     case 'editCarRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editCarRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditCar($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editCarRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     // --- Write: unit info row ---
     case 'editUnitRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editUnitRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditUnitInfo($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editUnitRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     // --- Write: emergency rows ---
     case 'addEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'addEmergencyRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbAddEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'addEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     case 'editEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editEmergencyRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     case 'deleteEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'deleteEmergencyRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbDeleteEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'deleteEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
