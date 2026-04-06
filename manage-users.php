@@ -565,11 +565,15 @@ $users = loadUsers($building);
   <strong>Run this whenever a resident moves out</strong> and periodically as a routine check.
   You review and confirm all changes before anything is modified.
 </p>
-<form method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
+<form id="sync-form" method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
   <input type="hidden" name="sync_only" value="1">
-  <button type="submit" class="add-btn"
-          onclick="return confirm('Compare web accounts against the database?\n\nYou will review all changes before anything is modified.')">Sync Now</button>
 </form>
+<button type="button" class="add-btn" onclick="showConfirm(
+  'Sync accounts?',
+  'Compares web accounts against the database in both directions.<br><br>Orphaned accounts and missing accounts will be listed for your review. <strong>Nothing is changed until you confirm.</strong>',
+  'Proceed',
+  function() { document.getElementById(\'sync-form\').submit(); }
+)">Sync Now</button>
 
 <div id="mu-confirm-overlay" class="modal-overlay" style="display:none;">
   <div class="modal-box">
@@ -701,12 +705,24 @@ if ($syncMissing !== null && count($syncMissing) > 0):
 <script>
 // ---- Confirm modal ----
 var confirmCb = null;
-function showConfirm(title, bodyHtml, proceedLabel, onProceed) {
+function showConfirm(title, bodyHtml, proceedLabel, onProceed, proceedColor) {
   document.getElementById('mu-confirm-title').textContent = title;
   document.getElementById('mu-confirm-body').innerHTML    = bodyHtml;
-  document.getElementById('mu-confirm-proceed').textContent = proceedLabel;
+  var btn = document.getElementById('mu-confirm-proceed');
+  btn.textContent = proceedLabel;
+  var color = proceedColor || '#0070f3';
+  btn.style.background = color;
+  btn.onmouseover = function() { this.style.background = proceedColor ? shadeColor(color, -20) : '#005bb5'; };
+  btn.onmouseout  = function() { this.style.background = color; };
   confirmCb = onProceed;
   document.getElementById('mu-confirm-overlay').style.display = 'flex';
+}
+function shadeColor(hex, pct) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = Math.max(0, Math.min(255, (n >> 16) + pct));
+  var g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + pct));
+  var b = Math.max(0, Math.min(255, (n & 0xff) + pct));
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
 }
 function closeMuConfirm() {
   document.getElementById('mu-confirm-overlay').style.display = 'none';
@@ -725,7 +741,8 @@ function confirmRemoveUser(btn) {
     'Remove ' + user + '?',
     'This will permanently delete the web login for <strong>' + user + '</strong>. The resident will no longer be able to log in.',
     'Remove',
-    function() { document.getElementById(formId).submit(); }
+    function() { document.getElementById(formId).submit(); },
+    '#c00'
   );
 }
 
