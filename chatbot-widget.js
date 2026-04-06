@@ -390,7 +390,7 @@
         </div>
       </div>
       <div id="ss-login-body">
-        <input id="ss-login-user" type="text"     placeholder="Username" autocomplete="username" />
+        <input id="ss-login-user" type="text"     placeholder="Username" autocomplete="username" autocapitalize="none" />
         <input id="ss-login-pass" type="password" placeholder="Password" autocomplete="current-password" />
         <div id="ss-login-error"></div>
         <div id="ss-login-buttons">

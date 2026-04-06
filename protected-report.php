@@ -131,7 +131,7 @@ if (empty($_SESSION[$sessionKey])) {
 
   <form method="post" action="<?= htmlspecialchars($baseURL) ?>">
     <label for="username">Username</label>
-    <input type="text" id="username" name="username" autocomplete="username" autofocus>
+    <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" autofocus>
 
     <label for="password">Password</label>
     <input type="password" id="password" name="password" autocomplete="current-password">

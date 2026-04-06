@@ -242,7 +242,7 @@ $username = $loggedIn ? $_SESSION[$sessionKey] : '';
     <?php endif ?>
     <form method="post">
       <input type="hidden" name="building" value="<?= htmlspecialchars($building) ?>">
-      <input type="text"     name="username" placeholder="Username" autocomplete="username" required>
+      <input type="text"     name="username" placeholder="Username" autocomplete="username" autocapitalize="none" required>
       <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
       <button type="submit">Log in</button>
     </form>

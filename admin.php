@@ -152,7 +152,7 @@ if (empty($_SESSION[$sessionKey])) {
 
   <form method="post" action="admin.php?building=<?= urlencode($building) ?>">
     <label for="admin_user">Username</label>
-    <input type="text" id="admin_user" name="admin_user" autocomplete="username" autofocus>
+    <input type="text" id="admin_user" name="admin_user" autocomplete="username" autocapitalize="none" autofocus>
 
     <label for="admin_pass">Password</label>
     <input type="password" id="admin_pass" name="admin_pass" autocomplete="current-password">

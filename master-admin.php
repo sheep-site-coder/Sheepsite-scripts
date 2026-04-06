@@ -87,7 +87,7 @@ if (empty($_SESSION[SESSION_KEY])) {
   <?php endif; ?>
   <form method="post">
     <label for="master_user">Username</label>
-    <input type="text" id="master_user" name="master_user" autocomplete="username" autofocus>
+    <input type="text" id="master_user" name="master_user" autocomplete="username" autocapitalize="none" autofocus>
     <label for="master_pass">Password</label>
     <input type="password" id="master_pass" name="master_pass" autocomplete="current-password">
     <button type="submit" class="login-btn">Log in</button>

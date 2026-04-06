@@ -120,7 +120,7 @@ if (empty($_SESSION[$sessionKey])) {
 
   <form method="post">
     <label for="admin_user">Username</label>
-    <input type="text" id="admin_user" name="admin_user" autocomplete="username" autofocus>
+    <input type="text" id="admin_user" name="admin_user" autocomplete="username" autocapitalize="none" autofocus>
     <label for="admin_pass">Password</label>
     <input type="password" id="admin_pass" name="admin_pass" autocomplete="current-password">
     <button type="submit">Log in</button>
@@ -528,7 +528,7 @@ $users = loadUsers($building);
   If the username is new, the account is created as-is.
 </p>
 <form class="add-form" method="post">
-  <input type="text"     name="username" placeholder="Username"    autocomplete="off">
+  <input type="text"     name="username" placeholder="Username"    autocomplete="off" autocapitalize="none">
   <input type="password" name="password" placeholder="Password"    autocomplete="new-password">
   <button type="submit" name="add_user" class="add-btn">Add / Reset</button>
 </form>
