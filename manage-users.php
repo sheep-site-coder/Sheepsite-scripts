@@ -58,6 +58,29 @@ if (isset($_GET['dismiss_missing'])) {
 }
 
 // -------------------------------------------------------
+// Temporary debug endpoint — remove after testing
+// ?building=QGscratch&debug=1
+// -------------------------------------------------------
+if (isset($_GET['debug'])) {
+  header('Content-Type: text/plain');
+  echo "useLocalDB: " . ($useLocalDB ? 'YES' : 'NO') . "\n";
+  echo "db.php exists: " . (file_exists(CREDENTIALS_DIR . '../db/db.php') ? 'YES' : 'NO') . "\n";
+  echo "db.json exists: " . (file_exists(CREDENTIALS_DIR . 'db.json') ? 'YES' : 'NO') . "\n";
+  if ($useLocalDB) {
+    try {
+      $pdo = getDB();
+      echo "DB connection: OK\n";
+      $stmt = $pdo->prepare('SELECT COUNT(*) as n FROM residents WHERE building=?');
+      $stmt->execute([$building]);
+      echo "Residents in DB: " . $stmt->fetch()['n'] . "\n";
+    } catch (Exception $e) {
+      echo "DB error: " . $e->getMessage() . "\n";
+    }
+  }
+  exit;
+}
+
+// -------------------------------------------------------
 // Logout
 // -------------------------------------------------------
 if (isset($_GET['logout'])) {
