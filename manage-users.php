@@ -602,7 +602,8 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
-      <button type="submit" name="remove_orphans" class="remove-checked-btn"
+      <input type="hidden" name="remove_orphans" value="1">
+      <button type="submit" class="remove-checked-btn"
               onclick="this.disabled=true;this.textContent='Removing\u2026'">Remove checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_orphans=1" class="keep-all-link">Keep all / dismiss</a>
     </div>
