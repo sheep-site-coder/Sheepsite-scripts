@@ -882,5 +882,20 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: April 5, 2026 (session 28 — private folder paths, marketing copy, cron path fix)*
+## Session 29 — Woolsy CORS bug fix
+
+- **chatbot-auth.php** + **chatbot.php** — Added CORS headers to both endpoints:
+  - Reflect `Origin` header with `Access-Control-Allow-Credentials: true`
+  - Handle `OPTIONS` preflight (204 exit)
+  - Root cause: session 28 inline login form made cross-origin fetch calls from building sites
+    to sheepsite.com; without CORS headers the browser blocked the preflight, causing
+    "Could not connect" on login and `whoami` always returning "not logged in"
+
+- **chatbot-widget.js** — Changed `credentials: 'same-origin'` → `credentials: 'include'`
+  for all three `chatbot-auth.php` calls (`whoami`, `login`, `logout`) so session cookies
+  are sent and stored across origins
+
+---
+
+*Snapshot updated: April 5, 2026 (session 29 — Woolsy CORS bug fix)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

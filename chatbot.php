@@ -11,6 +11,19 @@
 //   faqs/{building}.txt               — building-specific FAQ
 //   faqs/{building}_rules.md          — distilled governing docs (from setup phase)
 
+// CORS — widget runs on building sites (cross-origin).
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($origin) {
+    header("Access-Control-Allow-Origin: $origin");
+    header("Access-Control-Allow-Credentials: true");
+    header("Access-Control-Allow-Methods: POST, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type");
+}
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 header('Content-Type: application/json');
 
 $buildings = require __DIR__ . '/buildings.php';

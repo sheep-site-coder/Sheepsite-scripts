@@ -5,6 +5,19 @@
 // GET  ?action=logout&building=X          — clears session, returns {ok}
 // POST ?action=login&building=X           — authenticates, returns {ok, username} or {ok:false, error}
 
+// CORS — widget runs on building sites (cross-origin); reflect Origin so session cookies work.
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($origin) {
+    header("Access-Control-Allow-Origin: $origin");
+    header("Access-Control-Allow-Credentials: true");
+    header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type");
+}
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 session_start();
 
 header('Content-Type: application/json');

@@ -58,7 +58,7 @@
   async function whoami(building) {
     try {
       const res  = await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=whoami&building=${encodeURIComponent(building)}`, {
-        credentials: 'same-origin',
+        credentials: 'include',
         cache:       'no-store',
       });
       const data = await res.json();
@@ -70,7 +70,9 @@
 
   async function logout(building) {
     try {
-      await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=logout&building=${encodeURIComponent(building)}`);
+      await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=logout&building=${encodeURIComponent(building)}`, {
+        credentials: 'include',
+      });
     } catch { /* ignore */ }
   }
 
@@ -424,7 +426,7 @@
     try {
       const res  = await fetch(`${SCRIPTS_URL}/chatbot-auth.php?action=login&building=${encodeURIComponent(building)}`, {
         method:      'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
         body:        JSON.stringify({ username, password }),
       });
