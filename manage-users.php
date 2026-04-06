@@ -371,8 +371,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tmpHash  = password_hash($tmpPw, PASSWORD_DEFAULT);
         $users[]  = ['user' => $m['user'], 'pass' => $tmpHash, 'mustChange' => true];
         $added++;
-        // Email the new temp password via Apps Script
-        if ($webAppURL) {
+        // Email the new temp password via Apps Script (skipped in DB mode)
+        if (!$useLocalDB && $webAppURL) {
           $resetURL = $webAppURL
                     . '?page=resetpw'
                     . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
@@ -380,7 +380,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     . '&building=' . urlencode($building)
                     . '&tmppw='    . urlencode($tmpPw)
                     . '&loginurl=' . urlencode($loginURL);
-          $resp = @file_get_contents($resetURL);
+          $ctx  = stream_context_create(['http' => ['timeout' => 10]]);
+          $resp = @file_get_contents($resetURL, false, $ctx);
           if ($resp !== false && (json_decode($resp, true)['status'] ?? '') === 'ok') {
             $emailed++;
           }
@@ -632,7 +633,8 @@ if ($syncMissing !== null && count($syncMissing) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
-      <button type="submit" name="recreate_missing" class="add-btn" style="background:#1d4ed8;"
+      <input type="hidden" name="recreate_missing" value="1">
+      <button type="submit" class="add-btn" style="background:#1d4ed8;"
               onclick="this.disabled=true;this.textContent='Creating accounts\u2026'">Recreate checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_missing=1" class="keep-all-link">Dismiss</a>
     </div>
