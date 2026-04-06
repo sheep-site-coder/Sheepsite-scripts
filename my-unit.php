@@ -24,6 +24,9 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildingConfig = $buildings[$building];
 $webAppURL      = $buildingConfig['webAppURL'];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+
+$useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
 $sessionKey     = 'private_auth_' . $building;
 $returnURL      = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
@@ -96,7 +99,9 @@ if ($action) {
     // Load this resident's unit data
     case 'getMyUnit': {
       // Step 1: list all DB rows to find which unit this username belongs to
-      $dbRes = gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN]);
+      $dbRes = $useLocalDB
+        ? dbListDatabase($building)
+        : gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN]);
       if (!empty($dbRes['error'])) { echo json_encode($dbRes); exit; }
 
       $rows = $dbRes['rows'] ?? [];
@@ -119,7 +124,9 @@ if ($action) {
       }
 
       // Step 2: get full unit data
-      $unitRes = gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $myUnit]);
+      $unitRes = $useLocalDB
+        ? dbGetUnit($building, $myUnit)
+        : gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $myUnit]);
       echo json_encode($unitRes);
       exit;
     }
@@ -135,30 +142,30 @@ if ($action) {
       if (empty($body['matchUnit']) || empty($body['matchFirst']) || empty($body['matchLast'])) {
         echo json_encode(['error' => 'Missing required fields']); exit;
       }
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     // Edit unit info row (UnitDB tab)
     case 'editUnitRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editUnitRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditUnitInfo($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editUnitRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     // Edit car row
     case 'editCarRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editCarRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditCar($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editCarRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
