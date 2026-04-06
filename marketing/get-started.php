@@ -177,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_submit'])) {
       <div class="creds-grid">
         <div class="cred-box">
           <h4>Resident Login</h4>
-          <div class="cred-row">Username: <span>SampleSite</span></div>
+          <div class="cred-row">Username: <span>sresident</span></div>
           <div class="cred-row">Password: <span>Testdrive</span></div>
         </div>
         <div class="cred-box">
