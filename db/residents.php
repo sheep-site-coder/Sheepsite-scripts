@@ -223,7 +223,7 @@ function dbEditResident(string $building, array $data): array {
      WHERE building = ? AND unit = ? AND first_name = ? AND last_name = ?
      LIMIT 1"
   );
-  $stmt->execute([...array_values($fields), $building, $matchUnit, $matchFirst, $matchLast]);
+  $stmt->execute(array_merge(array_values($fields), [$building, $matchUnit, $matchFirst, $matchLast]));
 
   if ($stmt->rowCount() === 0) return ['error' => 'Row not found'];
   return ['ok' => true];
@@ -334,7 +334,7 @@ function dbEditEmergency(string $building, array $data): array {
      WHERE building = ? AND unit = ? AND first_name = ? AND last_name = ?
      LIMIT 1"
   );
-  $stmt->execute([...array_values($fields), $building, $matchUnit, $matchFirst, $matchLast]);
+  $stmt->execute(array_merge(array_values($fields), [$building, $matchUnit, $matchFirst, $matchLast]));
 
   if ($stmt->rowCount() === 0) return ['error' => 'Row not found'];
   return ['ok' => true];
