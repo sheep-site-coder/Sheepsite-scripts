@@ -307,14 +307,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   elseif (isset($_POST['sync_only'])) {
+    error_log("SYNC_DEBUG: sync_only start, useLocalDB=" . ($useLocalDB ? '1' : '0'));
     if ($useLocalDB) {
+      error_log("SYNC_DEBUG: calling dbListDatabase");
       $dbResult = dbListDatabase($building);
+      error_log("SYNC_DEBUG: dbListDatabase returned " . count($dbResult['rows'] ?? []) . " rows");
       $owners = array_map(fn($r) => [
         'firstName' => $r['First Name'],
         'lastName'  => $r['Last Name'],
       ], $dbResult['rows'] ?? []);
       $data = ['owners' => $owners];
       $syncError = false;
+      error_log("SYNC_DEBUG: DB path complete, owners=" . count($owners));
     } else {
       $webAppURL = $buildings[$building]['webAppURL'] ?? '';
       if (!$webAppURL) {
@@ -340,9 +344,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     }
+    error_log("SYNC_DEBUG: syncError=" . var_export($syncError ?? null, true));
     if (!($syncError ?? false)) {
+      error_log("SYNC_DEBUG: loading users");
       $users    = loadUsers($building);
       $existing = array_column($users, 'user');
+      error_log("SYNC_DEBUG: loaded " . count($users) . " users");
 
       // Orphans: web accounts with no matching database record
       $orphans = [];
@@ -373,6 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
       if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
       $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
+      error_log("SYNC_DEBUG: done, message=" . $message);
     }
   }
 
