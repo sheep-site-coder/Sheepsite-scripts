@@ -9,7 +9,9 @@
 // The master credentials can access any building.
 // Change all passwords before deploying.
 // -------------------------------------------------------
+file_put_contents('/tmp/mu-debug.log', date('H:i:s') . " method=" . $_SERVER['REQUEST_METHOD'] . " post_keys=" . implode(',', array_keys($_POST)) . "\n", FILE_APPEND);
 session_start();
+file_put_contents('/tmp/mu-debug.log', date('H:i:s') . " after session_start\n", FILE_APPEND);
 
 define('CREDENTIALS_DIR',    __DIR__ . '/credentials/');
 define('OWNER_IMPORT_TOKEN', 'QRF*!v2r2KgJEesq&P');  // must match building-script.gs
