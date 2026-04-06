@@ -67,9 +67,10 @@ if (!empty($dbRes['error'])) {
   die('<p style="color:red;">Failed to fetch residents: ' . htmlspecialchars($dbRes['error']) . '</p>');
 }
 
-$rows    = $dbRes['rows'] ?? [];
-$units   = [];
-$resAdded = 0; $resSkipped = 0;
+$rows      = $dbRes['rows'] ?? [];
+$units     = [];
+$unitInfoFromDb = []; // unit info fields collected from old Database rows (pre-UnitDB schema)
+$resAdded  = 0; $resSkipped = 0;
 
 foreach ($rows as $r) {
   $unit  = trim($r['Unit #']     ?? '');
@@ -77,6 +78,15 @@ foreach ($rows as $r) {
   $last  = trim($r['Last Name']  ?? '');
   if (!$unit && !$first && !$last) continue;
   if ($unit) $units[$unit] = true;
+
+  // Collect unit-level fields from Database rows (old schema has them per resident)
+  // Take the first non-empty value found for each field per unit
+  foreach (['Insurance', 'Policy #', 'AC Replaced', 'Water Tank'] as $field) {
+    $val = trim($r[$field] ?? '');
+    if ($val && empty($unitInfoFromDb[$unit][$field])) {
+      $unitInfoFromDb[$unit][$field] = $val;
+    }
+  }
 
   try {
     $pdo  = getDB();
@@ -118,10 +128,14 @@ foreach (array_keys($units) as $unit) {
     } catch (Exception $e) { $errors[] = "Unit $unit car: " . $e->getMessage(); }
   }
 
-  // Unit info
-  if (!empty($res['unitInfo'])) {
+  // Unit info — prefer UnitDB tab; fall back to fields collected from Database rows
+  $unitInfoData = $res['unitInfo'] ?? null;
+  if (!$unitInfoData && !empty($unitInfoFromDb[$unit])) {
+    $unitInfoData = array_merge(['Unit #' => $unit], $unitInfoFromDb[$unit]);
+  }
+  if (!empty($unitInfoData)) {
     try {
-      $result = dbEditUnitInfo($building, $res['unitInfo']);
+      $result = dbEditUnitInfo($building, $unitInfoData);
       if (!empty($result['error'])) $errors[] = "Unit $unit unitInfo: " . $result['error'];
       else $unitAdded++;
     } catch (Exception $e) { $errors[] = "Unit $unit unitInfo: " . $e->getMessage(); }
