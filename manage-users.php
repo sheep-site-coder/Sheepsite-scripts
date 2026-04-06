@@ -307,18 +307,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   elseif (isset($_POST['sync_only'])) {
-    error_log("SYNC_DEBUG: sync_only start, useLocalDB=" . ($useLocalDB ? '1' : '0'));
+    file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " start useLocalDB=" . ($useLocalDB ? '1' : '0') . "\n", FILE_APPEND);
     if ($useLocalDB) {
-      error_log("SYNC_DEBUG: calling dbListDatabase");
+      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " calling dbListDatabase\n", FILE_APPEND);
       $dbResult = dbListDatabase($building);
-      error_log("SYNC_DEBUG: dbListDatabase returned " . count($dbResult['rows'] ?? []) . " rows");
+      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " dbListDatabase returned " . count($dbResult['rows'] ?? []) . " rows\n", FILE_APPEND);
       $owners = array_map(fn($r) => [
         'firstName' => $r['First Name'],
         'lastName'  => $r['Last Name'],
       ], $dbResult['rows'] ?? []);
       $data = ['owners' => $owners];
       $syncError = false;
-      error_log("SYNC_DEBUG: DB path complete, owners=" . count($owners));
+      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " DB path complete owners=" . count($owners) . "\n", FILE_APPEND);
     } else {
       $webAppURL = $buildings[$building]['webAppURL'] ?? '';
       if (!$webAppURL) {
@@ -344,12 +344,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     }
-    error_log("SYNC_DEBUG: syncError=" . var_export($syncError ?? null, true));
+    file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " syncError=" . var_export($syncError ?? null, true) . "\n", FILE_APPEND);
     if (!($syncError ?? false)) {
-      error_log("SYNC_DEBUG: loading users");
+      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " loading users\n", FILE_APPEND);
       $users    = loadUsers($building);
       $existing = array_column($users, 'user');
-      error_log("SYNC_DEBUG: loaded " . count($users) . " users");
+      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " loaded " . count($users) . " users\n", FILE_APPEND);
 
       // Orphans: web accounts with no matching database record
       $orphans = [];
@@ -380,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
       if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
       $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
-      error_log("SYNC_DEBUG: done, message=" . $message);
+      file_put_contents(__DIR__ . '/sync-debug.log', date('H:i:s') . " done message=" . $message . "\n", FILE_APPEND);
     }
   }
 
