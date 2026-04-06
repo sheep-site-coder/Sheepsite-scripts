@@ -351,7 +351,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
       $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
     }
-    }
   }
 
   elseif (isset($_POST['recreate_missing'])) {
