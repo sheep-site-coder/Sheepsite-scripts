@@ -595,27 +595,11 @@ $users = loadUsers($building);
   <strong>Run this whenever a resident moves out</strong> and periodically as a routine check.
   You review and confirm all changes before anything is modified.
 </p>
-<button type="button" class="add-btn" onclick="document.getElementById('sync-modal').style.display='flex'">Sync Now</button>
-
-<div id="sync-modal" class="modal-overlay" style="display:none;">
-  <div class="modal-box">
-    <h3>Sync Web Accounts with Database</h3>
-    <p>This will compare all web login accounts against the association database and identify:</p>
-    <ul>
-      <li><strong>Orphaned accounts</strong> — web logins with no matching resident in the database (e.g. someone who moved out)</li>
-      <li><strong>Missing accounts</strong> — database residents with no web login (e.g. imported but never activated)</li>
-    </ul>
-    <p>You will review and confirm all changes before anything is modified.</p>
-    <div class="modal-actions">
-      <form method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
-        <input type="hidden" name="sync_only" value="1">
-        <button type="submit" class="btn-proceed"
-                onclick="this.disabled=true;this.textContent='Checking\u2026'">Proceed</button>
-      </form>
-      <button type="button" class="btn-cancel" onclick="document.getElementById('sync-modal').style.display='none'">Cancel</button>
-    </div>
-  </div>
-</div>
+<form method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
+  <input type="hidden" name="sync_only" value="1">
+  <button type="submit" class="add-btn"
+          onclick="return confirm('Compare web accounts against the database?\n\nYou will review all changes before anything is modified.')">Sync Now</button>
+</form>
 
 <div id="mu-confirm-overlay" class="modal-overlay" style="display:none;">
   <div class="modal-box">
