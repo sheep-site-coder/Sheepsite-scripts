@@ -25,6 +25,11 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildingConfig = $buildings[$building];
 $webAppURL      = $buildingConfig['webAppURL'];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+
+// Use local MySQL DB if credentials/db.json exists (QGscratch and future deployments).
+// Falls back to Apps Script (gasGet/gasPost) when db.json is absent.
+$useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
 $sessionKey     = 'manage_auth_' . $building;
 
 $adminCredFile  = CREDENTIALS_DIR . $building . '_admin.json';
@@ -129,47 +134,49 @@ if ($action) {
     // --- Bulk import: CSV rows into Database tab ---
     case 'importResidents': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'importResidents',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      if ($useLocalDB) {
+        echo json_encode(dbImportResidents($building, $body['rows'] ?? []));
+      } else {
+        echo json_encode(gasPost($webAppURL, array_merge($body, [
+          'action' => 'importResidents',
+          'token'  => OWNER_IMPORT_TOKEN,
+        ])));
+      }
       exit;
     }
 
     // --- Read: unit list ---
     case 'listDatabase':
-      echo json_encode(gasGet($webAppURL, [
-        'page'  => 'listDatabase',
-        'token' => OWNER_IMPORT_TOKEN,
-      ]));
+      echo json_encode($useLocalDB
+        ? dbListDatabase($building)
+        : gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN])
+      );
       exit;
 
     // --- Read: single unit detail ---
     case 'getUnit':
       $unit = trim($_GET['unit'] ?? '');
-      echo json_encode(gasGet($webAppURL, [
-        'page'  => 'getUnit',
-        'token' => OWNER_IMPORT_TOKEN,
-        'unit'  => $unit,
-      ]));
+      echo json_encode($useLocalDB
+        ? dbGetUnit($building, $unit)
+        : gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $unit])
+      );
       exit;
 
     // --- Read: all emails ---
     case 'getAllEmails':
-      echo json_encode(gasGet($webAppURL, [
-        'page'  => 'getAllEmails',
-        'token' => OWNER_IMPORT_TOKEN,
-      ]));
+      echo json_encode($useLocalDB
+        ? dbGetAllEmails($building)
+        : gasGet($webAppURL, ['page' => 'getAllEmails', 'token' => OWNER_IMPORT_TOKEN])
+      );
       exit;
 
-    // --- Write: add resident (GAS row + web account) ---
+    // --- Write: add resident (DB/GAS row + web account) ---
     case 'addDatabaseRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      // 1. Write to Google Sheet
-      $gasResult = gasPost($webAppURL, array_merge($body, [
-        'action' => 'addDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ]));
+      // 1. Write to DB or Google Sheet
+      $gasResult = $useLocalDB
+        ? dbAddResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'addDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
       // 2. Create web account only if resident has an email address
@@ -189,39 +196,28 @@ if ($action) {
       $users[]  = ['user' => $username, 'pass' => password_hash($tempPw, PASSWORD_DEFAULT), 'mustChange' => true];
       saveUsers($building, $users);
 
-      // Email the temp password via Apps Script
+      // Email the temp password directly from PHP
       $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
       $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
       $siteURL  = loadConfig($building)['siteURL'] ?? '';
       $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                 . '/display-private-dir.php?building=' . urlencode($building)
                 . ($siteURL ? '&return=' . urlencode($siteURL) : '');
-      $resetURL = $webAppURL
-                . '?page=resetpw'
-                . '&token='       . urlencode(OWNER_IMPORT_TOKEN)
-                . '&username='    . urlencode($username)
-                . '&building='    . urlencode($building)
-                . '&tmppw='       . urlencode($tempPw)
-                . '&loginurl='    . urlencode($loginURL)
-                . '&directemail=' . urlencode($email ?? $newEmail ?? '');
-      $emailResp = @file_get_contents($resetURL);
-      $emailSent = false;
-      if ($emailResp !== false) {
-        $emailData = json_decode($emailResp, true);
-        $emailSent = ($emailData['status'] ?? '') === 'ok';
-      }
+      $recipientEmail = $email ?? $newEmail ?? '';
+      $emailSent = $recipientEmail
+        ? sendTempPasswordEmail($recipientEmail, $username, $tempPw, $loginURL, $buildLabel, true)
+        : false;
 
       echo json_encode(['ok' => true, 'username' => $username, 'emailSent' => $emailSent]);
       exit;
     }
 
-    // --- Write: edit resident (GAS row + optional username rename) ---
+    // --- Write: edit resident (DB/GAS row + optional username rename) ---
     case 'editDatabaseRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      $gasResult = gasPost($webAppURL, array_merge($body, [
-        'action' => 'editDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ]));
+      $gasResult = $useLocalDB
+        ? dbEditResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
       // Handle username rename if name changed
@@ -286,16 +282,7 @@ if ($action) {
           $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
           $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                     . '/display-private-dir.php?building=' . urlencode($building);
-          $resetURL = $webAppURL
-                    . '?page=resetpw'
-                    . '&token='       . urlencode(OWNER_IMPORT_TOKEN)
-                    . '&username='    . urlencode($username)
-                    . '&building='    . urlencode($building)
-                    . '&tmppw='       . urlencode($tempPw)
-                    . '&loginurl='    . urlencode($loginURL)
-                    . '&directemail=' . urlencode($newEmail);
-          $emailResp = @file_get_contents($resetURL);
-          $emailSent = ($emailResp !== false && ($emailData = json_decode($emailResp, true)) && ($emailData['status'] ?? '') === 'ok');
+          $emailSent = sendTempPasswordEmail($newEmail, $username, $tempPw, $loginURL, $buildLabel, true);
 
           $response['accountCreated'] = true;
           $response['username']       = $username;
@@ -307,13 +294,12 @@ if ($action) {
       exit;
     }
 
-    // --- Write: delete resident (GAS row + web credential) ---
+    // --- Write: delete resident (DB/GAS row + web credential) ---
     case 'deleteDatabaseRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      $gasResult = gasPost($webAppURL, array_merge($body, [
-        'action' => 'deleteDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ]));
+      $gasResult = $useLocalDB
+        ? dbDeleteResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'deleteDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
       // Remove web credential
@@ -334,38 +320,48 @@ if ($action) {
     // --- Write: car row ---
     case 'editCarRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editCarRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditCar($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editCarRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
+      exit;
+    }
+
+    // --- Write: unit info row ---
+    case 'editUnitRow': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode($useLocalDB
+        ? dbEditUnitInfo($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editUnitRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     // --- Write: emergency rows ---
     case 'addEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'addEmergencyRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbAddEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'addEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     case 'editEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editEmergencyRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     case 'deleteEmergencyRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'deleteEmergencyRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbDeleteEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'deleteEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
@@ -381,6 +377,69 @@ if ($action) {
         if (array_key_exists($key, $body)) $config[$key] = $body[$key];
       }
       echo json_encode(['ok' => saveConfig($building, $config)]);
+      exit;
+    }
+
+    // --- Pending requests ---
+    case 'listRequests':
+      echo json_encode($useLocalDB
+        ? dbGetRequests($building)
+        : ['requests' => []]
+      );
+      exit;
+
+    case 'approveRequest': {
+      $id  = (int)($_GET['id'] ?? 0);
+      $req = $useLocalDB ? dbGetRequest($building, $id) : null;
+      if (!$req) { echo json_encode(['error' => 'Request not found']); exit; }
+
+      // Add to residents table
+      $addResult = dbAddResident($building, [
+        'Unit #'     => $req['unit'],
+        'First Name' => $req['first_name'],
+        'Last Name'  => $req['last_name'],
+        'eMail'      => $req['email'],
+        'Phone #1'   => $req['phone1'],
+        'Phone #2'   => $req['phone2'],
+        'Full Time'  => (bool)$req['full_time'],
+        'Resident'   => (bool)$req['is_resident'],
+        'Owner'      => (bool)$req['is_owner'],
+      ]);
+      if (!empty($addResult['error'])) { echo json_encode($addResult); exit; }
+
+      // Create web account + send welcome email if email provided
+      $email     = trim($req['email'] ?? '');
+      $first     = trim($req['first_name'] ?? '');
+      $last      = trim($req['last_name']  ?? '');
+      $emailSent = false;
+      $username  = null;
+      if ($email) {
+        $users    = loadUsers($building);
+        $existing = array_column($users, 'user');
+        $username = generateUsername($first, $last, $existing);
+        $tempPw   = generateTempPassword();
+        $users[]  = ['user' => $username, 'pass' => password_hash($tempPw, PASSWORD_DEFAULT), 'mustChange' => true];
+        saveUsers($building, $users);
+        $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+        $siteURL  = loadConfig($building)['siteURL'] ?? '';
+        $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                  . '/display-private-dir.php?building=' . urlencode($building)
+                  . ($siteURL ? '&return=' . urlencode($siteURL) : '');
+        $emailSent = sendTempPasswordEmail($email, $username, $tempPw, $loginURL, $buildLabel, true);
+      }
+
+      dbDeleteRequest($building, $id);
+      echo json_encode(['ok' => true, 'username' => $username, 'emailSent' => $emailSent]);
+      exit;
+    }
+
+    case 'rejectRequest': {
+      $id = (int)($_GET['id'] ?? 0);
+      echo json_encode($useLocalDB
+        ? dbDeleteRequest($building, $id)
+        : ['error' => 'DB not available']
+      );
       exit;
     }
   }
@@ -537,6 +596,26 @@ $config = loadConfig($building);
     .confirm-cancel:hover { background: #f5f5f5; }
 
     /* CSV import panel */
+    /* Pending requests */
+    #pending-btn        { position: relative; }
+    .req-badge          { display: inline-block; background: #e65c00; color: #fff;
+                          font-size: 0.7rem; font-weight: 700; border-radius: 10px;
+                          padding: 0 5px; line-height: 1.5; margin-left: 4px; vertical-align: middle; }
+    #pending-panel      { border: 1px solid #f5c189; border-radius: 6px; padding: 1rem 1.2rem;
+                          margin-bottom: 1.25rem; background: #fffaf5; display: none; }
+    #pending-panel h3   { font-size: 0.95rem; margin: 0 0 0.75rem; color: #b84d00; }
+    .req-card           { border: 1px solid #e0d0c0; border-radius: 5px; padding: 0.75rem 1rem;
+                          margin-bottom: 0.75rem; background: #fff; font-size: 0.875rem; }
+    .req-card-header    { font-weight: 600; margin-bottom: 0.4rem; color: #333; }
+    .req-card-fields    { color: #555; line-height: 1.7; }
+    .req-card-actions   { margin-top: 0.65rem; display: flex; gap: 0.5rem; }
+    .btn-approve        { padding: 0.3rem 0.85rem; background: #1a7f37; color: #fff;
+                          border: none; border-radius: 4px; font-size: 0.82rem; cursor: pointer; }
+    .btn-approve:hover  { background: #155d28; }
+    .btn-reject         { padding: 0.3rem 0.85rem; background: #c00; color: #fff;
+                          border: none; border-radius: 4px; font-size: 0.82rem; cursor: pointer; }
+    .btn-reject:hover   { background: #900; }
+
     #csv-import-panel   { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem 1.2rem;
                           margin-bottom: 1.25rem; background: #fafafa; display: none; }
     #csv-import-panel h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
@@ -572,7 +651,15 @@ $config = loadConfig($building);
   <button class="btn btn-secondary" id="copy-emails-btn" onclick="copyAllEmails()"
     title="Copies all resident emails to the clipboard. Then simply Paste into the CC or BCC field of your email.">Get Email List</button>
   <button class="btn btn-secondary" onclick="toggleCsvPanel()">⤓ Import from CSV</button>
+  <button class="btn btn-secondary" id="pending-btn" onclick="togglePendingPanel()" style="display:none">
+    Pending Requests <span class="req-badge" id="pending-badge">0</span>
+  </button>
   <button class="btn btn-primary" onclick="showAddUnit()">+ Add to Unit…</button>
+</div>
+
+<div id="pending-panel">
+  <h3>Pending Resident Addition Requests</h3>
+  <div id="pending-list"></div>
 </div>
 
 <div id="csv-import-panel">
@@ -650,12 +737,14 @@ let unitCache   = {};   // unit# -> {unit, residents, car, emergency} — avoids
 // Boot
 // -------------------------------------------------------
 async function init() {
-  const [dbRes, cfgRes] = await Promise.all([
+  const [dbRes, cfgRes, reqRes] = await Promise.all([
     apiFetch('listDatabase'),
     apiFetch('getConfig'),
+    apiFetch('listRequests'),
   ]);
   if (dbRes.error) { showError(dbRes.error); return; }
   floorConfig = cfgRes || floorConfig;
+  renderPendingRequests(reqRes.requests || []);
 
   allRows    = dbRes.rows || [];
   unitMap    = {};
@@ -772,12 +861,13 @@ async function toggleUnit(row, unit) {
 // Unit detail rendering
 // -------------------------------------------------------
 function renderUnitDetail(container, data) {
-  const { unit, residents, car, emergency } = data;
+  const { unit, residents, car, unitInfo, emergency } = data;
   container.innerHTML = `
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab(this, 'tab-residents-${esc(unit)}')">
         Residents (${residents.length})
       </button>
+      <button class="tab-btn" onclick="switchTab(this, 'tab-unitinfo-${esc(unit)}')">Unit Info</button>
       <button class="tab-btn" onclick="switchTab(this, 'tab-car-${esc(unit)}')">Vehicle &amp; Parking</button>
       <button class="tab-btn" onclick="switchTab(this, 'tab-emergency-${esc(unit)}')">
         Emergency (${emergency.length})
@@ -786,6 +876,9 @@ function renderUnitDetail(container, data) {
 
     <div class="tab-panel active" id="tab-residents-${esc(unit)}">
       ${renderResidentTab(unit, residents)}
+    </div>
+    <div class="tab-panel" id="tab-unitinfo-${esc(unit)}">
+      ${renderUnitInfoTab(unit, unitInfo)}
     </div>
     <div class="tab-panel" id="tab-car-${esc(unit)}">
       ${renderCarTab(unit, car)}
@@ -829,10 +922,6 @@ function residentCardHtml(unit, r) {
       ${fieldPair('Email',  r['eMail'])}
       ${fieldPair('Phone 1', r['Phone #1'])}
       ${fieldPair('Phone 2', r['Phone #2'])}
-      ${fieldPair('Insurance', r['Insurance'])}
-      ${fieldPair('Policy #', r['Policy #'])}
-      ${fieldPair('A/C Replaced', r['AC Replaced'])}
-      ${fieldPair('Water Heater', r['Water Tank'])}
     </div>
     <div class="person-actions">
       <button class="btn btn-secondary btn-sm"
@@ -864,10 +953,6 @@ function editResidentFormHtml(unit, r) {
       <div><label>Email</label><input type="text" id="ef-email-${id}" value="${esc(r['eMail'])}"></div>
       <div><label>Phone #1</label><input type="text" id="ef-ph1-${id}" value="${esc(r['Phone #1'])}"></div>
       <div><label>Phone #2</label><input type="text" id="ef-ph2-${id}" value="${esc(r['Phone #2'])}"></div>
-      <div><label>Insurance</label><input type="text" id="ef-ins-${id}" value="${esc(r['Insurance'])}"></div>
-      <div><label>Policy #</label><input type="text" id="ef-pol-${id}" value="${esc(r['Policy #'])}"></div>
-      <div><label>A/C Replaced</label><input type="date" id="ef-ac-${id}" value="${esc(r['AC Replaced'])}"></div>
-      <div><label>Water Heater</label><input type="date" id="ef-wt-${id}" value="${esc(r['Water Tank'])}"></div>
       <div><label>Board Role</label>
         <select id="ef-board-${id}">
           ${BOARD_ROLES.map(role => `<option value="${esc(role)}"${r['Board'] === role ? ' selected' : ''}>${esc(role) || '—'}</option>`).join('')}
@@ -901,10 +986,6 @@ function addPersonFormHtml(unit) {
       <div><label>Email <span style="color:#888;font-weight:400;font-size:0.75rem;">(required for web access)</span></label><input type="text" id="ap-email-${esc(unit)}"></div>
       <div><label>Phone #1</label><input type="text" id="ap-ph1-${esc(unit)}"></div>
       <div><label>Phone #2</label><input type="text" id="ap-ph2-${esc(unit)}"></div>
-      <div><label>Insurance</label><input type="text" id="ap-ins-${esc(unit)}"></div>
-      <div><label>Policy #</label><input type="text" id="ap-pol-${esc(unit)}"></div>
-      <div><label>A/C Replaced</label><input type="date" id="ap-ac-${esc(unit)}"></div>
-      <div><label>Water Heater</label><input type="date" id="ap-wt-${esc(unit)}"></div>
       <div><label>Board Role</label>
         <select id="ap-board-${esc(unit)}">
           ${BOARD_ROLES.map(role => `<option value="${esc(role)}">${esc(role) || '—'}</option>`).join('')}
@@ -964,6 +1045,61 @@ function renderCarTab(unit, car) {
       </div>
     </div>
   </div>`;
+}
+
+// -------------------------------------------------------
+// Unit Info tab
+// -------------------------------------------------------
+function renderUnitInfoTab(unit, u) {
+  u = u || {};
+  return `<div class="person-card">
+    <div class="field-grid">
+      ${fieldPair('Insurance',    u['Insurance'])}
+      ${fieldPair('Policy #',     u['Policy #'])}
+      ${fieldPair('A/C Replaced', u['AC Replaced'])}
+      ${fieldPair('Water Heater', u['Water Tank'])}
+    </div>
+    <div class="person-actions">
+      <button class="btn btn-secondary btn-sm" onclick="showEditUnitInfo('${esc(unit)}')">Edit</button>
+    </div>
+    <div id="unitinfo-edit-${esc(unit)}" style="display:none;">
+      <div class="edit-form" style="margin-top:0.75rem;">
+        <div class="field-grid">
+          <div><label>Insurance</label><input type="text" id="ui-ins-${esc(unit)}" value="${esc(u['Insurance'])}"></div>
+          <div><label>Policy #</label><input type="text" id="ui-pol-${esc(unit)}" value="${esc(u['Policy #'])}"></div>
+          <div><label>A/C Replaced</label><input type="date" id="ui-ac-${esc(unit)}" value="${esc(u['AC Replaced'])}"></div>
+          <div><label>Water Heater</label><input type="date" id="ui-wt-${esc(unit)}" value="${esc(u['Water Tank'])}"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveUnitInfoRow('${esc(unit)}')">Save</button>
+          <button class="btn btn-secondary btn-sm"
+            onclick="document.getElementById('unitinfo-edit-${esc(unit)}').style.display='none'">Cancel</button>
+        </div>
+        <div id="ui-msg-${esc(unit)}" style="margin-top:0.5rem;"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function showEditUnitInfo(unit) {
+  document.getElementById('unitinfo-edit-' + unit).style.display = 'block';
+}
+
+async function saveUnitInfoRow(unit) {
+  const msgEl   = document.getElementById('ui-msg-' + unit);
+  showMsg(msgEl, 'Saving…', 'info');
+  const unitData = {
+    'Unit #':      unit,
+    'Insurance':   document.getElementById('ui-ins-' + unit).value.trim(),
+    'Policy #':    document.getElementById('ui-pol-' + unit).value.trim(),
+    'AC Replaced': document.getElementById('ui-ac-'  + unit).value,
+    'Water Tank':  document.getElementById('ui-wt-'  + unit).value,
+  };
+  const res = await apiPost('editUnitRow', unitData);
+  if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
+  if (unitCache[unit]) unitCache[unit].unitInfo = unitData;
+  refreshUnitDetail(unit);
+  toast('✓ Unit info saved.');
 }
 
 // -------------------------------------------------------
@@ -1127,10 +1263,6 @@ async function saveAddPerson(unit) {
     'eMail':       document.getElementById('ap-email-' + unit).value.trim(),
     'Phone #1':    document.getElementById('ap-ph1-'   + unit).value.trim(),
     'Phone #2':    document.getElementById('ap-ph2-'   + unit).value.trim(),
-    'Insurance':   document.getElementById('ap-ins-'   + unit).value.trim(),
-    'Policy #':    document.getElementById('ap-pol-'   + unit).value.trim(),
-    'AC Replaced': document.getElementById('ap-ac-'    + unit).value,
-    'Water Tank':  document.getElementById('ap-wt-'    + unit).value,
     'Board':       document.getElementById('ap-board-' + unit).value,
     'Full Time':   document.getElementById('ap-ft-'    + unit).checked,
     'Resident':    document.getElementById('ap-res-'   + unit).checked,
@@ -1171,10 +1303,6 @@ async function saveEditResident(unit, origFirst, origLast, id) {
     'eMail':       document.getElementById('ef-email-' + id).value.trim(),
     'Phone #1':    document.getElementById('ef-ph1-'   + id).value.trim(),
     'Phone #2':    document.getElementById('ef-ph2-'   + id).value.trim(),
-    'Insurance':   document.getElementById('ef-ins-'   + id).value.trim(),
-    'Policy #':    document.getElementById('ef-pol-'   + id).value.trim(),
-    'AC Replaced': document.getElementById('ef-ac-'    + id).value,
-    'Water Tank':  document.getElementById('ef-wt-'    + id).value,
     'Board':       document.getElementById('ef-board-' + id).value,
     'Full Time':   document.getElementById('ef-ft-'    + id).checked,
     'Resident':    document.getElementById('ef-res-'   + id).checked,
@@ -1472,6 +1600,78 @@ function showError(msg) {
 // CSV Import
 // -------------------------------------------------------
 let csvRows = [];
+
+// -------------------------------------------------------
+// Pending requests
+// -------------------------------------------------------
+function renderPendingRequests(requests) {
+  const btn    = document.getElementById('pending-btn');
+  const badge  = document.getElementById('pending-badge');
+  const panel  = document.getElementById('pending-panel');
+  const list   = document.getElementById('pending-list');
+  const count  = requests.length;
+  badge.textContent = count;
+  btn.style.display = count > 0 ? '' : 'none';
+
+  if (!count) { list.innerHTML = ''; panel.style.display = 'none'; return; }
+
+  list.innerHTML = requests.map(r => {
+    const flags = [
+      r.full_time   ? 'Full Time' : '',
+      r.is_resident ? 'Resident'  : '',
+      r.is_owner    ? 'Owner'     : '',
+    ].filter(Boolean).join(' · ') || '—';
+    const date = r.submitted_at ? r.submitted_at.substring(0, 16).replace('T', ' ') : '';
+    return `<div class="req-card" id="req-card-${r.id}">
+      <div class="req-card-header">Unit ${esc(r.unit)} &mdash; ${esc(r.req_type)} &mdash; <span style="font-weight:400;color:#888;font-size:0.8rem;">${esc(date)}</span></div>
+      <div class="req-card-fields">
+        Submitted by: <strong>${esc(r.submitted_by)}</strong><br>
+        Name: <strong>${esc(r.first_name)} ${esc(r.last_name)}</strong><br>
+        ${r.email  ? `Email: ${esc(r.email)}<br>` : ''}
+        ${r.phone1 ? `Phone #1: ${esc(r.phone1)}<br>` : ''}
+        ${r.phone2 ? `Phone #2: ${esc(r.phone2)}<br>` : ''}
+        Status: ${flags}
+        ${r.notes  ? `<br>Notes: ${esc(r.notes)}` : ''}
+      </div>
+      <div class="req-card-actions">
+        <button class="btn-approve" onclick="approveRequest(${r.id})">✓ Approve</button>
+        <button class="btn-reject"  onclick="rejectRequest(${r.id})">✗ Reject</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togglePendingPanel() {
+  const panel = document.getElementById('pending-panel');
+  panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+}
+
+async function approveRequest(id) {
+  if (!confirm('Approve this request? The resident will be added to the database and sent a welcome email if an email address was provided.')) return;
+  const res = await apiFetch('approveRequest', { id });
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  const msg = res.emailSent
+    ? `Approved — resident added, welcome email sent to ${res.username}.`
+    : 'Approved — resident added. No email address on file.';
+  toast(msg, 'ok', 7000);
+  // Reload unit list and requests
+  const [dbRes, reqRes] = await Promise.all([apiFetch('listDatabase'), apiFetch('listRequests')]);
+  allRows = dbRes.rows || [];
+  unitMap = {};
+  allRows.forEach(r => { const u = String(r['Unit #']).trim(); if (u) (unitMap[u] = unitMap[u] || []).push(r); });
+  unitOrder = Object.keys(unitMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  renderUnits(unitOrder);
+  renderPendingRequests(reqRes.requests || []);
+}
+
+async function rejectRequest(id) {
+  if (!confirm('Reject and delete this request?')) return;
+  const res = await apiFetch('rejectRequest', { id });
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  toast('Request rejected.', 'ok');
+  const reqRes = await apiFetch('listRequests');
+  renderPendingRequests(reqRes.requests || []);
+}
 
 function toggleCsvPanel() {
   const panel = document.getElementById('csv-import-panel');

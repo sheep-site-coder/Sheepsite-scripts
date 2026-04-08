@@ -24,6 +24,9 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildingConfig = $buildings[$building];
 $webAppURL      = $buildingConfig['webAppURL'];
 $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
+
+$useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
 $sessionKey     = 'private_auth_' . $building;
 $returnURL      = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
@@ -96,7 +99,9 @@ if ($action) {
     // Load this resident's unit data
     case 'getMyUnit': {
       // Step 1: list all DB rows to find which unit this username belongs to
-      $dbRes = gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN]);
+      $dbRes = $useLocalDB
+        ? dbListDatabase($building)
+        : gasGet($webAppURL, ['page' => 'listDatabase', 'token' => OWNER_IMPORT_TOKEN]);
       if (!empty($dbRes['error'])) { echo json_encode($dbRes); exit; }
 
       $rows = $dbRes['rows'] ?? [];
@@ -119,7 +124,9 @@ if ($action) {
       }
 
       // Step 2: get full unit data
-      $unitRes = gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $myUnit]);
+      $unitRes = $useLocalDB
+        ? dbGetUnit($building, $myUnit)
+        : gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $myUnit]);
       echo json_encode($unitRes);
       exit;
     }
@@ -135,20 +142,30 @@ if ($action) {
       if (empty($body['matchUnit']) || empty($body['matchFirst']) || empty($body['matchLast'])) {
         echo json_encode(['error' => 'Missing required fields']); exit;
       }
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editDatabaseRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditResident($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
+      exit;
+    }
+
+    // Edit unit info row (UnitDB tab)
+    case 'editUnitRow': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode($useLocalDB
+        ? dbEditUnitInfo($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editUnitRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
     // Edit car row
     case 'editCarRow': {
       $body = json_decode(file_get_contents('php://input'), true) ?? [];
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action' => 'editCarRow',
-        'token'  => OWNER_IMPORT_TOKEN,
-      ])));
+      echo json_encode($useLocalDB
+        ? dbEditCar($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editCarRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
       exit;
     }
 
@@ -161,13 +178,120 @@ if ($action) {
       $dir          = rtrim(dirname($_SERVER['PHP_SELF']), '/');
       $adminUrl     = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                     . '/database-admin.php?building=' . urlencode($building);
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action'       => 'sendChangeRequest',
-        'token'        => OWNER_IMPORT_TOKEN,
-        'buildingName' => $buildLabel,
-        'contactEmail' => $contactEmail,
-        'adminUrl'     => $adminUrl,
-      ])));
+
+      if ($useLocalDB) {
+        $unit         = trim($body['unit']         ?? '');
+        $residentName = trim($body['residentName'] ?? '');
+        $reqType      = trim($body['reqType']      ?? '');
+        $firstName    = trim($body['firstName']    ?? '');
+        $lastName     = trim($body['lastName']     ?? '');
+        $email        = trim($body['email']        ?? '');
+        $phone1       = trim($body['phone1']       ?? '');
+        $phone2       = trim($body['phone2']       ?? '');
+        $notes        = trim($body['notes']        ?? '');
+
+        if ($reqType === 'Add resident') {
+          // Store in pending queue; admin approves/rejects in database-admin.php
+          dbAddRequest($building, [
+            'unit'         => $unit,
+            'submitted_by' => $residentName,
+            'req_type'     => $reqType,
+            'first_name'   => $firstName,
+            'last_name'    => $lastName,
+            'email'        => $email,
+            'phone1'       => $phone1,
+            'phone2'       => $phone2,
+            'full_time'    => !empty($body['fullTime']),
+            'is_resident'  => !empty($body['resident']),
+            'is_owner'     => !empty($body['owner']),
+            'notes'        => $notes,
+          ]);
+
+          // Notify admin — shorter email since full detail is in the approval queue
+          $toEmail = $contactEmail;
+          if (!$toEmail) {
+            $pdo  = getDB();
+            $stmt = $pdo->prepare(
+              "SELECT email FROM residents WHERE building = ? AND board_role = 'President' AND email != '' LIMIT 1"
+            );
+            $stmt->execute([$building]);
+            $toEmail = $stmt->fetchColumn() ?: '';
+          }
+          if ($toEmail) {
+            $subject = "[$buildLabel] Pending: Add resident request from Unit $unit";
+            $body2   = "A request to add a resident was submitted by $residentName (Unit $unit) "
+                     . "and is waiting for your approval.\n\n"
+                     . "Name: $firstName $lastName\n"
+                     . ($email  ? "Email:    $email\n"  : '')
+                     . ($phone1 ? "Phone #1: $phone1\n" : '')
+                     . ($notes  ? "Notes:    $notes\n"  : '')
+                     . "\nPlease log in to approve or reject:\n$adminUrl";
+            $headers = implode("\r\n", [
+              'From: SheepSite.com <noreply@sheepsite.com>',
+              'Reply-To: noreply@sheepsite.com',
+              'Content-Type: text/plain; charset=UTF-8',
+            ]);
+            mail($toEmail, $subject, $body2, $headers);
+          }
+          echo json_encode(['ok' => true]);
+
+        } else {
+          // Remove / Name correction — email-only, no queue
+          $toEmail = $contactEmail;
+          if (!$toEmail) {
+            $pdo  = getDB();
+            $stmt = $pdo->prepare(
+              "SELECT email FROM residents WHERE building = ? AND board_role = 'President' AND email != '' LIMIT 1"
+            );
+            $stmt->execute([$building]);
+            $toEmail = $stmt->fetchColumn() ?: '';
+          }
+          if (!$toEmail) {
+            echo json_encode(['error' => 'No contact email found. Set a Building Contact Email in admin → Building Settings.']);
+            exit;
+          }
+          $fullTime = !empty($body['fullTime']) ? 'Yes' : 'No';
+          $resident = !empty($body['resident']) ? 'Yes' : 'No';
+          $owner    = !empty($body['owner'])    ? 'Yes' : 'No';
+          $subject  = "[$buildLabel] Resident change request from Unit $unit";
+          $lines    = [
+            'A resident change request was submitted via the building website.',
+            '',
+            "Building:     $buildLabel",
+            "Unit:         $unit",
+            "Submitted by: $residentName",
+            '',
+            "Request type: $reqType",
+            "Name:         $firstName $lastName",
+          ];
+          if ($email)  $lines[] = "Email:        $email";
+          if ($phone1) $lines[] = "Phone #1:     $phone1";
+          if ($phone2) $lines[] = "Phone #2:     $phone2";
+          $lines[] = "Full Time:    $fullTime";
+          $lines[] = "Resident:     $resident";
+          $lines[] = "Owner:        $owner";
+          if ($notes) $lines[] = "Notes:        $notes";
+          $lines[] = '';
+          $lines[] = "Please log in to the admin panel and open Manage Residents/Owners → Unit $unit to make the change.";
+          $lines[] = '';
+          $lines[] = $adminUrl;
+          $headers = implode("\r\n", [
+            'From: SheepSite.com <noreply@sheepsite.com>',
+            'Reply-To: noreply@sheepsite.com',
+            'Content-Type: text/plain; charset=UTF-8',
+          ]);
+          $sent = mail($toEmail, $subject, implode("\n", $lines), $headers);
+          echo json_encode($sent ? ['ok' => true] : ['error' => 'Failed to send email.']);
+        }
+      } else {
+        echo json_encode(gasPost($webAppURL, array_merge($body, [
+          'action'       => 'sendChangeRequest',
+          'token'        => OWNER_IMPORT_TOKEN,
+          'buildingName' => $buildLabel,
+          'contactEmail' => $contactEmail,
+          'adminUrl'     => $adminUrl,
+        ])));
+      }
       exit;
     }
   }
@@ -317,7 +441,7 @@ const BUILD_LABEL = <?= json_encode($buildLabel) ?>;
 const USERNAME    = <?= json_encode($username) ?>;
 const SCRIPT_BASE = 'my-unit.php?building=' + encodeURIComponent(BUILDING);
 
-let myUnit     = null;
+let myUnit      = null;
 let myResidents = [];
 
 async function init() {
@@ -330,15 +454,14 @@ async function init() {
 
   myUnit      = res.unit;
   myResidents = res.residents || [];
-  const car   = res.car || {};
 
-  renderPage(myUnit, myResidents, car);
+  renderPage(myUnit, myResidents, res.car || {}, res.unitInfo || {});
 }
 
 // -------------------------------------------------------
 // Render
 // -------------------------------------------------------
-function renderPage(unit, residents, car) {
+function renderPage(unit, residents, car, unitInfo) {
   const main = document.getElementById('main-content');
   main.innerHTML = `
     <div style="font-size:0.9rem;color:#888;margin-bottom:1rem;">Unit ${esc(unit)}</div>
@@ -349,6 +472,9 @@ function renderPage(unit, residents, car) {
         onclick="openRequestPopup('${esc(unit)}')">Add/Remove Resident</button>
     </div>
     ${residents.map(r => residentCardHtml(unit, r)).join('') || '<p style="color:#888;font-size:0.9rem;">No residents on file.</p>'}
+
+    <div class="section-header">Unit Information</div>
+    ${unitInfoSectionHtml(unit, unitInfo)}
 
     <div class="section-header">Vehicle &amp; Parking</div>
     ${carSectionHtml(unit, car)}
@@ -376,10 +502,6 @@ function residentCardHtml(unit, r) {
       ${fieldPair('Email',   r['eMail'])}
       ${fieldPair('Phone 1', r['Phone #1'])}
       ${fieldPair('Phone 2', r['Phone #2'])}
-      ${fieldPair('Insurance', r['Insurance'])}
-      ${fieldPair('Policy #',  r['Policy #'])}
-      ${fieldPair('A/C Replaced',  r['AC Replaced'])}
-      ${fieldPair('Water Heater',  r['Water Tank'])}
     </div>
     <div class="person-actions">
       <button class="btn btn-primary btn-sm"
@@ -390,10 +512,6 @@ function residentCardHtml(unit, r) {
         <div><label>Email</label><input type="text" id="ef-email-${id}" value="${esc(r['eMail'])}"></div>
         <div><label>Phone #1</label><input type="text" id="ef-ph1-${id}" value="${esc(r['Phone #1'])}"></div>
         <div><label>Phone #2</label><input type="text" id="ef-ph2-${id}" value="${esc(r['Phone #2'])}"></div>
-        <div><label>Insurance</label><input type="text" id="ef-ins-${id}" value="${esc(r['Insurance'])}"></div>
-        <div><label>Policy #</label><input type="text" id="ef-pol-${id}" value="${esc(r['Policy #'])}"></div>
-        <div><label>A/C Replaced</label><input type="date" id="ef-ac-${id}" value="${esc(r['AC Replaced'])}"></div>
-        <div><label>Water Heater</label><input type="date" id="ef-wt-${id}" value="${esc(r['Water Tank'])}"></div>
       </div>
       <div style="margin-top:0.5rem;">
         <label style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:600;font-size:0.85rem;">
@@ -433,10 +551,6 @@ async function saveResident(unit, first, last, id) {
     'eMail':       document.getElementById('ef-email-' + id).value.trim(),
     'Phone #1':    document.getElementById('ef-ph1-'   + id).value.trim(),
     'Phone #2':    document.getElementById('ef-ph2-'   + id).value.trim(),
-    'Insurance':   document.getElementById('ef-ins-'   + id).value.trim(),
-    'Policy #':    document.getElementById('ef-pol-'   + id).value.trim(),
-    'AC Replaced': document.getElementById('ef-ac-'    + id).value,
-    'Water Tank':  document.getElementById('ef-wt-'    + id).value,
     'Full Time':   document.getElementById('ef-ft-'    + id).checked,
   });
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
@@ -444,9 +558,62 @@ async function saveResident(unit, first, last, id) {
   const refresh = await apiFetch('getMyUnit');
   if (!refresh.error) {
     myResidents = refresh.residents || [];
-    renderPage(myUnit, myResidents, refresh.car || {});
+    renderPage(myUnit, myResidents, refresh.car || {}, refresh.unitInfo || {});
   }
   toast('✓ Your info has been saved.');
+}
+
+// -------------------------------------------------------
+// Unit Information
+// -------------------------------------------------------
+function unitInfoSectionHtml(unit, u) {
+  u = u || {};
+  return `<div class="person-card">
+    <div class="field-grid">
+      ${fieldPair('Insurance',   u['Insurance'])}
+      ${fieldPair('Policy #',    u['Policy #'])}
+      ${fieldPair('A/C Replaced',  u['AC Replaced'])}
+      ${fieldPair('Water Heater',  u['Water Tank'])}
+    </div>
+    <div class="person-actions">
+      <button class="btn btn-primary btn-sm" onclick="showEditUnitInfo()">Edit</button>
+    </div>
+    <div class="edit-form" id="unit-info-edit-form">
+      <div class="field-grid">
+        <div><label>Insurance</label><input type="text" id="ui-ins" value="${esc(u['Insurance'])}"></div>
+        <div><label>Policy #</label><input type="text" id="ui-pol" value="${esc(u['Policy #'])}"></div>
+        <div><label>A/C Replaced</label><input type="date" id="ui-ac" value="${esc(u['AC Replaced'])}"></div>
+        <div><label>Water Heater</label><input type="date" id="ui-wt" value="${esc(u['Water Tank'])}"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm" onclick="saveUnitInfo('${esc(unit)}')">Save</button>
+        <button class="btn btn-secondary btn-sm"
+          onclick="document.getElementById('unit-info-edit-form').style.display='none'">Cancel</button>
+      </div>
+      <div id="ui-msg"></div>
+    </div>
+  </div>`;
+}
+
+function showEditUnitInfo() {
+  document.getElementById('unit-info-edit-form').style.display = 'block';
+}
+
+async function saveUnitInfo(unit) {
+  const msgEl = document.getElementById('ui-msg');
+  showMsg(msgEl, 'Saving…', 'info');
+  const res = await apiPost('editUnitRow', {
+    'Unit #':       unit,
+    'Insurance':    document.getElementById('ui-ins').value.trim(),
+    'Policy #':     document.getElementById('ui-pol').value.trim(),
+    'AC Replaced':  document.getElementById('ui-ac').value,
+    'Water Tank':   document.getElementById('ui-wt').value,
+  });
+  if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
+  document.getElementById('unit-info-edit-form').style.display = 'none';
+  const refresh = await apiFetch('getMyUnit');
+  if (!refresh.error) renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {});
+  toast('✓ Unit information has been saved.');
 }
 
 // -------------------------------------------------------
@@ -503,7 +670,7 @@ async function saveCar(unit) {
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
   document.getElementById('car-edit-form').style.display = 'none';
   const refresh = await apiFetch('getMyUnit');
-  if (!refresh.error) renderPage(myUnit, refresh.residents || [], refresh.car || {});
+  if (!refresh.error) renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {});
   toast('✓ Vehicle info has been saved.');
 }
 

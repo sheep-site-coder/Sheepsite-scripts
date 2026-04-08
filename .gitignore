@@ -10,3 +10,6 @@ faqs/woolsy_credits.json
 
 # Local working files — PDFs, screenshots, etc.
 Sharefolder/
+
+# Local deployment staging — never commit
+_deploy/

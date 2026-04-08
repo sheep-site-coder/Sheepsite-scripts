@@ -28,6 +28,9 @@ if (!$building || !array_key_exists($building, $buildings)) {
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 $sessionKey = 'manage_auth_' . $building;
 
+$useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
+
 // Load per-building admin credentials
 $adminCredFile = CREDENTIALS_DIR . $building . '_admin.json';
 if (!file_exists($adminCredFile)) {
@@ -235,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existingIdx = array_key_last($users);
       }
 
-      // Try to email the temp password via Apps Script (works for both new and existing residents)
+      // Try to email the temp password
       $webAppURL = $buildings[$building]['webAppURL'] ?? '';
       $scheme    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
       $dir       = rtrim(dirname($_SERVER['PHP_SELF']), '/');
@@ -243,7 +246,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  . '/display-private-dir.php?building=' . urlencode($building);
 
       $emailSent = false;
-      if ($webAppURL) {
+      if ($useLocalDB) {
+        $residentEmail = dbGetEmailByUsername($building, $user);
+        if ($residentEmail) {
+          $emailSent = sendTempPasswordEmail($residentEmail, $user, $pass, $loginURL, $buildLabel);
+        }
+      } elseif ($webAppURL) {
         $resetURL  = $webAppURL
                    . '?page=resetpw'
                    . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
@@ -282,57 +290,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   elseif (isset($_POST['sync_only'])) {
-    $webAppURL = $buildings[$building]['webAppURL'] ?? '';
-    if (!$webAppURL) {
-      $message = 'No webAppURL configured for this building.';
-      $messageType = 'error';
+    if ($useLocalDB) {
+      $dbResult = dbListDatabase($building);
+      $owners = array_map(fn($r) => [
+        'firstName' => $r['First Name'],
+        'lastName'  => $r['Last Name'],
+      ], $dbResult['rows'] ?? []);
+      $data = ['owners' => $owners];
+      $syncError = false;
     } else {
-      $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
-      $ctx      = stream_context_create(['http' => ['timeout' => 30]]);
-      $response = @file_get_contents($url, false, $ctx);
-      if ($response === false) {
-        $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
+      $webAppURL = $buildings[$building]['webAppURL'] ?? '';
+      if (!$webAppURL) {
+        $message = 'No webAppURL configured for this building.';
         $messageType = 'error';
+        $syncError = true;
       } else {
-        $data = json_decode($response, true);
-        if (!empty($data['error'])) {
-          $message = 'Sheet error: ' . $data['error'];
+        $url      = $webAppURL . '?page=owners&token=' . urlencode(OWNER_IMPORT_TOKEN);
+        $ctx      = stream_context_create(['http' => ['timeout' => 30]]);
+        $response = @file_get_contents($url, false, $ctx);
+        if ($response === false) {
+          $message = 'Could not reach the Google Sheet. Check the webAppURL for this building.';
           $messageType = 'error';
+          $syncError = true;
         } else {
-          $users   = loadUsers($building);
-          $existing = array_column($users, 'user');
-
-          // Orphans: web accounts with no matching database record
-          $orphans = [];
-          foreach ($users as $u) {
-            if (!isLinkedToDatabase($u['user'], $data['owners'])) {
-              $orphans[] = $u['user'];
-            }
+          $data = json_decode($response, true);
+          if (!empty($data['error'])) {
+            $message = 'Sheet error: ' . $data['error'];
+            $messageType = 'error';
+            $syncError = true;
+          } else {
+            $syncError = false;
           }
-          $_SESSION['sync_orphans_' . $building] = $orphans;
-
-          // Missing: database residents with no web account
-          $missing = [];
-          $taken   = [];
-          foreach ($data['owners'] as $owner) {
-            $firstName = $owner['firstName'] ?? '';
-            $lastName  = $owner['lastName']  ?? '';
-            if (!$lastName) continue;
-            $base = makeUsername($firstName, $lastName);
-            $taken[$base] = ($taken[$base] ?? 0) + 1;
-            $uname = $taken[$base] === 1 ? $base : $base . $taken[$base];
-            if (!in_array($uname, $existing)) {
-              $missing[] = ['user' => $uname, 'firstName' => $firstName, 'lastName' => $lastName];
-            }
-          }
-          $_SESSION['sync_missing_' . $building] = $missing;
-
-          $parts = [];
-          if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
-          if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
-          $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
         }
       }
+    }
+    if (!($syncError ?? false)) {
+      $users    = loadUsers($building);
+      $existing = array_column($users, 'user');
+
+      // Orphans: web accounts with no matching database record
+      $orphans = [];
+      foreach ($users as $u) {
+        if (!isLinkedToDatabase($u['user'], $data['owners'])) {
+          $orphans[] = $u['user'];
+        }
+      }
+      $_SESSION['sync_orphans_' . $building] = $orphans;
+
+      // Missing: database residents with no web account
+      $missing = [];
+      $taken   = [];
+      foreach ($data['owners'] as $owner) {
+        $firstName = $owner['firstName'] ?? '';
+        $lastName  = $owner['lastName']  ?? '';
+        if (!$lastName) continue;
+        $base = makeUsername($firstName, $lastName);
+        $taken[$base] = ($taken[$base] ?? 0) + 1;
+        $uname = $taken[$base] === 1 ? $base : $base . $taken[$base];
+        if (!in_array($uname, $existing)) {
+          $missing[] = ['user' => $uname, 'firstName' => $firstName, 'lastName' => $lastName];
+        }
+      }
+      $_SESSION['sync_missing_' . $building] = $missing;
+
+      $parts = [];
+      if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
+      if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
+      $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
     }
   }
 
@@ -354,8 +378,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tmpHash  = password_hash($tmpPw, PASSWORD_DEFAULT);
         $users[]  = ['user' => $m['user'], 'pass' => $tmpHash, 'mustChange' => true];
         $added++;
-        // Email the new temp password via Apps Script
-        if ($webAppURL) {
+        // Email the new temp password
+        if ($useLocalDB) {
+          $residentEmail = dbGetEmailByUsername($building, $m['user']);
+          if ($residentEmail && sendTempPasswordEmail($residentEmail, $m['user'], $tmpPw, $loginURL, $buildLabel, true)) {
+            $emailed++;
+          }
+        } elseif ($webAppURL) {
           $resetURL = $webAppURL
                     . '?page=resetpw'
                     . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
@@ -398,19 +427,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $message = 'New password cannot be empty.';
       $messageType = 'error';
     } else {
-      $users = loadUsers($building);
-      $found = false;
-      foreach ($users as &$u) {
-        if ($u['user'] === $user) {
-          $u['pass'] = password_hash($newpass, PASSWORD_DEFAULT);
-          $found = true;
-          break;
-        }
+      $users    = loadUsers($building);
+      $foundIdx = null;
+      foreach ($users as $i => $u) {
+        if ($u['user'] === $user) { $foundIdx = $i; break; }
       }
-      unset($u);
-      if ($found) {
+      if ($foundIdx !== null) {
+        $users[$foundIdx]['pass'] = password_hash($newpass, PASSWORD_DEFAULT);
+
+        // Email the new password if resident has an email in the DB
+        $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+        $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                  . '/display-private-dir.php?building=' . urlencode($building);
+        $emailSent = false;
+        if ($useLocalDB) {
+          $residentEmail = dbGetEmailByUsername($building, $user);
+          if ($residentEmail) {
+            $emailSent = sendTempPasswordEmail($residentEmail, $user, $newpass, $loginURL, $buildLabel);
+          }
+        }
+        if ($emailSent) {
+          $users[$foundIdx]['mustChange'] = true;
+        }
         saveUsers($building, $users);
-        $message = "Password updated for \"$user\".";
+        $message = $emailSent
+          ? "Password updated for \"$user\" — temporary password emailed to resident."
+          : "Password updated for \"$user\".";
       } else {
         $message = "Resident \"$user\" not found.";
         $messageType = 'error';
@@ -546,26 +589,10 @@ $users = loadUsers($building);
   <strong>Run this whenever a resident moves out</strong> and periodically as a routine check.
   You review and confirm all changes before anything is modified.
 </p>
-<button type="button" class="add-btn" onclick="document.getElementById('sync-modal').style.display='flex'">Sync Now</button>
-
 <form id="sync-form" method="post" action="manage-users.php?building=<?= urlencode($building) ?>">
   <input type="hidden" name="sync_only" value="1">
 </form>
-<div id="sync-modal" class="modal-overlay" style="display:none;">
-  <div class="modal-box">
-    <h3>Sync Web Accounts with Database</h3>
-    <p>This will compare all web login accounts against the association database and identify:</p>
-    <ul>
-      <li><strong>Orphaned accounts</strong> — web logins with no matching resident in the database (e.g. someone who moved out)</li>
-      <li><strong>Missing accounts</strong> — database residents with no web login (e.g. imported but never activated)</li>
-    </ul>
-    <p>You will review and confirm all changes before anything is modified.</p>
-    <div class="modal-actions">
-      <button type="button" class="btn-proceed" onclick="document.getElementById('sync-modal').style.display='none';document.getElementById('sync-form').submit()">Proceed</button>
-      <button type="button" class="btn-cancel" onclick="document.getElementById('sync-modal').style.display='none'">Cancel</button>
-    </div>
-  </div>
-</div>
+<button type="button" class="add-btn" onclick="openSyncConfirm()">Sync Now</button>
 
 <div id="mu-confirm-overlay" class="modal-overlay" style="display:none;">
   <div class="modal-box">
@@ -591,7 +618,6 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
   <p>The following web accounts have no matching resident in the association database.
      Check the ones you want to remove, then click Remove. Uncheck anyone you want to keep.</p>
   <form method="post" onsubmit="this.querySelector('.remove-checked-btn').disabled=true;this.querySelector('.remove-checked-btn').textContent='Removing\u2026'">
-    <input type="hidden" name="remove_orphans" value="1">
     <ul class="sync-list">
       <?php foreach ($syncOrphans as $orphan): ?>
       <li>
@@ -601,6 +627,7 @@ if ($syncOrphans !== null && count($syncOrphans) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
+      <input type="hidden" name="remove_orphans" value="1">
       <button type="submit" class="remove-checked-btn">Remove checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_orphans=1" class="keep-all-link">Keep all / dismiss</a>
     </div>
@@ -618,7 +645,6 @@ if ($syncMissing !== null && count($syncMissing) > 0):
   <h2 style="color:#1e40af;">Missing Accounts — <?= count($syncMissing) ?> resident(s) in database with no web account</h2>
   <p style="color:#1e40af;">These residents exist in the association database but have no web login. This may be due to an accidental deletion or a resident added without an email address. Check the ones you want to recreate — a temporary password will be generated automatically and a welcome email sent to each resident.</p>
   <form method="post" onsubmit="this.querySelector('.recreate-btn').disabled=true;this.querySelector('.recreate-btn').textContent='Creating accounts\u2026'">
-    <input type="hidden" name="recreate_missing" value="1">
     <ul class="sync-list" style="border-color:#bfdbfe;">
       <?php foreach ($syncMissing as $m): ?>
       <li style="border-color:#bfdbfe;">
@@ -632,6 +658,7 @@ if ($syncMissing !== null && count($syncMissing) > 0):
       <?php endforeach; ?>
     </ul>
     <div class="sync-actions">
+      <input type="hidden" name="recreate_missing" value="1">
       <button type="submit" class="add-btn recreate-btn" style="background:#1d4ed8;">Recreate checked</button>
       <a href="?building=<?= urlencode($building) ?>&dismiss_missing=1" class="keep-all-link">Dismiss</a>
     </div>
@@ -695,14 +722,38 @@ if ($syncMissing !== null && count($syncMissing) > 0):
 <?php endif; ?>
 
 <script>
+// ---- Sync ----
+function openSyncConfirm() {
+  showConfirm(
+    'Sync accounts?',
+    'Compares web accounts against the database in both directions.<br><br>' +
+    'Orphaned and missing accounts will be listed for review. ' +
+    '<strong>Nothing is changed until you confirm.</strong>',
+    'Proceed',
+    function() { document.getElementById('sync-form').submit(); }
+  );
+}
+
 // ---- Confirm modal ----
 var confirmCb = null;
-function showConfirm(title, bodyHtml, proceedLabel, onProceed) {
+function showConfirm(title, bodyHtml, proceedLabel, onProceed, proceedColor) {
   document.getElementById('mu-confirm-title').textContent = title;
   document.getElementById('mu-confirm-body').innerHTML    = bodyHtml;
-  document.getElementById('mu-confirm-proceed').textContent = proceedLabel;
+  var btn = document.getElementById('mu-confirm-proceed');
+  btn.textContent = proceedLabel;
+  var color = proceedColor || '#0070f3';
+  btn.style.background = color;
+  btn.onmouseover = function() { this.style.background = proceedColor ? shadeColor(color, -20) : '#005bb5'; };
+  btn.onmouseout  = function() { this.style.background = color; };
   confirmCb = onProceed;
   document.getElementById('mu-confirm-overlay').style.display = 'flex';
+}
+function shadeColor(hex, pct) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = Math.max(0, Math.min(255, (n >> 16) + pct));
+  var g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + pct));
+  var b = Math.max(0, Math.min(255, (n & 0xff) + pct));
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
 }
 function closeMuConfirm() {
   document.getElementById('mu-confirm-overlay').style.display = 'none';
@@ -721,7 +772,8 @@ function confirmRemoveUser(btn) {
     'Remove ' + user + '?',
     'This will permanently delete the web login for <strong>' + user + '</strong>. The resident will no longer be able to log in.',
     'Remove',
-    function() { document.getElementById(formId).submit(); }
+    function() { document.getElementById(formId).submit(); },
+    '#c00'
   );
 }
 

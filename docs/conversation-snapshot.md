@@ -897,5 +897,53 @@ web credentials from CSV data, but the CSV should be populating the *resident da
 
 ---
 
-*Snapshot updated: April 5, 2026 (session 29 — Woolsy CORS bug fix)*
+## Session 30 — MySQL DB layer (feature/unitdb) + manage-users.php button bug fixes
+
+### branch: feature/unitdb (deployed to qgscratch.website/Scripts/)
+
+- **QGscratch MySQL DB** — `qgscrmoq_unitsdb` database on localhost. 25 residents imported.
+  `$useLocalDB` flag: true when `db/db.php` + `credentials/db.json` both exist.
+
+- **db/db.php** (NEW) — PDO singleton; reads host/dbname/user/pass from `credentials/db.json` (gitignored)
+
+- **db/residents.php** (NEW) — Full CRUD for residents, car_db, unit_info, emergency tables.
+  GAS field-name ↔ MySQL column mapping helpers. All functions return GAS-style arrays so callers need minimal changes.
+
+- **database-admin.php**, **my-unit.php**, **manage-users.php** — wired to use MySQL when `$useLocalDB` true.
+  GAS fallback preserved for buildings without db.json.
+
+- **import-sheet-to-db.php** (NEW) — One-time import tool. QGscratch already done.
+  Keep on server for LyndhurstH, LyndhurstI, SampleSite.
+
+- **manage-users.php** — Sync handler: in DB mode, reads from MySQL instead of GAS.
+  Sync, Remove Checked, Recreate Checked all confirmed working on qgscratch.website.
+
+### manage-users.php button bug — all branches fixed
+
+**Root cause (2 hrs to debug):** `onclick="this.disabled=true"` on a `<button type="submit">`
+cancels the entire form submission in Safari and some other browsers. Proven via sync-test.php
+with 3 test variants. Test D (form onsubmit) confirmed the fix.
+
+**Fix applied to both `main` and `feature/unitdb`:**
+- `name=` moved from `<button>` to `<input type="hidden">` for `remove_orphans` and `recreate_missing`
+- Button disable moved to `<form onsubmit="...">` instead of `onclick` on the button
+- Sync Now: form moved outside modal div; Proceed calls `form.submit()` via named JS function
+  (`openSyncConfirm()` in feature/unitdb, inline in main's static modal)
+- All GAS `file_get_contents()` calls given explicit timeouts (10s email, 30s sync) to prevent hangs
+
+### Pending before merging feature/unitdb to main
+1. Test email sending on account creation — expected from `noreply@sheepsite.com`
+2. Test `my-unit.php` with MySQL
+3. Test `database-admin.php` full CRUD with MySQL
+4. Import LyndhurstH, LyndhurstI, SampleSite via `import-sheet-to-db.php`
+5. Run Sync for each building — verify no orphans/missing (accounts should already exist)
+6. Merge feature/unitdb → main and deploy to sheepsite.com/Scripts/
+
+### Other outstanding items
+- **Invoice cron** — `storage-cron.php` renewal invoice generation not working. Not yet diagnosed.
+  Start by running `?token=sh33pCr0nN0jje59dd26` and reading `storage-cron.log`.
+
+---
+
+*Snapshot updated: April 6, 2026 (session 30 — MySQL DB layer, button bug fixes)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
