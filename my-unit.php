@@ -27,6 +27,7 @@ $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
 
 $useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
 if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
+require_once __DIR__ . '/db/admin-helpers.php';
 $sessionKey     = 'private_auth_' . $building;
 $returnURL      = $_GET['return'] ?? '';
 if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
@@ -172,9 +173,14 @@ if ($action) {
     // Send change request email
     case 'sendChangeRequest': {
       $body         = json_decode(file_get_contents('php://input'), true) ?? [];
-      $cfg          = loadBuildingConfig($building);
-      $contactEmail = trim($cfg['contactEmail'] ?? '');
-      $scheme       = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+      $cfg    = loadBuildingConfig($building);
+      $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+
+      // Build admin notification list: all admin emails → contactEmail → President
+      $adminEmails = array_values(array_filter(
+        array_column(loadAdminCreds(CREDENTIALS_DIR . $building . '_admin.json'), 'email')
+      ));
+      $notifyTo    = $adminEmails ? implode(', ', $adminEmails) : trim($cfg['contactEmail'] ?? '');
       $dir          = rtrim(dirname($_SERVER['PHP_SELF']), '/');
       $adminUrl     = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                     . '/database-admin.php?building=' . urlencode($building);
@@ -208,7 +214,7 @@ if ($action) {
           ]);
 
           // Notify admin — shorter email since full detail is in the approval queue
-          $toEmail = $contactEmail;
+          $toEmail = $notifyTo;
           if (!$toEmail) {
             $pdo  = getDB();
             $stmt = $pdo->prepare(
@@ -237,7 +243,7 @@ if ($action) {
 
         } else {
           // Remove / Name correction — email-only, no queue
-          $toEmail = $contactEmail;
+          $toEmail = $notifyTo;
           if (!$toEmail) {
             $pdo  = getDB();
             $stmt = $pdo->prepare(
@@ -247,7 +253,7 @@ if ($action) {
             $toEmail = $stmt->fetchColumn() ?: '';
           }
           if (!$toEmail) {
-            echo json_encode(['error' => 'No contact email found. Set a Building Contact Email in admin → Building Settings.']);
+            echo json_encode(['error' => 'No admin email found. Add an email to an admin account in Admin → Admin Accounts.']);
             exit;
           }
           $fullTime = !empty($body['fullTime']) ? 'Yes' : 'No';
