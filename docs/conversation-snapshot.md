@@ -1,5 +1,5 @@
 # Conversation Snapshot - Sheepsite-scripts
-**Date:** March 28, 2026 (updated)
+**Date:** April 8, 2026 (updated)
 
 ---
 
@@ -945,5 +945,95 @@ with 3 test variants. Test D (form onsubmit) confirmed the fix.
 
 ---
 
-*Snapshot updated: April 6, 2026 (session 30 — MySQL DB layer, button bug fixes)*
+---
+
+## Session 31 — Multi-admin, Assume Admin, self-serve admin reset, DB-only architecture
+
+### branch: feature/unitdb → merged to main
+
+All three admin features fully implemented, documented, and merged to main.
+
+**db/admin-helpers.php** (NEW shared library)
+- `loadAdminCreds($file)` — loads admin JSON array; auto-wraps legacy single-object files for backward compat
+- `saveAdminCreds($file, $admins)` — writes back as JSON array
+- `findAdmin($admins, $user)` — lookup by username
+- `findAdminByPassword($admins, $user, $pass)` — bcrypt verify
+- `updateAdminEntry($admins, $user, $changes)` — merges changes; null value removes key
+
+**_admin.json format changed from single object to array:**
+```json
+[
+  {"user": "admin", "pass": "$2y$...", "email": "president@example.com", "mustChange": false},
+  {"user": "jsmith", "pass": "$2y$...", "email": "jsmith@example.com"}
+]
+```
+Backward compat: `loadAdminCreds()` wraps legacy single-object files transparently.
+
+**Session format changed:** `manage_auth_{building}` now stores `{user, email}` array (was plain `true`).
+Legacy sessions auto-invalidated on first page load via migration guard in admin.php and manage-users.php.
+Master assumed sessions store `{user: "_master", email: ""}`.
+
+**Admin Accounts UI (admin.php)**
+- New section lists all admins: username, email (inline editable), Remove button
+- Add Admin form (collapsible) — username, email, temp password; all new accounts get mustChange:true
+- "Cannot remove yourself" guard; must keep at least one admin
+- Master admin bypasses password-change form — shows advisory message instead
+
+**Assume Admin (master-admin.php → admin.php)**
+- "Assume Admin" button on each building card in master-admin.php
+- POSTs `assume_building=X`, sets `manage_auth_{building}` session as `_master`
+- Blue banner in admin.php: "Logged in as master admin (assumed)" with "Release ×" link
+- No building admin password required
+
+**Self-serve admin reset (forgot-password.php)**
+- Admin reset now requires TWO fields: admin username + President's unit number (secret)
+- Both validated together — failure message: "Admin name or Secret does not match our records." (no hint which failed)
+- Success: temp password emailed to the admin's own `email` field in `_admin.json`
+- Bootstrap (setup=1): if no admin file exists, temp pw sent to President's DB email; new entry created
+
+**Notification routing (my-unit.php)**
+- Change-request notifications now route to all admin emails from `_admin.json`
+- Fallback chain: admin emails → contactEmail → error
+- `contactEmail` / "Building contact email" renamed "Billing contact email" everywhere (admin.php, building-detail.php)
+
+**Architecture / documentation**
+- All GAS/Sheets references purged from user manual (build-manual.py) and architecture doc (build-architecture.py)
+- Sheets .gs files marked Decommissioned in architecture; entire GAS-for-resident-data section retired
+- DB-only architecture fully documented; `$useLocalDB` flag language removed
+- Architecture doc: added `db/admin-helpers.php`; session format section; Assume Admin flow section
+
+### Pending deployment (15 files to upload to sheepsite.com/Scripts/)
+```
+db/db.php
+db/residents.php
+db/admin-helpers.php
+admin.php
+association-remove.php
+building-detail.php
+database-admin.php
+forgot-password.php
+manage-users.php
+master-admin.php
+my-unit.php
+protected-report.php
+public-report.php
+import-sheet-to-db.php
+docs/Sheepsite-Admin-Manual.html
+docs/Sheepsite-Architecture.html
+```
+
+### Post-deploy steps
+1. Run `import-sheet-to-db.php` for LyndhurstH, LyndhurstI, SampleSite (one-time migration)
+2. Sync each building in Manage User Accounts — confirm no orphans/missing
+3. Verify reports, forgot-password admin reset, Admin Accounts UI on live site
+4. Delete `import-sheet-to-db.php` from server
+5. Note: first login after deploy invalidates legacy `true` sessions — users re-login once
+
+### Outstanding items
+- **Invoice cron** — `storage-cron.php` renewal invoice generation not working; not yet diagnosed
+- **ToS user manual** — Task 5 from session 19 still pending (document ToS flow in manual)
+
+---
+
+*Snapshot updated: April 8, 2026 (session 31 — multi-admin, Assume Admin, self-serve reset, DB-only docs)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
