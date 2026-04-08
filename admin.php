@@ -177,6 +177,85 @@ if (empty($_SESSION[$sessionKey])) {
   exit;
 }
 
+// Derive logged-in user identity (used by all POST handlers below)
+$loggedInUser = is_array($_SESSION[$sessionKey]) ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
+
+// -------------------------------------------------------
+// Manage Admins — handle POST
+// -------------------------------------------------------
+$adminsMessage     = '';
+$adminsMessageType = 'ok';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_admin'])) {
+  $newUser  = strtolower(trim($_POST['new_admin_user']  ?? ''));
+  $newEmail = trim($_POST['new_admin_email'] ?? '');
+  $newPass  = $_POST['new_admin_pass']  ?? '';
+  $newCreds = loadAdminCreds($adminCredFile);
+  if (!preg_match('/^[a-z][a-z0-9]{1,29}$/', $newUser)) {
+    $adminsMessage     = 'Username must be 2–30 lowercase letters/numbers, starting with a letter.';
+    $adminsMessageType = 'error';
+  } elseif (strlen($newPass) < 8) {
+    $adminsMessage     = 'Password must be at least 8 characters.';
+    $adminsMessageType = 'error';
+  } elseif (findAdmin($newCreds, $newUser)) {
+    $adminsMessage     = 'That username already exists.';
+    $adminsMessageType = 'error';
+  } else {
+    $newCreds[] = ['user' => $newUser, 'pass' => password_hash($newPass, PASSWORD_DEFAULT), 'email' => $newEmail];
+    if (saveAdminCreds($adminCredFile, $newCreds)) {
+      $adminsMessage = 'Admin account "' . htmlspecialchars($newUser) . '" created.';
+    } else {
+      $adminsMessage     = 'Could not save — check that the credentials/ folder is writable.';
+      $adminsMessageType = 'error';
+    }
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_admin'])) {
+  $removeUser = trim($_POST['remove_admin_user'] ?? '');
+  $newCreds   = loadAdminCreds($adminCredFile);
+  if ($removeUser === $loggedInUser) {
+    $adminsMessage     = 'You cannot remove your own account.';
+    $adminsMessageType = 'error';
+  } elseif (count($newCreds) <= 1) {
+    $adminsMessage     = 'Cannot remove the last admin account.';
+    $adminsMessageType = 'error';
+  } elseif (!findAdmin($newCreds, $removeUser)) {
+    $adminsMessage     = 'Admin not found.';
+    $adminsMessageType = 'error';
+  } else {
+    $newCreds = array_values(array_filter($newCreds, fn($a) => $a['user'] !== $removeUser));
+    if (saveAdminCreds($adminCredFile, $newCreds)) {
+      $adminsMessage = 'Admin account "' . htmlspecialchars($removeUser) . '" removed.';
+    } else {
+      $adminsMessage     = 'Could not save — check that the credentials/ folder is writable.';
+      $adminsMessageType = 'error';
+    }
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_admin_email'])) {
+  $editUser  = trim($_POST['edit_admin_user']  ?? '');
+  $editEmail = trim($_POST['edit_admin_email'] ?? '');
+  $newCreds  = loadAdminCreds($adminCredFile);
+  if (!findAdmin($newCreds, $editUser)) {
+    $adminsMessage     = 'Admin not found.';
+    $adminsMessageType = 'error';
+  } else {
+    $newCreds = updateAdminEntry($newCreds, $editUser, ['email' => $editEmail]);
+    if (saveAdminCreds($adminCredFile, $newCreds)) {
+      $adminsMessage = 'Email updated for "' . htmlspecialchars($editUser) . '".';
+      // Refresh session email if editing own account
+      if ($editUser === $loggedInUser) {
+        $_SESSION[$sessionKey]['email'] = $editEmail;
+      }
+    } else {
+      $adminsMessage     = 'Could not save — check that the credentials/ folder is writable.';
+      $adminsMessageType = 'error';
+    }
+  }
+}
+
 // -------------------------------------------------------
 // Building Settings — handle POST
 // -------------------------------------------------------
@@ -198,7 +277,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_building_setting
 // mustChange check — re-read credential file after any POST
 // -------------------------------------------------------
 $adminCreds    = loadAdminCreds($adminCredFile);
-$loggedInUser  = is_array($_SESSION[$sessionKey]) ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
 $loggedInAdmin = ($loggedInUser && $loggedInUser !== '_master') ? findAdmin($adminCreds, $loggedInUser) : null;
 $mustChange    = $loggedInAdmin && !empty($loggedInAdmin['mustChange']);
 
@@ -570,6 +648,87 @@ if (!$mustChange) {
 
   <hr>
 <?php endif; ?>
+
+<!-- ── Manage Admins ── -->
+<h2>Admin Accounts</h2>
+
+<?php if ($adminsMessage): ?>
+  <div class="message <?= $adminsMessageType ?>"><?= htmlspecialchars($adminsMessage) ?></div>
+<?php endif; ?>
+
+<?php
+  $currentAdmins = loadAdminCreds($adminCredFile);
+?>
+<table style="width:100%;border-collapse:collapse;font-size:0.875rem;margin-bottom:1rem;">
+  <thead>
+    <tr>
+      <th style="text-align:left;padding:5px 8px;border-bottom:2px solid #eee;color:#777;font-size:0.78rem;font-weight:600;">Username</th>
+      <th style="text-align:left;padding:5px 8px;border-bottom:2px solid #eee;color:#777;font-size:0.78rem;font-weight:600;">Email</th>
+      <th style="padding:5px 8px;border-bottom:2px solid #eee;"></th>
+    </tr>
+  </thead>
+  <tbody>
+  <?php foreach ($currentAdmins as $adm): ?>
+    <tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;font-family:monospace;">
+        <?= htmlspecialchars($adm['user']) ?>
+        <?php if ($adm['user'] === $loggedInUser): ?>
+          <span style="font-family:sans-serif;font-size:0.75rem;color:#888;">(you)</span>
+        <?php endif; ?>
+        <?php if (!empty($adm['mustChange'])): ?>
+          <span style="font-family:sans-serif;font-size:0.75rem;color:#d97706;">temp pw</span>
+        <?php endif; ?>
+      </td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">
+        <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+              style="display:flex;gap:0.4rem;align-items:center;">
+          <input type="hidden" name="edit_admin_user" value="<?= htmlspecialchars($adm['user']) ?>">
+          <input type="text" name="edit_admin_email"
+                 value="<?= htmlspecialchars($adm['email'] ?? '') ?>"
+                 placeholder="email@example.com"
+                 style="width:220px;padding:0.3rem 0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.85rem;">
+          <button type="submit" name="update_admin_email" class="save-btn" style="padding:0.3rem 0.7rem;font-size:0.8rem;">Save</button>
+        </form>
+      </td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;">
+        <?php if ($adm['user'] !== $loggedInUser && count($currentAdmins) > 1): ?>
+          <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+                onsubmit="return confirm('Remove admin account <?= htmlspecialchars(addslashes($adm['user'])) ?>?');">
+            <input type="hidden" name="remove_admin_user" value="<?= htmlspecialchars($adm['user']) ?>">
+            <button type="submit" name="remove_admin" style="background:none;border:none;color:#dc2626;font-size:0.85rem;cursor:pointer;padding:0;">Remove</button>
+          </form>
+        <?php endif; ?>
+      </td>
+    </tr>
+  <?php endforeach; ?>
+  </tbody>
+</table>
+
+<details style="margin-bottom:2rem;">
+  <summary style="cursor:pointer;font-size:0.9rem;color:#0070f3;font-weight:600;margin-bottom:0.75rem;">+ Add admin account</summary>
+  <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+        style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end;margin-top:0.75rem;max-width:640px;">
+    <div style="flex:1;min-width:140px;">
+      <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Username</label>
+      <input type="text" name="new_admin_user" autocapitalize="none" autocomplete="off"
+             placeholder="jsmith"
+             style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+    </div>
+    <div style="flex:2;min-width:180px;">
+      <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Email</label>
+      <input type="text" name="new_admin_email" autocomplete="off" placeholder="jsmith@example.com"
+             style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+    </div>
+    <div style="flex:2;min-width:160px;">
+      <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Password</label>
+      <input type="password" name="new_admin_pass" autocomplete="new-password"
+             style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+    </div>
+    <button type="submit" name="add_admin" class="save-btn">Add</button>
+  </form>
+</details>
+
+<hr>
 
 <h2>Change Admin Password</h2>
 
