@@ -234,8 +234,17 @@ html = f"""<!DOCTYPE html>
 <h3>Copying All Resident Emails</h3>
 <p>Click <strong>Get Email List</strong> in the toolbar to copy all resident email addresses to your clipboard. Paste into the <strong>BCC</strong> field of your email client to send a community-wide message.</p>
 
+<h3>Resident Change Requests &mdash; Pending Queue</h3>
+<p>When a resident submits an &ldquo;Add Resident&rdquo; request from the My Unit page, it goes into a pending queue rather than just sending an email. You will see a <strong>Pending Requests</strong> button with a badge count on the Manage Residents/Owners page whenever requests are waiting.</p>
+<p>Click the button to open the queue. Each request shows the submitted details. You have two options:</p>
+<ul>
+  <li><strong>Accept</strong> &mdash; creates the database record, creates a web login, and sends the resident a welcome email with a temporary password automatically</li>
+  <li><strong>Reject</strong> &mdash; removes the request from the queue with no further action</li>
+</ul>
+<p>You do not need to copy-paste any data manually &mdash; accepting a request does everything in one step.</p>
+
 <h3>Automated Reports</h3>
-<p>The following reports are generated automatically from the resident database within about a minute of any change:</p>
+<p>The following reports are served directly from the resident database and are always current:</p>
 <table>
   <tr><th>Report</th><th>Access</th></tr>
   <tr><td>Resident List</td><td>Private (residents only)</td></tr>
@@ -243,6 +252,7 @@ html = f"""<!DOCTYPE html>
   <tr><td>Parking List</td><td>Private (residents only)</td></tr>
   <tr><td>Board of Directors</td><td>Public</td></tr>
 </table>
+<p>Residents access these reports the same way as always &mdash; through the building website. No Google Sheets or spreadsheet access is needed. Changes made in <strong>Manage Residents/Owners</strong> are reflected in the reports immediately.</p>
 
 {divider()}
 

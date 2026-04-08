@@ -359,6 +359,69 @@ function dbDeleteEmergency(string $building, array $data): array {
 }
 
 // -------------------------------------------------------
+// getEmailByUsername — look up a resident's email by their web username
+// Mirrors the makeUsername() logic from manage-users.php so duplicate
+// suffixes (jsmith2) resolve to the correct resident.
+// Returns email string, or null if not found / no email on file.
+// -------------------------------------------------------
+function dbGetEmailByUsername(string $building, string $username): ?string {
+  $pdo  = getDB();
+  $stmt = $pdo->prepare(
+    'SELECT first_name, last_name, email FROM residents WHERE building = ?
+     ORDER BY unit, last_name, first_name'
+  );
+  $stmt->execute([$building]);
+  $rows = $stmt->fetchAll();
+
+  // Assign usernames in the same order/logic as makeUsername() + uniqueUsername()
+  $seen = [];
+  foreach ($rows as $row) {
+    $base = strtolower(
+      substr(preg_replace('/[^a-zA-Z]/', '', $row['first_name']), 0, 1)
+      . preg_replace('/[^a-zA-Z]/', '', $row['last_name'])
+    );
+    if (!$base) continue;
+    $seen[$base] = ($seen[$base] ?? 0) + 1;
+    $uname = $seen[$base] === 1 ? $base : $base . $seen[$base];
+    if ($uname === $username) {
+      $email = trim($row['email'] ?? '');
+      return $email !== '' ? $email : null;
+    }
+  }
+  return null;
+}
+
+// -------------------------------------------------------
+// sendTempPasswordEmail — send temp password via PHP mail (noreply@sheepsite.com)
+// $isNewAccount=true uses the welcome body; false uses the reset body.
+// Returns true if mail() accepted the message.
+// -------------------------------------------------------
+function sendTempPasswordEmail(string $to, string $username, string $tmpPw, string $loginURL, string $buildLabel, bool $isNewAccount = false): bool {
+  $subject = 'Your temporary password – ' . $buildLabel;
+  if ($isNewAccount) {
+    $body = "A login account has been created for you.\n\n"
+          . "    username --> $username   (note: all lower case)\n"
+          . "    password --> $tmpPw\n\n"
+          . "Please log in at the link below — you will be prompted to set a new password:\n"
+          . "$loginURL\n\n"
+          . "If you have any questions, please contact your building administrator.";
+  } else {
+    $body = "A password reset was requested for your account ($username).\n\n"
+          . "Your new temporary password is:\n\n"
+          . "    $tmpPw\n\n"
+          . "Please log in at the link below — you will be prompted to set a new password:\n"
+          . "$loginURL\n\n"
+          . "If you did not request this, please contact your building administrator.";
+  }
+  $headers = implode("\r\n", [
+    'From: SheepSite.com <noreply@sheepsite.com>',
+    'Reply-To: noreply@sheepsite.com',
+    'Content-Type: text/plain; charset=UTF-8',
+  ]);
+  return mail($to, $subject, $body, $headers);
+}
+
+// -------------------------------------------------------
 // importResidents — bulk upsert from owners JSON (idempotent)
 // Skips rows where first_name + last_name already exist for this building.
 // Returns: ['ok' => true, 'added' => N, 'skipped' => N]
@@ -397,4 +460,77 @@ function dbImportResidents(string $building, array $owners): array {
   }
 
   return ['ok' => true, 'added' => $added, 'skipped' => $skipped];
+}
+
+// -------------------------------------------------------
+// res_requests — pending resident addition requests
+//
+// CREATE TABLE IF NOT EXISTS res_requests (
+//   id           INT AUTO_INCREMENT PRIMARY KEY,
+//   building     VARCHAR(50)  NOT NULL,
+//   unit         VARCHAR(20)  NOT NULL,
+//   submitted_by VARCHAR(100) NOT NULL,
+//   req_type     VARCHAR(50)  NOT NULL,
+//   first_name   VARCHAR(100),
+//   last_name    VARCHAR(100),
+//   email        VARCHAR(200),
+//   phone1       VARCHAR(50),
+//   phone2       VARCHAR(50),
+//   full_time    TINYINT DEFAULT 0,
+//   is_resident  TINYINT DEFAULT 0,
+//   is_owner     TINYINT DEFAULT 0,
+//   notes        TEXT,
+//   submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+//   INDEX (building)
+// );
+// -------------------------------------------------------
+
+function dbAddRequest(string $building, array $data): array {
+  $pdo  = getDB();
+  $stmt = $pdo->prepare(
+    'INSERT INTO res_requests
+       (building, unit, submitted_by, req_type, first_name, last_name,
+        email, phone1, phone2, full_time, is_resident, is_owner, notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+  );
+  $stmt->execute([
+    $building,
+    trim($data['unit']         ?? ''),
+    trim($data['submitted_by'] ?? ''),
+    trim($data['req_type']     ?? ''),
+    trim($data['first_name']   ?? ''),
+    trim($data['last_name']    ?? ''),
+    trim($data['email']        ?? ''),
+    trim($data['phone1']       ?? ''),
+    trim($data['phone2']       ?? ''),
+    !empty($data['full_time'])   ? 1 : 0,
+    !empty($data['is_resident']) ? 1 : 0,
+    !empty($data['is_owner'])    ? 1 : 0,
+    trim($data['notes']        ?? ''),
+  ]);
+  return ['ok' => true, 'id' => (int)$pdo->lastInsertId()];
+}
+
+function dbGetRequests(string $building): array {
+  $pdo  = getDB();
+  $stmt = $pdo->prepare(
+    'SELECT * FROM res_requests WHERE building = ? ORDER BY submitted_at ASC'
+  );
+  $stmt->execute([$building]);
+  return ['requests' => $stmt->fetchAll()];
+}
+
+function dbGetRequest(string $building, int $id): ?array {
+  $pdo  = getDB();
+  $stmt = $pdo->prepare('SELECT * FROM res_requests WHERE id = ? AND building = ?');
+  $stmt->execute([$id, $building]);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
+
+function dbDeleteRequest(string $building, int $id): array {
+  $pdo  = getDB();
+  $stmt = $pdo->prepare('DELETE FROM res_requests WHERE id = ? AND building = ?');
+  $stmt->execute([$id, $building]);
+  return ['ok' => true];
 }
