@@ -127,13 +127,13 @@ html = f"""<!DOCTYPE html>
 
 <h1>SheepSite Admin Manual</h1>
 <p class="subtitle">For Board Members Managing the Building Website</p>
-<p class="version">Version 2.0 &nbsp;&middot;&nbsp; March 2026</p>
+<p class="version">Version 2.1 &nbsp;&middot;&nbsp; April 2026</p>
 
 <div class="toc">
   <h3>Contents</h3>
   <ol>
     <li>Getting Started</li>
-    <li>The Admin Dashboard</li>
+    <li>The Admin Dashboard &mdash; Admin Accounts</li>
     <li>Manage Residents/Owners</li>
     <li>Manage User Accounts</li>
     <li>Managing Files</li>
@@ -164,7 +164,7 @@ html = f"""<!DOCTYPE html>
 <h3>Accessing the Admin Area</h3>
 <p>The admin area is accessed directly from the building website. In the site menu, open the <strong>Admin</strong> dropdown and select <strong>Site Admin</strong>. Log in with your admin credentials. If this is your first login, you will be prompted to set a permanent password.</p>
 
-<blockquote><strong>Forgot your password?</strong> Click the &ldquo;Forgot password?&rdquo; link on the login page. The system will email a temporary password to the President. Enter the <strong>President&rsquo;s unit number</strong> as the security verification.</blockquote>
+<blockquote><strong>Forgot your password?</strong> Click the &ldquo;Forgot password?&rdquo; link on the login page. Enter your <strong>admin username</strong> and the <strong>President&rsquo;s unit number</strong> as the security verification. A temporary password will be sent to the email address on file for your admin account.</blockquote>
 
 <h3>Terms of Service</h3>
 <p>When you log in to the admin panel, you may be presented with the SheepSite Terms of Service agreement before accessing any admin features &mdash; on your first login, or whenever SheepSite has updated its terms. You must read the agreement in full and click <strong>I Accept</strong> to continue. Your acceptance is recorded with a timestamp.</p>
@@ -188,9 +188,30 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
   <tr><td><strong>Woolsy AI Assistant</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
-  <tr><td><strong>Building Settings</strong></td><td>Update the building contact email address, used for resident change requests and system notifications. The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
+  <tr><td><strong>Admin Accounts</strong></td><td>View and manage all administrator accounts for this building. Add new admins, update email addresses for notifications, or remove accounts. Each admin has a separate username, password, and email address.</td></tr>
+  <tr><td><strong>Building Settings</strong></td><td>Update the building&rsquo;s <strong>billing contact email</strong> address (used for invoices). The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
+
+<h3>Admin Accounts</h3>
+<p>Each building can have more than one administrator account. All admin accounts are listed in the <strong>Admin Accounts</strong> section at the bottom of the Admin Dashboard. Each account shows its username and a field to set the email address used for resident change-request notifications.</p>
+
+<h4>Changing Your Email Address</h4>
+<p>Find your account in the list and update the email field, then click <strong>Save</strong>. This email receives notifications when a resident submits a change request from the My Unit page.</p>
+
+<h4>Adding a New Admin Account</h4>
+<ol>
+  <li>Click <strong>+ Add admin account</strong> below the accounts table to expand the form</li>
+  <li>Enter a username (lowercase letters and numbers, e.g. &ldquo;jsmith&rdquo;), an email address, and an initial password</li>
+  <li>Click <strong>Add</strong> &mdash; the new account appears in the list immediately</li>
+  <li>Share the username and password with the new admin &mdash; they can log in right away</li>
+</ol>
+
+<h4>Removing an Admin Account</h4>
+<p>Click <strong>Remove</strong> next to any account that should no longer have access. You cannot remove your own account, and at least one admin account must remain at all times.</p>
+
+<h4>Changing Your Own Password</h4>
+<p>Use the <strong>Change Admin Password</strong> form at the very bottom of the page. Enter your current password, then your new password twice. The new password must be at least 8 characters.</p>
 
 {divider()}
 

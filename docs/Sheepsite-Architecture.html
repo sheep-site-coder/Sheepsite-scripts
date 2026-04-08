@@ -139,10 +139,10 @@ by PHP + MySQL (see <a href="#mysql">Section 5</a>).</p>
 <h3>Google (Alain&rsquo;s account)</h3>
 <table>
   <tr><th>Where</th><th>What</th></tr>
-  <tr><td>Apps Script project: <em>dir-display-bridge</em></td><td>Drive browser web app &mdash; handles file listing, downloads, storage reports, Woolsy doc extraction, doc index building</td></tr>
-  <tr><td>Apps Script project: <em>building-script.gs</em> (one per building)</td><td>Per-building Sheets web app &mdash; generates reports, handles owner import, handles password reset emails</td></tr>
+  <tr><td>Apps Script project: <em>dir-display-bridge</em></td><td>Drive browser web app &mdash; handles file listing, downloads, storage reports, Woolsy doc extraction, doc index building. <strong>Active for all buildings.</strong></td></tr>
+  <tr><td>Apps Script project: <em>building-script.gs</em> (one per building)</td><td>Per-building Sheets web app. <strong>Decommissioned &mdash; no longer called by PHP.</strong> Can be left in place or removed; triggers should be disabled.</td></tr>
   <tr><td>Google Drive (one folder set per building)</td><td>Public folder tree (IncorporationDocs, RulesDocs, Forms, etc.) and Private folder tree (Financials, etc.)</td></tr>
-  <tr><td>Google Sheets (one per building)</td><td>Owner database, car data, generates elevator/parking/resident/board reports</td></tr>
+  <tr><td>Google Sheets (one per building)</td><td>Used only for the initial one-time data import into MySQL. After import the Sheet is no longer a data source.</td></tr>
 </table>
 
 <h3>Building Websites (subdomains of sheepsite.com)</h3>
@@ -216,49 +216,30 @@ so the web app endpoint is not open to the public.</p>
 doc changes and cache results in Script Properties. A <code>keepWarm()</code> trigger fires every
 few minutes to prevent cold starts on the web app.</p>
 
-<h3>Sheets Web App: building-script.gs (one per building) &mdash; Legacy / Non-DB Buildings</h3>
-<div class="warn"><strong>DB-mode buildings:</strong> For buildings with MySQL enabled (<code>$useLocalDB = true</code>),
-none of the Sheets web app endpoints below are called by PHP. Reports, owner import, and password reset
-emails are all handled by PHP + MySQL. The <code>runScheduledUpdate</code> trigger still fires and
-regenerates Sheet list tabs, but those tabs are no longer the data source for anything. The trigger
-can be removed for DB-mode buildings.</div>
-<p>Each building has its own Apps Script project bound to its Google Sheet. It is deployed as a
-web app and dispatches on the <code>page</code> parameter:</p>
-<table>
-  <tr><th>URL / page param</th><th>What it does</th><th>DB-mode status</th></tr>
-  <tr><td><code>.../exec</code></td><td>Board of Directors report</td><td>Dead &mdash; PHP serves from MySQL</td></tr>
-  <tr><td><code>?page=elevator</code></td><td>Elevator List report</td><td>Dead &mdash; PHP serves from MySQL</td></tr>
-  <tr><td><code>?page=parking</code></td><td>Parking List report</td><td>Dead &mdash; PHP serves from MySQL</td></tr>
-  <tr><td><code>?page=resident</code></td><td>Resident List report</td><td>Dead &mdash; PHP serves from MySQL</td></tr>
-  <tr><td><code>?page=owners&amp;token=...</code></td><td>Owner list JSON for import into manage-users.php</td><td>Dead &mdash; manage-users.php reads from MySQL</td></tr>
-</table>
-<p>Two installable triggers run per building: <code>onEditHandler</code> (stamps a timestamp when
-Database or CarDB tabs are edited) and <code>runScheduledUpdate</code> (time-driven, every minute,
-runs all four generate functions after a 30-second debounce). For non-DB buildings, this keeps
-reports fresh within ~90 seconds of any data change. For DB-mode buildings, the Sheet is used
-for the initial data import only and the triggers can be disabled.</p>
-<p>The master library <code>DatabaseSheetMaster</code> contains the shared report generation logic.
-Each building script calls the library, so improvements deploy to all buildings by publishing a
-new library version.</p>
+<h3>Sheets Web App: building-script.gs &mdash; Decommissioned</h3>
+<div class="warn"><strong>No longer used.</strong> All report generation (elevator, parking, resident, board), owner
+import, and password reset emails are handled by PHP + MySQL. The per-building Sheets web app is not called
+by any PHP script. Triggers (<code>onEditHandler</code>, <code>runScheduledUpdate</code>) should be disabled
+in each building&rsquo;s Apps Script project. The Google Sheet itself is retained as an archive; it is not
+a live data source.</div>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
 
 <h2 id="mysql">5. MySQL Resident Database</h2>
 
 <h3>Overview</h3>
-<p>Buildings with MySQL enabled (<code>$useLocalDB = true</code>) store all resident data in a
-shared MySQL database on sheepsite.com. PHP scripts read and write the database directly &mdash;
-no Google Sheets or Apps Script involved. The Google Sheet is used only for the initial one-time
-import; after that, the database is the single source of truth.</p>
-<p>The <code>$useLocalDB</code> flag is set to <code>true</code> automatically when both
-<code>db/db.php</code> and <code>credentials/db.json</code> are present on the server. When false,
-the system falls back to the legacy GAS/Sheet path for the affected operations.</p>
+<p>All resident data is stored in a shared MySQL database on sheepsite.com. PHP scripts read and
+write the database directly &mdash; no Google Sheets or Apps Script involved. The Google Sheet is
+used only for the initial one-time import; after that, the database is the single source of truth.</p>
+<p>DB-mode is active when both <code>db/db.php</code> and <code>credentials/db.json</code> are
+present on the server (which they always are on the live site). All buildings operate in DB-mode.</p>
 
 <h3>Database Files</h3>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>db/db.php</code></td><td>PDO singleton. Reads MySQL host/user/password/database from <code>credentials/db.json</code> (gitignored). All DB access goes through this file.</td></tr>
-  <tr><td><code>db/residents.php</code></td><td>Full CRUD for residents, cars, unit_info, and emergency contacts. Field-name mapping between Sheet column names and MySQL column names. <code>sendTempPasswordEmail()</code> helper (PHP <code>mail()</code> from noreply@sheepsite.com). <code>dbGetEmailByUsername()</code> for username &rarr; email lookup (used by forgot-password.php).</td></tr>
+  <tr><td><code>db/residents.php</code></td><td>Full CRUD for residents, cars, unit_info, and emergency contacts. <code>sendTempPasswordEmail()</code> helper (PHP <code>mail()</code> from noreply@sheepsite.com). <code>dbGetEmailByUsername()</code> for username &rarr; email lookup (used by forgot-password.php).</td></tr>
+  <tr><td><code>db/admin-helpers.php</code></td><td>Helpers for reading and writing <code>*_admin.json</code> files. <code>loadAdminCreds()</code> (auto-wraps legacy single-object format), <code>saveAdminCreds()</code>, <code>findAdmin()</code>, <code>findAdminByPassword()</code>, <code>updateAdminEntry()</code>. Required by admin.php, manage-users.php, and forgot-password.php.</td></tr>
   <tr><td><code>credentials/db.json</code></td><td>MySQL credentials. <strong>Gitignored.</strong> Format: <code>{"host":"...","user":"...","pass":"...","db":"..."}</code>.</td></tr>
 </table>
 
@@ -272,15 +253,15 @@ the system falls back to the legacy GAS/Sheet path for the affected operations.<
   <tr><td><code>res_requests</code></td><td>Pending add-resident requests submitted via my-unit.php. Reviewed and actioned in database-admin.php.</td></tr>
 </table>
 
-<h3>What Changed vs. Legacy (GAS/Sheet) Path</h3>
+<h3>How Each Feature Works</h3>
 <table>
-  <tr><th>Feature</th><th>Legacy (GAS/Sheet)</th><th>DB-mode (MySQL)</th></tr>
-  <tr><td>Reports (elevator, parking, resident, board)</td><td>GAS web app generates HTML from Sheet tabs</td><td>PHP queries MySQL directly in protected-report.php / public-report.php</td></tr>
-  <tr><td>Admin reset &mdash; President lookup</td><td>GAS looks up President row in Sheet</td><td>PHP queries <code>residents</code> table where <code>board_role = &lsquo;President&rsquo;</code></td></tr>
-  <tr><td>Owner import in manage-users.php</td><td>Calls <code>?page=owners&amp;token=...</code> GAS endpoint</td><td>Queries MySQL directly</td></tr>
-  <tr><td>Resident change requests (my-unit.php)</td><td>Email sent to building contact; admin copies data manually</td><td>Request inserted into <code>res_requests</code>; admin accepts/rejects in database-admin.php</td></tr>
-  <tr><td>Password reset email</td><td>GAS sends email via Gmail API</td><td>PHP <code>mail()</code> from noreply@sheepsite.com via <code>sendTempPasswordEmail()</code></td></tr>
-  <tr><td>Resident data editing</td><td>Board edits Google Sheet directly</td><td>Admin uses database-admin.php on the website</td></tr>
+  <tr><th>Feature</th><th>Implementation</th></tr>
+  <tr><td>Reports (elevator, parking, resident, board)</td><td>PHP queries MySQL directly; rendered as inline HTML in protected-report.php / public-report.php</td></tr>
+  <tr><td>Admin password reset &mdash; President lookup</td><td>PHP queries <code>residents</code> table where <code>board_role = &lsquo;President&rsquo;</code>; validates admin username + President&rsquo;s unit number</td></tr>
+  <tr><td>Owner import</td><td>manage-users.php reads from MySQL (Sync → Recreate Checked)</td></tr>
+  <tr><td>Resident change requests (my-unit.php)</td><td>Request inserted into <code>res_requests</code>; admin accepts/rejects in database-admin.php. Email notification sent to all admin account emails.</td></tr>
+  <tr><td>Password reset email</td><td>PHP <code>mail()</code> from noreply@sheepsite.com via <code>sendTempPasswordEmail()</code></td></tr>
+  <tr><td>Resident data editing</td><td>Admin uses database-admin.php on the website</td></tr>
 </table>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -311,28 +292,28 @@ the system falls back to the legacy GAS/Sheet path for the affected operations.<
   <tr><td><code>display-private-dir.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Private Drive folder browser. Session-based resident login. <code>mustChange</code> flag forces password change on first login.</td></tr>
   <tr><td><code>protected-report.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Resident-authenticated reports (elevator, parking, resident). Reuses <code>private_auth_{building}</code> session. <strong>DB-mode:</strong> queries MySQL directly and renders inline PHP/HTML. <strong>Legacy:</strong> renders report HTML from the building&rsquo;s Sheets web app as an iframe.</td></tr>
+      <td>Resident-authenticated reports (elevator, parking, resident). Reuses <code>private_auth_{building}</code> session. Queries MySQL directly and renders inline HTML. Elevator report: server-side grouping by unit+last_name with first names joined (&ldquo;John &amp; Jane&rdquo;); two-column layout. Resident and Parking: JSON-embedded data for client-side JS sort.</td></tr>
   <tr><td><code>public-report.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Unauthenticated reports (board of directors). Same structure as protected-report.php minus auth. <code>?nav=0</code> hides the back bar when embedded as an iframe. <strong>DB-mode:</strong> renders from MySQL inline; no iframe needed.</td></tr>
+      <td>Unauthenticated reports (board of directors). Same structure as protected-report.php minus auth. <code>?nav=0</code> hides the back bar when embedded as an iframe. Board report sorted by ROLE_ORDER (President, VP, Treasurer, Secretary, Director). Renders from MySQL inline.</td></tr>
   <tr><td><code>get-doc-byname.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Looks up a file by name in Drive and redirects to a Google Docs preview URL. Used for document iframes on building sites.</td></tr>
   <tr><td><code>my-account.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Resident account hub. Requires active <code>private_auth_{building}</code> session. Cards: My Unit Info (links to my-unit.php), Change Password (links to change-password.php), and Resident Manual (opens <code>Sheepsite-Resident-Manual.html</code> in a new tab). Also accessible from the Admin dropdown in the building site nav. Falls back to <code>siteURL</code> from config for the &ldquo;← Back to site&rdquo; link.</td></tr>
   <tr><td><code>my-unit.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Shows the resident&rsquo;s unit information from the database. &ldquo;Request a Change&rdquo; form inserts a row into <code>res_requests</code> (DB-mode) or emails the board (legacy). Pending requests are reviewed in database-admin.php.</td></tr>
+      <td>Shows the resident&rsquo;s unit information from the database. &ldquo;Request a Change&rdquo; form inserts a row into <code>res_requests</code>; email notification sent to all admin emails from <code>_admin.json</code> (falls back to <code>contactEmail</code>, then President&rsquo;s DB email). Pending requests are reviewed and actioned in database-admin.php.</td></tr>
   <tr><td><code>change-password.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Lets a logged-in resident change their own password. Handles <code>mustChange</code> enforcement. Accepts <code>redirect</code> param to return to origin page. Blocked entirely (form hidden, warning shown) when <code>testSite</code> is set in the building config.</td></tr>
   <tr><td><code>forgot-password.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Self-serve password reset. Owner flow: username lookup, email temp password, update credentials. Admin flow: validates President&rsquo;s unit number before sending. <strong>DB-mode:</strong> President&rsquo;s email and unit looked up from MySQL (<code>board_role = &lsquo;President&rsquo;</code>). <strong>Legacy:</strong> calls GAS to look up the President row from the Sheet. <code>?setup=1</code> bootstraps first-time admin credentials. Owner reset blocked when <code>testSite</code> is set.</td></tr>
+      <td>Self-serve password reset. <strong>Owner flow:</strong> username lookup → email from MySQL → PHP <code>mail()</code> temp password → <code>mustChange: true</code>. <strong>Admin flow:</strong> form collects admin username + President&rsquo;s unit number (secret #). Both are validated together &mdash; failure returns &ldquo;Admin name or Secret does not match our records.&rdquo; (does not reveal which field failed). On success: temp password emailed to the admin&rsquo;s own email address stored in <code>_admin.json</code>. President&rsquo;s unit looked up from MySQL (<code>board_role = &lsquo;President&rsquo;</code>). <code>?setup=1</code> bootstraps first-time admin credentials (new admin entry appended; temp password sent to President&rsquo;s email). Owner reset blocked when <code>testSite</code> is set.</td></tr>
 </table>
 
 <h3>Admin PHP Scripts</h3>
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building admin dashboard. Cards: Manage Users, Storage Report, Woolsy Knowledge Base, User Manual. Async doc status check. Woolsy prompt version check. Requires <code>manage_auth_{building}</code> session. Shows &ldquo;← Back to site&rdquo; link on both the login page and the dashboard when <code>siteURL</code> is configured in the building config.</td></tr>
+      <td>Building admin dashboard. Cards: Manage Residents/Owners, Manage User Accounts, File Management, Tag Management, Storage Report, Woolsy, Billing, User Manual. <strong>Admin Accounts section:</strong> inline table of all admins with email edit; Remove button (blocked for self and last admin); collapsible Add form. <strong>Change Admin Password</strong> section for changing own password (hidden for master admin). <strong>Assume Admin banner:</strong> shown when master admin has assumed this building via master-admin.php. Woolsy prompt version check. Requires <code>manage_auth_{building}</code> session (stores <code>{user, email}</code>).</td></tr>
   <tr><td><code>manage-users.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Add, remove, and reset passwords for resident accounts. <strong>DB-mode:</strong> import reads from MySQL; password reset emails sent via <code>sendTempPasswordEmail()</code>. <strong>Legacy:</strong> import calls GAS <code>?page=owners</code> endpoint. Supports both building admin and master admin login.</td></tr>
+      <td>Add, remove, and reset passwords for resident web login accounts. Import reads directly from MySQL; password reset emails sent via <code>sendTempPasswordEmail()</code>. Sync compares web accounts against MySQL residents in both directions. Supports building admin and master admin login.</td></tr>
   <tr><td><code>database-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Full in-site resident database editor (DB-mode only). Grouped by floor/unit; tabs for Residents, Vehicles, Emergency contacts. Add/edit/delete residents; bulk CSV import. Pending Requests panel (badge count) to accept or reject change requests submitted via my-unit.php. Accepting a request creates the DB record, creates a web login, and sends a welcome email. Requires admin session.</td></tr>
   <tr><td><code>storage-report.php</code> <span class="tag tag-php">PHP</span></td>
@@ -342,11 +323,11 @@ the system falls back to the legacy GAS/Sheet path for the affected operations.<
   <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Building-level Woolsy admin sub-page (accessible from admin.php Woolsy card).</td></tr>
   <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage (with last-updated age and ↺ per-card refresh button), ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. The <code>?action=refreshStorage&amp;building=X</code> AJAX handler calls dir-display-bridge.gs storageReport and saves the result to <code>config/{building}.json</code> without a page reload. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
+      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage (with last-updated age and ↺ per-card refresh button), ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. Each card has: <strong>Manage →</strong> (goes to building-detail.php) and <strong>Assume Admin</strong> (POST sets <code>manage_auth_{building}</code> session as <code>_master</code> and redirects to admin.php; blue banner in admin.php with &ldquo;Release ×&rdquo; link clears the session). Storage AJAX handler calls dir-display-bridge.gs storageReport. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
   <tr><td><code>building-detail.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate, discountPct), Woolsy credits, storage, ToS, and Billing (invoice preview, generate invoice, invoice history, mark paid). Also handles <code>?building=new</code> — automated Drive folder + Sheet creation via GAS, plus setup checklist.</td></tr>
   <tr><td><code>association-remove.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Master admin tool to decommission an association. Deletes server-side files (credentials, config, tags, Woolsy entries). Requires typing the building key to confirm. Shows manual checklist for buildings.php edit and Drive folder removal.</td></tr>
+      <td>Master admin tool to decommission an association. <strong>Automatic:</strong> deletes server-side files (credentials, config, tags, Woolsy entries) and all MySQL rows for the building across all five tables. Requires typing the building key to confirm. Shows manual checklist for the two remaining manual steps: remove from buildings.php, trash Drive folders.</td></tr>
   <tr><td><code>suspension.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Shared suspension check. Included by all resident-facing pages after <code>$building</code> is validated. Reads <code>config/{building}.json</code>; auto-sets <code>suspended:true</code> if <code>renewalDate</code> has passed. Outputs a "Service Unavailable" page (or JSON error for API endpoints) and exits.</td></tr>
   <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
@@ -392,7 +373,7 @@ the system falls back to the legacy GAS/Sheet path for the affected operations.<
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>buildings.php</code> <span class="tag tag-php">PHP</span></td>
-      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code> (Sheets web app URL &mdash; still present but <strong>not called for reports in DB-mode</strong>; used only as a legacy fallback), <code>state</code> (two-letter state code for Woolsy FAQ layer), <code>community</code> (optional community name for shared FAQ layer, e.g. <code>CVE</code>).</td></tr>
+      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code> (retained as empty string; not called by any PHP script), <code>state</code> (two-letter state code for Woolsy FAQ layer), <code>community</code> (optional community name for shared FAQ layer, e.g. <code>CVE</code>).</td></tr>
   <tr><td><code>footer-for-sites.js</code> <span class="tag tag-js">JS</span></td>
       <td>Reference document (not served directly). Legacy reference for the footer script pattern. New buildings use <code>building-site.php</code> which embeds all helpers directly. Documents button/iframe HTML snippets and helper functions (<code>openFolder</code>, <code>openPrivateFolder</code>, <code>openAdmin</code>, etc.).</td></tr>
 </table>
@@ -405,25 +386,25 @@ the system falls back to the legacy GAS/Sheet path for the affected operations.<
       <td>Drive proxy. All Drive/Docs access from PHP routes through here. See Section 4. <strong>Still active for all buildings.</strong></td></tr>
   <tr><td><code>sheets/building-script.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>Per-building project, bound to the building&rsquo;s Sheet</td>
-      <td>Report generation, owner import, password reset emails. <strong>DB-mode:</strong> no longer called by PHP &mdash; Sheet used for initial import only. Triggers can be disabled.</td></tr>
+      <td><strong>Decommissioned.</strong> Not called by any PHP script. Triggers should be disabled. Retained for reference / archive.</td></tr>
   <tr><td><code>sheets/board-list.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Board of Directors report generator. <strong>Dead for DB-mode buildings</strong> &mdash; PHP renders from MySQL.</td></tr>
+      <td><strong>Decommissioned.</strong> PHP renders Board report from MySQL in public-report.php.</td></tr>
   <tr><td><code>sheets/elevator-list.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Elevator List report. <strong>Dead for DB-mode buildings</strong> &mdash; PHP renders from MySQL.</td></tr>
+      <td><strong>Decommissioned.</strong> PHP renders Elevator report from MySQL in protected-report.php.</td></tr>
   <tr><td><code>sheets/parking-list.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Parking List report. <strong>Dead for DB-mode buildings</strong> &mdash; PHP renders from MySQL.</td></tr>
+      <td><strong>Decommissioned.</strong> PHP renders Parking report from MySQL in protected-report.php.</td></tr>
   <tr><td><code>sheets/resident-list.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Resident List. <strong>Dead for DB-mode buildings</strong> &mdash; PHP renders from MySQL.</td></tr>
+      <td><strong>Decommissioned.</strong> PHP renders Resident List from MySQL in protected-report.php.</td></tr>
   <tr><td><code>sheets/owner-import.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Returns Database tab as JSON for owner import into manage-users.php. <strong>Dead for DB-mode buildings</strong> &mdash; manage-users.php reads from MySQL.</td></tr>
+      <td><strong>Decommissioned.</strong> manage-users.php reads directly from MySQL.</td></tr>
   <tr><td><code>sheets/reset-password.gs</code> <span class="tag tag-gs">GAS</span></td>
       <td>DatabaseSheetMaster library</td>
-      <td>Handles self-serve password reset email flow (owner and admin). <strong>Dead for DB-mode buildings</strong> &mdash; PHP sends email directly via <code>sendTempPasswordEmail()</code>.</td></tr>
+      <td><strong>Decommissioned.</strong> Password reset emails sent directly from PHP via <code>sendTempPasswordEmail()</code>.</td></tr>
 </table>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -444,9 +425,20 @@ the system falls back to the legacy GAS/Sheet path for the affected operations.<
   {"user": "jsmith", "pass": "$2y$10$...", "mustChange": true},
   {"user": "mjones", "pass": "$2y$10$..."}
 ]</pre>
-<p>Admin and master files (<code>*_admin.json</code>, <code>_master.json</code>) &mdash; single object:</p>
-<pre>{"user": "admin", "pass": "$2y$10$..."}</pre>
-<p>All passwords are bcrypt-hashed. <code>password_verify()</code> is used for all checks. No plaintext passwords anywhere in the codebase.</p>
+<p>Admin file (<code>*_admin.json</code>) &mdash; array of admin objects (supports multiple admins):</p>
+<pre>[
+  {"user": "admin",  "pass": "$2y$10$...", "email": "president@example.com", "mustChange": false},
+  {"user": "jsmith", "pass": "$2y$10$...", "email": "jsmith@example.com"}
+]</pre>
+<p>Master file (<code>_master.json</code>) &mdash; single object (unchanged):</p>
+<pre>{"user": "master", "pass": "$2y$10$..."}</pre>
+<p>All passwords are bcrypt-hashed. <code>password_verify()</code> is used for all checks. Helpers in <code>db/admin-helpers.php</code>: <code>loadAdminCreds()</code> (handles backward-compat single-object files), <code>findAdminByPassword()</code>, <code>updateAdminEntry()</code>, <code>saveAdminCreds()</code>. No plaintext passwords anywhere in the codebase.</p>
+
+<h3>Session Format</h3>
+<p>Building admin sessions (<code>manage_auth_{building}</code>) now store an array: <code>{"user": "admin", "email": "..."}</code>. Master admin assumed sessions store <code>{"user": "_master", "email": ""}</code>. Legacy sessions stored as plain <code>true</code> are invalidated on first load, forcing a re-login once.</p>
+
+<h3>Assume Admin Flow (Master Admin)</h3>
+<p>From <code>master-admin.php</code>, the <strong>Assume Admin</strong> button on each building card POSTs to <code>master-admin.php</code> with <code>assume_building=X</code>. This sets <code>$_SESSION[&apos;manage_auth_X&apos;] = [&apos;user&apos; =&gt; &apos;_master&apos;, &apos;email&apos; =&gt; &apos;&apos;]</code> and redirects to <code>admin.php?building=X</code>. A blue &ldquo;Viewing as Master Admin&rdquo; banner appears at the top with a &ldquo;Release ×&rdquo; link that clears the session and returns to master-admin.php. No building admin password is required.</p>
 
 <h3>mustChange Flow</h3>
 <p>When <code>mustChange: true</code> is set on a resident account (e.g., after import or admin reset),
@@ -539,7 +531,7 @@ coverage without manual tracking.</p>
   <tr><th>File / Folder</th><th>Description</th><th>In git?</th></tr>
   <tr><td><code>buildings.php</code> <span class="tag tag-data">data</span></td><td>Single config file for all buildings. Edit only this when adding a building.</td><td>Yes</td></tr>
   <tr><td><code>credentials/{building}.json</code> <span class="tag tag-data">data</span></td><td>Resident accounts (bcrypt). Array of {user, pass, mustChange?}.</td><td>No</td></tr>
-  <tr><td><code>credentials/{building}_admin.json</code> <span class="tag tag-data">data</span></td><td>Building admin credentials (bcrypt). Single {user, pass} object.</td><td>No</td></tr>
+  <tr><td><code>credentials/{building}_admin.json</code> <span class="tag tag-data">data</span></td><td>Building admin credentials (bcrypt). <strong>Array</strong> of <code>{user, pass, email, mustChange?}</code> objects. Supports multiple admins. <code>email</code> field used for change-request notifications and self-serve password reset. Loaded by <code>db/admin-helpers.php</code>; backward-compat with legacy single-object format.</td><td>No</td></tr>
   <tr><td><code>credentials/_master.json</code> <span class="tag tag-data">data</span></td><td>Master admin credentials (bcrypt). Used by master-admin.php and as override in building admin pages.</td><td>No</td></tr>
   <tr><td><code>credentials/.htaccess</code> <span class="tag tag-data">data</span></td><td>Blocks all web access to the credentials folder.</td><td>Yes</td></tr>
   <tr><td><code>credentials/db.json</code> <span class="tag tag-data">data</span></td><td>MySQL connection credentials. Read by <code>db/db.php</code>. Format: <code>{"host":"...","user":"...","pass":"...","db":"..."}</code>. Presence of this file (with <code>db/db.php</code>) activates DB-mode across all scripts.</td><td>No</td></tr>
@@ -576,10 +568,11 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 <p>In <code>master-admin.php</code>, click <strong>Remove Association</strong> in System Tools. The tool:</p>
 <ul>
   <li>Shows a checklist of all server-side files that will be deleted (credentials, config, tags, Woolsy entries)</li>
+  <li>Deletes all MySQL rows for the building across the five tables (<code>residents</code>, <code>car_db</code>, <code>unit_info</code>, <code>emergency</code>, <code>res_requests</code>)</li>
   <li>Requires typing the building key exactly to confirm &mdash; no undo</li>
-  <li>After deletion, shows a manual checklist: remove the entry from <code>buildings.php</code> and trash the Drive folders and Owner DB sheet</li>
+  <li>After deletion, shows a checklist of two remaining manual steps: remove the entry from <code>buildings.php</code>, and trash the Drive folders in the SheepSite Google account</li>
 </ul>
-<div class="warn"><strong>Google Drive is not touched by this tool.</strong> Folder and sheet removal must be done manually in the SheepSite Google account.</div>
+<div class="warn"><strong>Google Drive is not touched by this tool.</strong> Folder removal must be done manually.</div>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
 
