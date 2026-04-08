@@ -555,57 +555,43 @@ if (!$isNew) {
       </div>
     </li>
 
-    <!-- Step 2: Google Sheet -->
+    <!-- Step 2: buildings.php + credentials -->
     <li>
-      <div class="cl-num" id="cl_num_2">2</div>
-      <div class="cl-body">
-        <div class="cl-title">Finish Setting Up the Owner DB Sheet</div>
-        <div class="cl-steps" id="cl_sheet_section">
-          <div id="cl_sheet_copied" style="display:none">
-            The sheet <strong id="cl_sheet_name">&mdash;</strong> has been created automatically.
-            <span id="cl_sheet_link_wrap"></span>
-            <br><br>
-            Complete these 3 steps inside the sheet:
-          </div>
-          <div id="cl_sheet_manual">
-            No template sheet was provided &mdash; create the sheet manually first:
-            create a Google Sheet named <strong id="cl_sheet_name2">&mdash;</strong>, rename Sheet1 to
-            <code>Database</code>, add a second tab named <code>CarDB</code>, add column headers
-            (see <code>sheets/README.md</code>), then open Extensions &rarr; Apps Script and paste
-            <code>sheets/building-script.gs</code>. Add the <code>DatabaseSheetMaster</code> library,
-            then continue with the steps below.
-          </div>
-          <ol>
-            <li>Open <strong>Extensions &rarr; Apps Script</strong> &rarr; find the line
-              <code>const BUILDING_NAME = '...'</code> &rarr; change the value to
-              <code id="cl_building_key_sheet">'BuildingKey'</code> &rarr; <strong>Save</strong></li>
-            <li><strong>Deploy &rarr; New deployment</strong> &rarr; Type: Web App &rarr;
-              Execute as: Me &rarr; Who has access: Anyone &rarr; Deploy &rarr;
-              <strong>copy the Web App URL</strong> (needed in Step 3)</li>
-            <li>Install two triggers &mdash; <strong>Triggers &rarr; Add Trigger</strong>:
-              <ol>
-                <li><code>onEditHandler</code> &mdash; From spreadsheet &rarr; On edit</li>
-                <li><code>runScheduledUpdate</code> &mdash; Time-driven &rarr; Minutes timer &rarr; Every minute</li>
-              </ol>
-            </li>
-          </ol>
-        </div>
-        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,2)"> Done</label>
-      </div>
-    </li>
-
-    <!-- Step 3: buildings.php + credentials -->
-    <li>
-      <div class="cl-num">3</div>
+      <div class="cl-num">2</div>
       <div class="cl-body">
         <div class="cl-title">Add Building to Server Config</div>
         <div class="cl-steps">
-          <strong>a)</strong> Open <code>buildings.php</code> on the server and add this entry (paste the Web App URL from Step 2):
+          <strong>a)</strong> Open <code>buildings.php</code> on the server and add this entry:
           <div class="cl-code" id="cl_snippet">Fill in building details above to generate snippet.<button class="cl-copy" onclick="copyCode('cl_snippet')">Copy</button></div>
           Upload the updated <code>buildings.php</code> to the server.<br><br>
           <strong>b)</strong> Create a new empty credentials file on the server at:
           <div class="cl-code" id="cl_creds_path">credentials/BuildingKey.json<button class="cl-copy" onclick="copyCode('cl_creds_path')">Copy</button></div>
           Contents must be exactly: <code>[]</code>
+        </div>
+        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,2)"> Done</label>
+      </div>
+    </li>
+
+    <!-- Step 3: MySQL database -->
+    <li>
+      <div class="cl-num">3</div>
+      <div class="cl-body">
+        <div class="cl-title">Import Resident Data into MySQL</div>
+        <div class="cl-steps">
+          Resident data lives in the MySQL database, not in a Google Sheet. Use the one-time import tool:<br><br>
+          <strong>Option A — Import from existing Google Sheet (existing associations):</strong>
+          <ol>
+            <li>Upload <code>import-sheet-to-db.php</code> to the server if not already there</li>
+            <li>Visit: <code>https://sheepsite.com/Scripts/import-sheet-to-db.php?building=<span id="cl_key_db"></span></code></li>
+            <li>This reads the sheet&rsquo;s Database and CarDB tabs and inserts all rows into MySQL</li>
+            <li>It is idempotent &mdash; safe to run multiple times; duplicate names are skipped</li>
+          </ol>
+          <strong>Option B — Enter data directly (new associations):</strong>
+          <ol>
+            <li>Set up the admin account first (Step 4), then log in</li>
+            <li>Use <strong>Manage Residents</strong> &rarr; <strong>Add Resident</strong> to enter each resident manually</li>
+          </ol>
+          <div class="cl-note"><strong>Note:</strong> The President&rsquo;s record (with <em>board_role = President</em> and a valid email) must exist in the database before the admin password reset will work. Enter the President first if using Option B.</div>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,3)"> Done</label>
       </div>
@@ -621,42 +607,49 @@ if (!$isNew) {
           <div class="cl-code" id="cl_admin_url">https://sheepsite.com/Scripts/admin.php?building=BuildingKey<button class="cl-copy" onclick="copyCode('cl_admin_url')">Copy</button></div>
           <ol>
             <li>Enter the <strong>President&rsquo;s unit number</strong> as the secret verification</li>
-            <li>A temporary password is emailed to the President (whoever has <em>President</em> in the Board column of the Database tab)</li>
+            <li>A temporary password is emailed to the President (looked up from the MySQL database by <em>board_role = President</em>)</li>
             <li>Log in with the temporary password &mdash; you will be prompted to set a permanent one immediately</li>
           </ol>
-          <div class="cl-note"><strong>Note:</strong> The Database tab must exist and have a President row before this step will work. If the sheet is empty, create the President row first or use the master password as a fallback.</div>
+          <div class="cl-note"><strong>Note:</strong> If the President&rsquo;s record is not yet in MySQL, use the master password as a fallback to log in and set the admin password manually.</div>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,4)"> Done</label>
       </div>
     </li>
 
-    <!-- Step 5: Import owners -->
+    <!-- Step 5: Create web accounts -->
     <li>
       <div class="cl-num">5</div>
       <div class="cl-body">
-        <div class="cl-title">Import Owners</div>
+        <div class="cl-title">Create Resident Web Accounts</div>
         <div class="cl-steps">
           <ol>
             <li>Log in to the Admin Dashboard for the new association</li>
-            <li>Click <strong>Manage Users</strong> &rarr; <strong>Import from Association Database Sheet</strong></li>
-            <li>Enter a temporary password that you will distribute to owners &rarr; click <strong>Import</strong></li>
-            <li>All imported accounts have <em>must change password</em> set &mdash; owners will be forced to set their own password on first login</li>
-            <li>Distribute the temporary password to owners (email, letter, etc.)</li>
+            <li>Click <strong>Manage Users</strong> &rarr; <strong>Sync Now</strong></li>
+            <li>Sync compares the MySQL database against existing web accounts and lists everyone missing an account</li>
+            <li>Check all residents &rarr; click <strong>Recreate Checked</strong> &mdash; accounts are created with a temporary password and a welcome email is sent automatically to each resident&rsquo;s email address on file</li>
+            <li>For any resident without an email on file, use <strong>Add/Reset User</strong> to set a password manually and distribute it yourself</li>
           </ol>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,5)"> Done</label>
       </div>
     </li>
 
-    <!-- Step 6: Website footer script -->
+    <!-- Step 6: Website -->
     <li>
       <div class="cl-num">6</div>
       <div class="cl-body">
         <div class="cl-title">Configure the Building Website</div>
         <div class="cl-steps">
-          In Namecheap Website Builder: <strong>Settings &rarr; Pages &rarr; Default &rarr; After &lt;body&gt;</strong><br>
-          Paste the footer script below. The only value that changes per building is the first line.
-          <div class="cl-code" id="cl_footer_script">Fill in building key above to generate script.<button class="cl-copy" onclick="copyCode('cl_footer_script')">Copy</button></div>
+          The building website is a PHP site hosted on the association&rsquo;s own server (not Website Builder).
+          See <code>NEW-SITE-GUIDE.md</code> in the repo for the full setup walkthrough. Key steps:<br><br>
+          <ol>
+            <li>Upload all site PHP files to the association&rsquo;s server</li>
+            <li>Add the footer script to every page. The only value that changes per building is <code>BUILDING_NAME</code>:
+              <div class="cl-code" id="cl_footer_script">Fill in building key above to generate script.<button class="cl-copy" onclick="copyCode('cl_footer_script')">Copy</button></div>
+            </li>
+            <li>Verify public and private folder links open the correct Drive folders</li>
+            <li>Verify resident login, password reset, and the reports (Elevator List, Parking List, Resident List) all work</li>
+          </ol>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,6)"> Done</label>
       </div>
@@ -761,7 +754,7 @@ function updateChecklist() {
     if (community) lines.push("    'community'       => '" + community + "',");
     lines.push("    'publicFolderId'  => '" + (nbPublicId  || 'PASTE_PUBLIC_FOLDER_ID')  + "',");
     lines.push("    'privateFolderId' => '" + (nbPrivateId || 'PASTE_PRIVATE_FOLDER_ID') + "',");
-    lines.push("    'webAppURL'       => 'PASTE_WEB_APP_URL_FROM_STEP_2',");
+    lines.push("    'webAppURL'       => '',   // not used — reports served from MySQL");
     lines.push("  ],");
     var snip = document.getElementById('cl_snippet');
     var btn  = snip.querySelector('.cl-copy');
@@ -774,6 +767,10 @@ function updateChecklist() {
   var cpBtn = cp.querySelector('.cl-copy');
   cp.textContent = key ? 'credentials/' + key + '.json' : 'credentials/BuildingKey.json';
   cp.appendChild(cpBtn);
+
+  // Step 3 DB import URL
+  var dbKeyEl = document.getElementById('cl_key_db');
+  if (dbKeyEl) dbKeyEl.textContent = key || 'BuildingKey';
 
   // Step 4 admin URL
   var au = document.getElementById('cl_admin_url');

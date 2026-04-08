@@ -428,7 +428,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     <div class="tool-icon">➕</div>
     <div>
       <div class="tool-title">Add New Association</div>
-      <div class="tool-desc">Create Drive folders, copy sheet, generate setup checklist.</div>
+      <div class="tool-desc">Create Drive folders, configure server and database, generate setup checklist.</div>
     </div>
   </a>
 
@@ -436,7 +436,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     <div class="tool-icon">➖</div>
     <div>
       <div class="tool-title">Remove Association</div>
-      <div class="tool-desc">Delete server files for a decommissioned association.</div>
+      <div class="tool-desc">Delete server files and database records for a decommissioned association.</div>
     </div>
   </a>
 
