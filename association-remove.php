@@ -3,8 +3,8 @@
 // association-remove.php
 // Master admin tool to remove a building association.
 //
-// Deletes server-side files only. Google Drive folders
-// must be removed manually.
+// Deletes server-side files and MySQL database records.
+// Google Drive folders must be removed manually.
 //
 //   https://sheepsite.com/Scripts/association-remove.php
 // -------------------------------------------------------
@@ -21,6 +21,7 @@ if (empty($_SESSION['master_admin_auth'])) {
 }
 
 $buildings = require __DIR__ . '/buildings.php';
+require_once __DIR__ . '/db/db.php';
 $message   = '';
 $msgType   = 'ok';
 $removed   = null; // building key that was just removed
@@ -91,6 +92,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT));
         $deleted[] = 'credentials/login_stats.json (entry removed)';
       }
+    }
+
+    // Delete MySQL database records
+    $dbDeleted = 0;
+    try {
+      $pdo = getDB();
+      foreach (['residents', 'car_db', 'unit_info', 'emergency', 'res_requests'] as $table) {
+        $stmt = $pdo->prepare("DELETE FROM `$table` WHERE building = ?");
+        $stmt->execute([$key]);
+        $dbDeleted += $stmt->rowCount();
+      }
+      $deleted[] = "MySQL: $dbDeleted row(s) deleted across residents/car_db/unit_info/emergency/res_requests";
+    } catch (Exception $e) {
+      $deleted[] = 'MySQL: ERROR — ' . $e->getMessage();
     }
 
     $removed = $key;
@@ -168,31 +183,19 @@ $buildingKeys = array_keys($buildings);
 <!-- ── Post-removal checklist ── -->
 <div class="card">
   <h2 style="margin:0 0 1rem;font-size:1rem;">Removal complete for: <strong><?= htmlspecialchars($removed) ?></strong></h2>
-  <p style="font-size:0.9rem;color:#555;margin:0 0 1.25rem;">Server files have been deleted. Complete the following manual steps:</p>
+  <p style="font-size:0.9rem;color:#555;margin:0 0 1.25rem;">Server files and database records have been deleted. Complete the following manual steps:</p>
 
   <p style="font-size:0.85rem;font-weight:bold;margin:0 0 0.4rem;">1. Remove from buildings.php</p>
   <p style="font-size:0.85rem;color:#555;margin:0 0 0.4rem;">Delete the following block from <code>buildings.php</code> on the server:</p>
   <div class="snippet" id="snippet-buildings"><?= "  '" . htmlspecialchars($removed) . "' => [\n    // ... remove this entire entry\n  ]," ?></div>
 
-  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">2. Delete database records</p>
-  <p style="font-size:0.85rem;color:#555;margin:0 0 0.4rem;">
-    Run the following SQL on the server database to remove all resident data for this association:
-  </p>
-  <div class="snippet"><?= htmlspecialchars(
-    "DELETE FROM residents   WHERE building = '" . $removed . "';\n" .
-    "DELETE FROM car_db      WHERE building = '" . $removed . "';\n" .
-    "DELETE FROM unit_info   WHERE building = '" . $removed . "';\n" .
-    "DELETE FROM emergency   WHERE building = '" . $removed . "';\n" .
-    "DELETE FROM res_requests WHERE building = '" . $removed . "';"
-  ) ?></div>
-
-  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">3. Remove Google Drive folders</p>
+  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">2. Remove Google Drive folders</p>
   <p style="font-size:0.85rem;color:#555;margin:0 0 0.75rem;">
     Log in to the SheepSite Google account and trash the association folder manually:<br>
     <strong>Association Folders / <?= htmlspecialchars($removed) ?>/</strong>
   </p>
 
-  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">4. Remove the Google Sheet (optional)</p>
+  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">3. Remove the Google Sheet (optional)</p>
   <p style="font-size:0.85rem;color:#555;margin:0;">
     The <strong><?= htmlspecialchars($removed) ?> Owner DB</strong> sheet is no longer used operationally.
     You may keep it as an archive or trash it from Google Drive.
@@ -204,8 +207,8 @@ $buildingKeys = array_keys($buildings);
 
 <div class="notice">
   <strong>What this tool does</strong>
-  Deletes all server-side files for the selected association (credentials, config, tags, Woolsy data).
-  MySQL database records and Google Drive folders must be removed manually — this tool will show you the SQL and remind you after deletion.
+  Deletes all server-side files (credentials, config, tags, Woolsy data) and all MySQL database records for the selected association.
+  Google Drive folders must be removed manually — this tool will remind you after deletion.
 </div>
 
 <div class="card">
