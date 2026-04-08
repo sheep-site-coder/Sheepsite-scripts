@@ -26,6 +26,7 @@ $isAdminSetup   = $isAdminReset && isset($_GET['setup']);
 
 $useLocalDB = file_exists(__DIR__ . '/db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
 if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
+require_once __DIR__ . '/db/admin-helpers.php';
 
 // Block owner password resets on demo/test sites (admin reset is unaffected)
 $configFile = __DIR__ . '/config/' . $building . '.json';
@@ -73,7 +74,9 @@ if ($isTestSite) {
   $message     = 'Password resets are disabled on this demo site.';
   $messageType = 'error';
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $username = $isAdminReset ? 'admin' : strtolower(trim($_POST['username'] ?? ''));
+  $username = $isAdminReset
+    ? strtolower(trim($_POST['admin_username'] ?? ''))
+    : strtolower(trim($_POST['username'] ?? ''));
 
   if (!$isAdminReset && (!$username || !preg_match('/^[a-z][a-z0-9]*$/', $username))) {
     $message     = 'Please enter a valid username.';
@@ -81,7 +84,7 @@ if ($isTestSite) {
   } else {
     $webAppURL      = $buildingConfig['webAppURL'];
     $tmpPw          = generateTempPassword();
-    $targetLoginURL = ($username === 'admin')
+    $targetLoginURL = $isAdminReset
                     ? $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir . '/admin.php?building=' . urlencode($building)
                     : $loginURL;
     $secretNum      = trim($_POST['secret_num'] ?? '');
@@ -99,35 +102,51 @@ if ($isTestSite) {
 
     if (!$message) {
       if ($isAdminReset && $useLocalDB) {
-        // DB mode admin reset: look up President from MySQL, validate secret #
+        // DB mode admin reset: validate username + President unit# (magic number)
+        $adminFile  = CREDENTIALS_DIR . $building . '_admin.json';
+        $adminCreds = loadAdminCreds($adminFile);
+        $adminEntry = $username ? findAdmin($adminCreds, $username) : null;
+
+        // Always look up President — needed for unit# validation and setup email routing
+        $president = null;
         try {
-          $pdo   = getDB();
-          $stmt  = $pdo->prepare(
+          $pdo  = getDB();
+          $stmt = $pdo->prepare(
             'SELECT email, unit FROM residents WHERE building = ? AND board_role = ? LIMIT 1'
           );
           $stmt->execute([$building, 'President']);
           $president = $stmt->fetch();
-        } catch (Exception $e) {
-          $president = null;
+        } catch (Exception $e) { /* leave null */ }
+
+        // Validate: username must exist (or be a new bootstrap) AND secret # must match President's unit
+        $unitMatches = $president && $secretNum === trim((string)$president['unit']);
+
+        if ($isAdminSetup && !$adminEntry && $username && $unitMatches) {
+          // Bootstrap: create a new admin entry using President's email
+          $sendTo     = $president['email'] ?? '';
+          $adminEntry = ['user' => $username, 'pass' => '', 'email' => $sendTo];
+        } else {
+          $sendTo = $adminEntry['email'] ?? '';
         }
 
-        if (!$president || !$president['email']) {
-          $message     = 'No President email on file. Please contact your building administrator.';
+        if (!$adminEntry || !$unitMatches) {
+          $message     = 'Admin name or Secret does not match our records.';
           $messageType = 'error';
-        } elseif ($secretNum !== trim((string)$president['unit'])) {
-          $message     = 'No email address is on file for this account. Please contact your building administrator.';
+        } elseif (!$sendTo) {
+          $message     = 'No email address is on file for this admin account. Please contact SheepSite support.';
           $messageType = 'error';
-        } elseif (sendTempPasswordEmail($president['email'], $username, $tmpPw, $targetLoginURL, $buildLabel)) {
-          $newHash   = password_hash($tmpPw, PASSWORD_DEFAULT);
-          $adminFile = CREDENTIALS_DIR . $building . '_admin.json';
-          if (!file_exists($adminFile)) {
-            $adminCred = ['user' => 'admin', 'pass' => $newHash, 'mustChange' => true];
+        } elseif (sendTempPasswordEmail($sendTo, $username, $tmpPw, $targetLoginURL, $buildLabel)) {
+          $newHash    = password_hash($tmpPw, PASSWORD_DEFAULT);
+          // updateAdminEntry adds the entry if it already exists; for bootstrap, append it
+          if (findAdmin($adminCreds, $username)) {
+            $adminCreds = updateAdminEntry($adminCreds, $username, [
+              'pass'       => $newHash,
+              'mustChange' => true,
+            ]);
           } else {
-            $adminCred = json_decode(file_get_contents($adminFile), true);
-            $adminCred['pass']       = $newHash;
-            $adminCred['mustChange'] = true;
+            $adminCreds[] = ['user' => $username, 'pass' => $newHash, 'email' => $sendTo, 'mustChange' => true];
           }
-          file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
+          saveAdminCreds($adminFile, $adminCreds);
           $message = 'A new temporary password has been sent to the email address on file.';
         } else {
           $message     = 'Could not send reset email. Please try again or contact your administrator.';
@@ -195,16 +214,14 @@ if ($isTestSite) {
             if ($savedToOwner) {
               saveUsers($building, $users);
             } else {
-              $adminFile = CREDENTIALS_DIR . $building . '_admin.json';
-              if (!file_exists($adminFile)) {
-                $adminCred = ['user' => 'admin', 'pass' => $newHash, 'mustChange' => true];
+              $adminFile  = CREDENTIALS_DIR . $building . '_admin.json';
+              $adminCreds = loadAdminCreds($adminFile);
+              if (!$adminCreds) {
+                saveAdminCreds($adminFile, [['user' => $username, 'pass' => $newHash, 'email' => '', 'mustChange' => true]]);
               } else {
-                $adminCred = json_decode(file_get_contents($adminFile), true);
-                if (($adminCred['user'] ?? '') === $username) {
-                  $adminCred['pass'] = $newHash; $adminCred['mustChange'] = true;
-                }
+                $adminCreds = updateAdminEntry($adminCreds, $username, ['pass' => $newHash, 'mustChange' => true]);
+                saveAdminCreds($adminFile, $adminCreds);
               }
-              file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
             }
             $message = 'A new temporary password has been sent to the email address on file.';
           } elseif ($status === 'no_email' || $status === 'not_found') {
@@ -259,17 +276,21 @@ if ($isTestSite) {
     <?php if ($isAdminReset): ?>
       <p style="font-size:0.9rem;color:#444;margin-bottom:1.5rem;">
         <?php if ($isAdminSetup): ?>
-          The admin account has not been set up yet. Enter the secret # and a temporary
-          password will be sent to the President of the association to get started.
+          The admin account has not been set up yet. Enter your admin username and secret #,
+          and a temporary password will be sent to the email on file for that account.
         <?php else: ?>
-          A new temporary password will be sent to the President of the association on file.
-          Enter the secret # to confirm.
+          Enter your admin username and secret # (the President's unit number).
+          A temporary password will be sent to the email on file for that account.
         <?php endif; ?>
       </p>
       <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin<?= $isAdminSetup ? '&setup=1' : '' ?>"
             onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Processing\u2026';">
-        <label for="secret_num">Secret #</label>
-        <input type="text" id="secret_num" name="secret_num" autocomplete="off" autofocus
+        <label for="admin_username">Admin username</label>
+        <input type="text" id="admin_username" name="admin_username" autocomplete="username"
+               autocapitalize="none" autofocus style="margin-bottom:1rem;"
+               value="<?= htmlspecialchars($_POST['admin_username'] ?? '') ?>">
+        <label for="secret_num">Secret # (President's unit number)</label>
+        <input type="text" id="secret_num" name="secret_num" autocomplete="off"
                inputmode="numeric" style="margin-bottom:1rem;">
         <button type="submit" class="reset-btn">Send temporary password</button>
       </form>

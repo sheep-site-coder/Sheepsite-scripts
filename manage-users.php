@@ -31,12 +31,14 @@ $sessionKey = 'manage_auth_' . $building;
 $useLocalDB = file_exists(CREDENTIALS_DIR . '../db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
 if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
 
+require_once __DIR__ . '/db/admin-helpers.php';
+
 // Load per-building admin credentials
 $adminCredFile = CREDENTIALS_DIR . $building . '_admin.json';
 if (!file_exists($adminCredFile)) {
   die('<p style="color:red;">Admin credentials not configured. Run setup-admin.php first.</p>');
 }
-$adminCred = json_decode(file_get_contents($adminCredFile), true);
+$adminCreds = loadAdminCreds($adminCredFile);
 
 // Load master credentials (optional — if file missing, master login is disabled)
 $masterCredFile = CREDENTIALS_DIR . '_master.json';
@@ -75,14 +77,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_pass'])) {
   $submittedUser = trim($_POST['admin_user'] ?? '');
   $submittedPass = $_POST['admin_pass'] ?? '';
 
-  $isMaster   = $masterCred
-                && $submittedUser === $masterCred['user']
-                && password_verify($submittedPass, $masterCred['pass']);
-  $isBuilding = $submittedUser === $adminCred['user']
-                && password_verify($submittedPass, $adminCred['pass']);
+  $isMaster     = $masterCred
+                  && $submittedUser === $masterCred['user']
+                  && password_verify($submittedPass, $masterCred['pass']);
+  $matchedAdmin = $isMaster ? null : findAdminByPassword($adminCreds, $submittedUser, $submittedPass);
 
-  if ($isMaster || $isBuilding) {
-    $_SESSION[$sessionKey] = true;
+  if ($isMaster) {
+    $_SESSION[$sessionKey] = ['user' => '_master', 'email' => ''];
+    header('Location: manage-users.php?building=' . urlencode($building));
+    exit;
+  } elseif ($matchedAdmin) {
+    $_SESSION[$sessionKey] = ['user' => $matchedAdmin['user'], 'email' => $matchedAdmin['email'] ?? ''];
     header('Location: manage-users.php?building=' . urlencode($building));
     exit;
   } else {
@@ -93,6 +98,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_pass'])) {
 // -------------------------------------------------------
 // Login — show form if not authenticated
 // -------------------------------------------------------
+// Invalidate legacy sessions stored as plain `true` (pre-multi-admin format)
+if (!empty($_SESSION[$sessionKey]) && !is_array($_SESSION[$sessionKey])) {
+  unset($_SESSION[$sessionKey]);
+}
 if (empty($_SESSION[$sessionKey])) {
 ?>
 <!DOCTYPE html>

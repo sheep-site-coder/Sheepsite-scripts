@@ -70,8 +70,10 @@ if (!file_exists($adminCredFile)) {
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 $sessionKey = 'manage_auth_' . $building;
 
+require_once __DIR__ . '/db/admin-helpers.php';
+
 // Load credentials
-$adminCred  = json_decode(file_get_contents($adminCredFile), true);
+$adminCreds = loadAdminCreds($adminCredFile);
 $masterCredFile = CREDENTIALS_DIR . '_master.json';
 $masterCred = file_exists($masterCredFile) ? json_decode(file_get_contents($masterCredFile), true) : null;
 
@@ -93,14 +95,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_pass'])) {
   $submittedUser = trim($_POST['admin_user'] ?? '');
   $submittedPass = $_POST['admin_pass'] ?? '';
 
-  $isMaster   = $masterCred
-                && $submittedUser === $masterCred['user']
-                && password_verify($submittedPass, $masterCred['pass']);
-  $isBuilding = $submittedUser === $adminCred['user']
-                && password_verify($submittedPass, $adminCred['pass']);
+  $isMaster     = $masterCred
+                  && $submittedUser === $masterCred['user']
+                  && password_verify($submittedPass, $masterCred['pass']);
+  $matchedAdmin = $isMaster ? null : findAdminByPassword($adminCreds, $submittedUser, $submittedPass);
 
-  if ($isMaster || $isBuilding) {
-    $_SESSION[$sessionKey] = true;
+  if ($isMaster) {
+    $_SESSION[$sessionKey] = ['user' => '_master', 'email' => ''];
+    header('Location: admin.php?building=' . urlencode($building));
+    exit;
+  } elseif ($matchedAdmin) {
+    $_SESSION[$sessionKey] = ['user' => $matchedAdmin['user'], 'email' => $matchedAdmin['email'] ?? ''];
     header('Location: admin.php?building=' . urlencode($building));
     exit;
   } else {
@@ -117,6 +122,10 @@ $loginSiteURL    = htmlspecialchars($loginPageConfig['siteURL'] ?? '');
 // -------------------------------------------------------
 // Show login form if not authenticated
 // -------------------------------------------------------
+// Invalidate legacy sessions stored as plain `true` (pre-multi-admin format)
+if (!empty($_SESSION[$sessionKey]) && !is_array($_SESSION[$sessionKey])) {
+  unset($_SESSION[$sessionKey]);
+}
 if (empty($_SESSION[$sessionKey])) {
 ?>
 <!DOCTYPE html>
@@ -188,8 +197,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_building_setting
 // -------------------------------------------------------
 // mustChange check — re-read credential file after any POST
 // -------------------------------------------------------
-$adminCred  = json_decode(file_get_contents($adminCredFile), true);
-$mustChange = !empty($adminCred['mustChange']);
+$adminCreds    = loadAdminCreds($adminCredFile);
+$loggedInUser  = is_array($_SESSION[$sessionKey]) ? ($_SESSION[$sessionKey]['user'] ?? '') : '';
+$loggedInAdmin = ($loggedInUser && $loggedInUser !== '_master') ? findAdmin($adminCreds, $loggedInUser) : null;
+$mustChange    = $loggedInAdmin && !empty($loggedInAdmin['mustChange']);
 
 // -------------------------------------------------------
 // Load config early — needed for testSite check before POST handling
@@ -203,7 +214,7 @@ $isTestSite = !empty($bldCfg['testSite']);
 $pwMessage     = '';
 $pwMessageType = 'ok';
 
-if (!$isTestSite && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass'])) {
+if (!$isTestSite && $loggedInAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_admin_pass'])) {
   $currentPass = $_POST['current_pass'] ?? '';
   $newPass     = $_POST['new_pass']     ?? '';
   $confirmPass = $_POST['confirm_pass'] ?? '';
@@ -217,13 +228,16 @@ if (!$isTestSite && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['chang
   } elseif (strlen($newPass) < 8) {
     $pwMessage     = 'New password must be at least 8 characters.';
     $pwMessageType = 'error';
-  } elseif (!password_verify($currentPass, $adminCred['pass'])) {
+  } elseif (!password_verify($currentPass, $loggedInAdmin['pass'] ?? '')) {
     $pwMessage     = 'Current password is incorrect.';
     $pwMessageType = 'error';
   } else {
-    $adminCred['pass'] = password_hash($newPass, PASSWORD_DEFAULT);
-    unset($adminCred['mustChange']);
-    if (file_put_contents($adminCredFile, json_encode($adminCred, JSON_PRETTY_PRINT)) !== false) {
+    $adminCreds = updateAdminEntry($adminCreds, $loggedInUser, [
+      'pass'       => password_hash($newPass, PASSWORD_DEFAULT),
+      'mustChange' => null,
+    ]);
+    if (saveAdminCreds($adminCredFile, $adminCreds)) {
+      $loggedInAdmin = findAdmin($adminCreds, $loggedInUser); // refresh
       $mustChange = false;
       $pwMessage  = 'Password updated. You now have full access.';
     } else {
@@ -561,6 +575,8 @@ if (!$mustChange) {
 
 <?php if ($isTestSite): ?>
   <p style="color:#999;font-size:0.9rem;font-style:italic;">Password changes are disabled in demo mode.</p>
+<?php elseif (!$loggedInAdmin): ?>
+  <p style="color:#999;font-size:0.9rem;font-style:italic;">Logged in as master admin — use master credentials to change your own password.</p>
 <?php else: ?>
 
 <?php if ($pwMessage): ?>
