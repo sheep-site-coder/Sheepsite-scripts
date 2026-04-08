@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       CONFIG_DIR      . $key . '_folders.json',
       TAGS_DIR        . $key . '.json',
       FAQS_DIR        . $key . '.txt',
+      FAQS_DIR        . $key . '_rules.md',
       FAQS_DIR        . $key . '_docindex.txt',
     ];
     $deleted  = [];
@@ -259,6 +260,7 @@ var filesByBuilding = <?php
       'config/'      . $k . '_folders.json',
       'tags/'        . $k . '.json',
       'faqs/'        . $k . '.txt',
+      'faqs/'        . $k . '_rules.md',
       'faqs/'        . $k . '_docindex.txt',
       'faqs/woolsy_credits.json (entry)',
       'faqs/woolsy_usage.json (entry)',
