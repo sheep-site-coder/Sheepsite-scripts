@@ -99,6 +99,29 @@ if (empty($_SESSION[SESSION_KEY])) {
 }
 
 // -------------------------------------------------------
+// Assume Admin — set manage_auth_{building} and redirect
+// -------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assume_building'])) {
+  $b = trim($_POST['assume_building'] ?? '');
+  $buildings = require __DIR__ . '/buildings.php';
+  if ($b && isset($buildings[$b])) {
+    $_SESSION['manage_auth_' . $b] = ['user' => '_master', 'email' => ''];
+    header('Location: admin.php?building=' . urlencode($b));
+    exit;
+  }
+}
+
+// -------------------------------------------------------
+// Release assumed admin session
+// -------------------------------------------------------
+if (isset($_GET['release_building'])) {
+  $b = trim($_GET['release_building'] ?? '');
+  if ($b) unset($_SESSION['manage_auth_' . $b]);
+  header('Location: master-admin.php');
+  exit;
+}
+
+// -------------------------------------------------------
 // Load data for dashboard
 // -------------------------------------------------------
 $buildings = require __DIR__ . '/buildings.php';
@@ -381,7 +404,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
         <span style="color:#16a34a;font-size:1rem;" title="<?= $bldInvoices ? 'All paid' : 'No invoices' ?>">✓</span>
       <?php endif; ?>
     </div>
-    <a href="building-detail.php?building=<?= urlencode($b) ?>" class="manage-btn">Manage →</a>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
+      <a href="building-detail.php?building=<?= urlencode($b) ?>" class="manage-btn">Manage →</a>
+      <form method="post" style="margin:0;">
+        <input type="hidden" name="assume_building" value="<?= htmlspecialchars($b) ?>">
+        <button type="submit" class="manage-btn" style="background:#6b7280;">Assume Admin</button>
+      </form>
+    </div>
   </div>
 
 </div>

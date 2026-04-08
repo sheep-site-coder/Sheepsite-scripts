@@ -409,6 +409,13 @@ if (!$mustChange) {
   </div>
 </div>
 
+<?php if ($loggedInUser === '_master'): ?>
+  <div style="background:#f0f7ff;border:1px solid #93c5fd;border-radius:8px;padding:0.65rem 1rem;margin-bottom:1.25rem;font-size:0.9rem;color:#1e3a5f;display:flex;justify-content:space-between;align-items:center;">
+    <span>Viewing as <strong>Master Admin</strong></span>
+    <a href="master-admin.php?release_building=<?= urlencode($building) ?>" style="color:#1e3a5f;font-weight:600;text-decoration:none;font-size:0.85rem;">Release ×</a>
+  </div>
+<?php endif; ?>
+
 <?php if ($isTestSite): ?>
   <div style="background:#fef9c3;border:1px solid #fbbf24;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1.5rem;font-size:0.9rem;color:#92400e;">
     <strong>Demo Site</strong> — You are viewing a demonstration site. Password changes, contact email, and Woolsy knowledge base rebuilds are disabled. Contact <a href="https://sheepsite.com" style="color:#92400e;">SheepSite</a> to activate your full account.
@@ -609,7 +616,7 @@ if (!$mustChange) {
       <div class="card-icon">⚙️</div>
       <div>
         <div class="card-title" style="color:inherit;">Building Settings</div>
-        <div class="card-desc">Contact email and website URL for this building.</div>
+        <div class="card-desc">Billing contact email and website URL for this building.</div>
       </div>
     </div>
     <?php if ($settingsMessage): ?>
@@ -619,7 +626,7 @@ if (!$mustChange) {
           style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.25rem;">
       <div style="flex:1;min-width:220px;">
         <label for="contact_email" style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
-          Building contact email
+          Billing contact email
         </label>
         <input type="text" id="contact_email" name="contact_email"
                value="<?= $contactEmail ?>"
@@ -642,7 +649,7 @@ if (!$mustChange) {
     </form>
     <p style="font-size:0.78rem;color:#999;margin:0.1rem 0 0;">
       Website URL enables "Back to site" links in welcome emails and resident pages.
-      Contact email is used for resident change requests (falls back to President's email if blank).
+      Billing contact email is for invoices. Resident change request notifications go to admin account emails.
     </p>
   </div>
 

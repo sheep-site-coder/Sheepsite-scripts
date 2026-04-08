@@ -880,7 +880,7 @@ function esc(s) {
                placeholder="https://lyndhurstH.com" style="width:100%;">
       </div>
       <div style="flex:1;min-width:220px;">
-        <label>Contact email</label>
+        <label>Billing contact email</label>
         <input type="email" name="contact_email" value="<?= htmlspecialchars($bldCfg['contactEmail'] ?? '') ?>"
                placeholder="board@example.com" style="width:100%;">
       </div>
