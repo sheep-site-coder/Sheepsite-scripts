@@ -196,27 +196,17 @@ if ($action) {
       $users[]  = ['user' => $username, 'pass' => password_hash($tempPw, PASSWORD_DEFAULT), 'mustChange' => true];
       saveUsers($building, $users);
 
-      // Email the temp password via Apps Script
+      // Email the temp password directly from PHP
       $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
       $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
       $siteURL  = loadConfig($building)['siteURL'] ?? '';
       $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                 . '/display-private-dir.php?building=' . urlencode($building)
                 . ($siteURL ? '&return=' . urlencode($siteURL) : '');
-      $resetURL = $webAppURL
-                . '?page=resetpw'
-                . '&token='       . urlencode(OWNER_IMPORT_TOKEN)
-                . '&username='    . urlencode($username)
-                . '&building='    . urlencode($building)
-                . '&tmppw='       . urlencode($tempPw)
-                . '&loginurl='    . urlencode($loginURL)
-                . '&directemail=' . urlencode($email ?? $newEmail ?? '');
-      $emailResp = @file_get_contents($resetURL);
-      $emailSent = false;
-      if ($emailResp !== false) {
-        $emailData = json_decode($emailResp, true);
-        $emailSent = ($emailData['status'] ?? '') === 'ok';
-      }
+      $recipientEmail = $email ?? $newEmail ?? '';
+      $emailSent = $recipientEmail
+        ? sendTempPasswordEmail($recipientEmail, $username, $tempPw, $loginURL, $buildLabel, true)
+        : false;
 
       echo json_encode(['ok' => true, 'username' => $username, 'emailSent' => $emailSent]);
       exit;
@@ -292,16 +282,7 @@ if ($action) {
           $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
           $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                     . '/display-private-dir.php?building=' . urlencode($building);
-          $resetURL = $webAppURL
-                    . '?page=resetpw'
-                    . '&token='       . urlencode(OWNER_IMPORT_TOKEN)
-                    . '&username='    . urlencode($username)
-                    . '&building='    . urlencode($building)
-                    . '&tmppw='       . urlencode($tempPw)
-                    . '&loginurl='    . urlencode($loginURL)
-                    . '&directemail=' . urlencode($newEmail);
-          $emailResp = @file_get_contents($resetURL);
-          $emailSent = ($emailResp !== false && ($emailData = json_decode($emailResp, true)) && ($emailData['status'] ?? '') === 'ok');
+          $emailSent = sendTempPasswordEmail($newEmail, $username, $tempPw, $loginURL, $buildLabel, true);
 
           $response['accountCreated'] = true;
           $response['username']       = $username;
@@ -396,6 +377,69 @@ if ($action) {
         if (array_key_exists($key, $body)) $config[$key] = $body[$key];
       }
       echo json_encode(['ok' => saveConfig($building, $config)]);
+      exit;
+    }
+
+    // --- Pending requests ---
+    case 'listRequests':
+      echo json_encode($useLocalDB
+        ? dbGetRequests($building)
+        : ['requests' => []]
+      );
+      exit;
+
+    case 'approveRequest': {
+      $id  = (int)($_GET['id'] ?? 0);
+      $req = $useLocalDB ? dbGetRequest($building, $id) : null;
+      if (!$req) { echo json_encode(['error' => 'Request not found']); exit; }
+
+      // Add to residents table
+      $addResult = dbAddResident($building, [
+        'Unit #'     => $req['unit'],
+        'First Name' => $req['first_name'],
+        'Last Name'  => $req['last_name'],
+        'eMail'      => $req['email'],
+        'Phone #1'   => $req['phone1'],
+        'Phone #2'   => $req['phone2'],
+        'Full Time'  => (bool)$req['full_time'],
+        'Resident'   => (bool)$req['is_resident'],
+        'Owner'      => (bool)$req['is_owner'],
+      ]);
+      if (!empty($addResult['error'])) { echo json_encode($addResult); exit; }
+
+      // Create web account + send welcome email if email provided
+      $email     = trim($req['email'] ?? '');
+      $first     = trim($req['first_name'] ?? '');
+      $last      = trim($req['last_name']  ?? '');
+      $emailSent = false;
+      $username  = null;
+      if ($email) {
+        $users    = loadUsers($building);
+        $existing = array_column($users, 'user');
+        $username = generateUsername($first, $last, $existing);
+        $tempPw   = generateTempPassword();
+        $users[]  = ['user' => $username, 'pass' => password_hash($tempPw, PASSWORD_DEFAULT), 'mustChange' => true];
+        saveUsers($building, $users);
+        $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+        $siteURL  = loadConfig($building)['siteURL'] ?? '';
+        $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                  . '/display-private-dir.php?building=' . urlencode($building)
+                  . ($siteURL ? '&return=' . urlencode($siteURL) : '');
+        $emailSent = sendTempPasswordEmail($email, $username, $tempPw, $loginURL, $buildLabel, true);
+      }
+
+      dbDeleteRequest($building, $id);
+      echo json_encode(['ok' => true, 'username' => $username, 'emailSent' => $emailSent]);
+      exit;
+    }
+
+    case 'rejectRequest': {
+      $id = (int)($_GET['id'] ?? 0);
+      echo json_encode($useLocalDB
+        ? dbDeleteRequest($building, $id)
+        : ['error' => 'DB not available']
+      );
       exit;
     }
   }
@@ -552,6 +596,26 @@ $config = loadConfig($building);
     .confirm-cancel:hover { background: #f5f5f5; }
 
     /* CSV import panel */
+    /* Pending requests */
+    #pending-btn        { position: relative; }
+    .req-badge          { display: inline-block; background: #e65c00; color: #fff;
+                          font-size: 0.7rem; font-weight: 700; border-radius: 10px;
+                          padding: 0 5px; line-height: 1.5; margin-left: 4px; vertical-align: middle; }
+    #pending-panel      { border: 1px solid #f5c189; border-radius: 6px; padding: 1rem 1.2rem;
+                          margin-bottom: 1.25rem; background: #fffaf5; display: none; }
+    #pending-panel h3   { font-size: 0.95rem; margin: 0 0 0.75rem; color: #b84d00; }
+    .req-card           { border: 1px solid #e0d0c0; border-radius: 5px; padding: 0.75rem 1rem;
+                          margin-bottom: 0.75rem; background: #fff; font-size: 0.875rem; }
+    .req-card-header    { font-weight: 600; margin-bottom: 0.4rem; color: #333; }
+    .req-card-fields    { color: #555; line-height: 1.7; }
+    .req-card-actions   { margin-top: 0.65rem; display: flex; gap: 0.5rem; }
+    .btn-approve        { padding: 0.3rem 0.85rem; background: #1a7f37; color: #fff;
+                          border: none; border-radius: 4px; font-size: 0.82rem; cursor: pointer; }
+    .btn-approve:hover  { background: #155d28; }
+    .btn-reject         { padding: 0.3rem 0.85rem; background: #c00; color: #fff;
+                          border: none; border-radius: 4px; font-size: 0.82rem; cursor: pointer; }
+    .btn-reject:hover   { background: #900; }
+
     #csv-import-panel   { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem 1.2rem;
                           margin-bottom: 1.25rem; background: #fafafa; display: none; }
     #csv-import-panel h3 { font-size: 0.95rem; margin: 0 0 0.35rem; }
@@ -587,7 +651,15 @@ $config = loadConfig($building);
   <button class="btn btn-secondary" id="copy-emails-btn" onclick="copyAllEmails()"
     title="Copies all resident emails to the clipboard. Then simply Paste into the CC or BCC field of your email.">Get Email List</button>
   <button class="btn btn-secondary" onclick="toggleCsvPanel()">⤓ Import from CSV</button>
+  <button class="btn btn-secondary" id="pending-btn" onclick="togglePendingPanel()" style="display:none">
+    Pending Requests <span class="req-badge" id="pending-badge">0</span>
+  </button>
   <button class="btn btn-primary" onclick="showAddUnit()">+ Add to Unit…</button>
+</div>
+
+<div id="pending-panel">
+  <h3>Pending Resident Addition Requests</h3>
+  <div id="pending-list"></div>
 </div>
 
 <div id="csv-import-panel">
@@ -665,12 +737,14 @@ let unitCache   = {};   // unit# -> {unit, residents, car, emergency} — avoids
 // Boot
 // -------------------------------------------------------
 async function init() {
-  const [dbRes, cfgRes] = await Promise.all([
+  const [dbRes, cfgRes, reqRes] = await Promise.all([
     apiFetch('listDatabase'),
     apiFetch('getConfig'),
+    apiFetch('listRequests'),
   ]);
   if (dbRes.error) { showError(dbRes.error); return; }
   floorConfig = cfgRes || floorConfig;
+  renderPendingRequests(reqRes.requests || []);
 
   allRows    = dbRes.rows || [];
   unitMap    = {};
@@ -1526,6 +1600,78 @@ function showError(msg) {
 // CSV Import
 // -------------------------------------------------------
 let csvRows = [];
+
+// -------------------------------------------------------
+// Pending requests
+// -------------------------------------------------------
+function renderPendingRequests(requests) {
+  const btn    = document.getElementById('pending-btn');
+  const badge  = document.getElementById('pending-badge');
+  const panel  = document.getElementById('pending-panel');
+  const list   = document.getElementById('pending-list');
+  const count  = requests.length;
+  badge.textContent = count;
+  btn.style.display = count > 0 ? '' : 'none';
+
+  if (!count) { list.innerHTML = ''; panel.style.display = 'none'; return; }
+
+  list.innerHTML = requests.map(r => {
+    const flags = [
+      r.full_time   ? 'Full Time' : '',
+      r.is_resident ? 'Resident'  : '',
+      r.is_owner    ? 'Owner'     : '',
+    ].filter(Boolean).join(' · ') || '—';
+    const date = r.submitted_at ? r.submitted_at.substring(0, 16).replace('T', ' ') : '';
+    return `<div class="req-card" id="req-card-${r.id}">
+      <div class="req-card-header">Unit ${esc(r.unit)} &mdash; ${esc(r.req_type)} &mdash; <span style="font-weight:400;color:#888;font-size:0.8rem;">${esc(date)}</span></div>
+      <div class="req-card-fields">
+        Submitted by: <strong>${esc(r.submitted_by)}</strong><br>
+        Name: <strong>${esc(r.first_name)} ${esc(r.last_name)}</strong><br>
+        ${r.email  ? `Email: ${esc(r.email)}<br>` : ''}
+        ${r.phone1 ? `Phone #1: ${esc(r.phone1)}<br>` : ''}
+        ${r.phone2 ? `Phone #2: ${esc(r.phone2)}<br>` : ''}
+        Status: ${flags}
+        ${r.notes  ? `<br>Notes: ${esc(r.notes)}` : ''}
+      </div>
+      <div class="req-card-actions">
+        <button class="btn-approve" onclick="approveRequest(${r.id})">✓ Approve</button>
+        <button class="btn-reject"  onclick="rejectRequest(${r.id})">✗ Reject</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togglePendingPanel() {
+  const panel = document.getElementById('pending-panel');
+  panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+}
+
+async function approveRequest(id) {
+  if (!confirm('Approve this request? The resident will be added to the database and sent a welcome email if an email address was provided.')) return;
+  const res = await apiFetch('approveRequest', { id });
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  const msg = res.emailSent
+    ? `Approved — resident added, welcome email sent to ${res.username}.`
+    : 'Approved — resident added. No email address on file.';
+  toast(msg, 'ok', 7000);
+  // Reload unit list and requests
+  const [dbRes, reqRes] = await Promise.all([apiFetch('listDatabase'), apiFetch('listRequests')]);
+  allRows = dbRes.rows || [];
+  unitMap = {};
+  allRows.forEach(r => { const u = String(r['Unit #']).trim(); if (u) (unitMap[u] = unitMap[u] || []).push(r); });
+  unitOrder = Object.keys(unitMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  renderUnits(unitOrder);
+  renderPendingRequests(reqRes.requests || []);
+}
+
+async function rejectRequest(id) {
+  if (!confirm('Reject and delete this request?')) return;
+  const res = await apiFetch('rejectRequest', { id });
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  toast('Request rejected.', 'ok');
+  const reqRes = await apiFetch('listRequests');
+  renderPendingRequests(reqRes.requests || []);
+}
 
 function toggleCsvPanel() {
   const panel = document.getElementById('csv-import-panel');

@@ -24,6 +24,9 @@ $buildLabel     = ucwords(str_replace(['_', '-'], ' ', $building));
 $isAdminReset   = ($_GET['role'] ?? '') === 'admin';
 $isAdminSetup   = $isAdminReset && isset($_GET['setup']);
 
+$useLocalDB = file_exists(__DIR__ . '/db/db.php') && file_exists(CREDENTIALS_DIR . 'db.json');
+if ($useLocalDB) require_once __DIR__ . '/db/residents.php';
+
 // Block owner password resets on demo/test sites (admin reset is unaffected)
 $configFile = __DIR__ . '/config/' . $building . '.json';
 $bldCfg     = file_exists($configFile) ? (json_decode(file_get_contents($configFile), true) ?? []) : [];
@@ -83,63 +86,137 @@ if ($isTestSite) {
                     : $loginURL;
     $secretNum      = trim($_POST['secret_num'] ?? '');
 
-    $url      = $webAppURL
-              . '?page=resetpw'
-              . '&token='     . urlencode(OWNER_IMPORT_TOKEN)
-              . '&username='  . urlencode($username)
-              . '&building='  . urlencode($building)
-              . '&tmppw='     . urlencode($tmpPw)
-              . '&loginurl='  . urlencode($targetLoginURL)
-              . '&secretnum=' . urlencode($secretNum);
-    $response = @file_get_contents($url);
+    // In DB mode for owner resets, look up the email from MySQL and pass it
+    // directly to GAS so GAS doesn't try to look it up from the Sheet.
+    $directEmail = null;
+    if (!$isAdminReset && $useLocalDB) {
+      $directEmail = dbGetEmailByUsername($building, $username);
+      if ($directEmail === null) {
+        $message     = 'No email address is on file for this account. Please contact your building administrator.';
+        $messageType = 'error';
+      }
+    }
 
-    if ($response === false) {
-      $message     = 'Could not reach the email service. Please try again later or contact your administrator.';
-      $messageType = 'error';
-    } else {
-      $data   = json_decode($response, true);
-      $status = $data['status'] ?? '';
-
-      if ($status === 'ok') {
-        // Email sent — update whichever credential file contains this username.
-        // Check owner file first, then admin file.
-        $newHash   = password_hash($tmpPw, PASSWORD_DEFAULT);
-        $savedToOwner = false;
-        $users = loadUsers($building);
-        foreach ($users as &$u) {
-          if ($u['user'] === $username) {
-            $u['pass']       = $newHash;
-            $u['mustChange'] = true;
-            $savedToOwner    = true;
-            break;
-          }
+    if (!$message) {
+      if ($isAdminReset && $useLocalDB) {
+        // DB mode admin reset: look up President from MySQL, validate secret #
+        try {
+          $pdo   = getDB();
+          $stmt  = $pdo->prepare(
+            'SELECT email, unit FROM residents WHERE building = ? AND board_role = ? LIMIT 1'
+          );
+          $stmt->execute([$building, 'President']);
+          $president = $stmt->fetch();
+        } catch (Exception $e) {
+          $president = null;
         }
-        unset($u);
-        if ($savedToOwner) {
-          saveUsers($building, $users);
-        } else {
-          // Check admin credential file — create it if this is first-time setup
+
+        if (!$president || !$president['email']) {
+          $message     = 'No President email on file. Please contact your building administrator.';
+          $messageType = 'error';
+        } elseif ($secretNum !== trim((string)$president['unit'])) {
+          $message     = 'No email address is on file for this account. Please contact your building administrator.';
+          $messageType = 'error';
+        } elseif (sendTempPasswordEmail($president['email'], $username, $tmpPw, $targetLoginURL, $buildLabel)) {
+          $newHash   = password_hash($tmpPw, PASSWORD_DEFAULT);
           $adminFile = CREDENTIALS_DIR . $building . '_admin.json';
           if (!file_exists($adminFile)) {
             $adminCred = ['user' => 'admin', 'pass' => $newHash, 'mustChange' => true];
           } else {
             $adminCred = json_decode(file_get_contents($adminFile), true);
-            if (($adminCred['user'] ?? '') === $username) {
-              $adminCred['pass']       = $newHash;
-              $adminCred['mustChange'] = true;
-            }
+            $adminCred['pass']       = $newHash;
+            $adminCred['mustChange'] = true;
           }
           file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
+          $message = 'A new temporary password has been sent to the email address on file.';
+        } else {
+          $message     = 'Could not send reset email. Please try again or contact your administrator.';
+          $messageType = 'error';
         }
-        $message = 'A new temporary password has been sent to the email address on file.';
-      } elseif ($status === 'no_email' || $status === 'not_found') {
-        $message     = 'No email address is on file for this account. Please contact your building administrator.';
-        $messageType = 'error';
+
+      } elseif ($directEmail !== null) {
+        // DB mode owner reset: send directly from PHP so From is noreply@sheepsite.com
+        $subject = 'Your temporary password – ' . $buildLabel;
+        $body    = "A password reset was requested for your account ($username).\n\n"
+                 . "Your new temporary password is:\n\n"
+                 . "    $tmpPw\n\n"
+                 . "Please log in at the link below — you will be prompted to set a new password:\n"
+                 . "$targetLoginURL\n\n"
+                 . "If you did not request this, please contact your building administrator.";
+        $headers = implode("\r\n", [
+          'From: SheepSite.com <noreply@sheepsite.com>',
+          'Reply-To: noreply@sheepsite.com',
+          'Content-Type: text/plain; charset=UTF-8',
+        ]);
+        if (mail($directEmail, $subject, $body, $headers)) {
+          $newHash = password_hash($tmpPw, PASSWORD_DEFAULT);
+          $users   = loadUsers($building);
+          foreach ($users as &$u) {
+            if ($u['user'] === $username) { $u['pass'] = $newHash; $u['mustChange'] = true; break; }
+          }
+          unset($u);
+          saveUsers($building, $users);
+          $message = 'A new temporary password has been sent to the email address on file.';
+        } else {
+          $message     = 'Could not send reset email. Please try again or contact your administrator.';
+          $messageType = 'error';
+        }
+
       } else {
-        $message     = 'Could not send reset email. Please try again or contact your administrator.';
-        $messageType = 'error';
+        // GAS path: non-DB buildings only
+        $url      = $webAppURL
+                  . '?page=resetpw'
+                  . '&token='     . urlencode(OWNER_IMPORT_TOKEN)
+                  . '&username='  . urlencode($username)
+                  . '&building='  . urlencode($building)
+                  . '&tmppw='     . urlencode($tmpPw)
+                  . '&loginurl='  . urlencode($targetLoginURL)
+                  . '&secretnum=' . urlencode($secretNum);
+        $ctx      = stream_context_create(['http' => ['timeout' => 15]]);
+        $response = @file_get_contents($url, false, $ctx);
+
+        if ($response === false) {
+          $message     = 'Could not reach the email service. Please try again later or contact your administrator.';
+          $messageType = 'error';
+        } else {
+          $data   = json_decode($response, true);
+          $status = $data['status'] ?? '';
+
+          if ($status === 'ok') {
+            $newHash      = password_hash($tmpPw, PASSWORD_DEFAULT);
+            $savedToOwner = false;
+            $users        = loadUsers($building);
+            foreach ($users as &$u) {
+              if ($u['user'] === $username) {
+                $u['pass'] = $newHash; $u['mustChange'] = true; $savedToOwner = true; break;
+              }
+            }
+            unset($u);
+            if ($savedToOwner) {
+              saveUsers($building, $users);
+            } else {
+              $adminFile = CREDENTIALS_DIR . $building . '_admin.json';
+              if (!file_exists($adminFile)) {
+                $adminCred = ['user' => 'admin', 'pass' => $newHash, 'mustChange' => true];
+              } else {
+                $adminCred = json_decode(file_get_contents($adminFile), true);
+                if (($adminCred['user'] ?? '') === $username) {
+                  $adminCred['pass'] = $newHash; $adminCred['mustChange'] = true;
+                }
+              }
+              file_put_contents($adminFile, json_encode($adminCred, JSON_PRETTY_PRINT));
+            }
+            $message = 'A new temporary password has been sent to the email address on file.';
+          } elseif ($status === 'no_email' || $status === 'not_found') {
+            $message     = 'No email address is on file for this account. Please contact your building administrator.';
+            $messageType = 'error';
+          } else {
+            $message     = 'Could not send reset email. Please try again or contact your administrator.';
+            $messageType = 'error';
+          }
+        }
       }
-    }
+    } // end if (!$message)
   }
 } // end elseif POST
 ?>
@@ -189,7 +266,8 @@ if ($isTestSite) {
           Enter the secret # to confirm.
         <?php endif; ?>
       </p>
-      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin<?= $isAdminSetup ? '&setup=1' : '' ?>">
+      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>&role=admin<?= $isAdminSetup ? '&setup=1' : '' ?>"
+            onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Processing\u2026';">
         <label for="secret_num">Secret #</label>
         <input type="text" id="secret_num" name="secret_num" autocomplete="off" autofocus
                inputmode="numeric" style="margin-bottom:1rem;">
@@ -201,7 +279,8 @@ if ($isTestSite) {
         Enter your username (first letter of your first name + last name, e.g. <strong>jsmith</strong>).
         If we have an email address on file for your account, we'll send you a temporary password.
       </p>
-      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>">
+      <form method="post" action="forgot-password.php?building=<?= urlencode($building) ?>"
+            onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='Processing\u2026';">
         <label for="username">Username</label>
         <input type="text" id="username" name="username"
                autocomplete="username" autocapitalize="none" autofocus

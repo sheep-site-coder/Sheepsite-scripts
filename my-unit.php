@@ -178,13 +178,120 @@ if ($action) {
       $dir          = rtrim(dirname($_SERVER['PHP_SELF']), '/');
       $adminUrl     = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
                     . '/database-admin.php?building=' . urlencode($building);
-      echo json_encode(gasPost($webAppURL, array_merge($body, [
-        'action'       => 'sendChangeRequest',
-        'token'        => OWNER_IMPORT_TOKEN,
-        'buildingName' => $buildLabel,
-        'contactEmail' => $contactEmail,
-        'adminUrl'     => $adminUrl,
-      ])));
+
+      if ($useLocalDB) {
+        $unit         = trim($body['unit']         ?? '');
+        $residentName = trim($body['residentName'] ?? '');
+        $reqType      = trim($body['reqType']      ?? '');
+        $firstName    = trim($body['firstName']    ?? '');
+        $lastName     = trim($body['lastName']     ?? '');
+        $email        = trim($body['email']        ?? '');
+        $phone1       = trim($body['phone1']       ?? '');
+        $phone2       = trim($body['phone2']       ?? '');
+        $notes        = trim($body['notes']        ?? '');
+
+        if ($reqType === 'Add resident') {
+          // Store in pending queue; admin approves/rejects in database-admin.php
+          dbAddRequest($building, [
+            'unit'         => $unit,
+            'submitted_by' => $residentName,
+            'req_type'     => $reqType,
+            'first_name'   => $firstName,
+            'last_name'    => $lastName,
+            'email'        => $email,
+            'phone1'       => $phone1,
+            'phone2'       => $phone2,
+            'full_time'    => !empty($body['fullTime']),
+            'is_resident'  => !empty($body['resident']),
+            'is_owner'     => !empty($body['owner']),
+            'notes'        => $notes,
+          ]);
+
+          // Notify admin — shorter email since full detail is in the approval queue
+          $toEmail = $contactEmail;
+          if (!$toEmail) {
+            $pdo  = getDB();
+            $stmt = $pdo->prepare(
+              "SELECT email FROM residents WHERE building = ? AND board_role = 'President' AND email != '' LIMIT 1"
+            );
+            $stmt->execute([$building]);
+            $toEmail = $stmt->fetchColumn() ?: '';
+          }
+          if ($toEmail) {
+            $subject = "[$buildLabel] Pending: Add resident request from Unit $unit";
+            $body2   = "A request to add a resident was submitted by $residentName (Unit $unit) "
+                     . "and is waiting for your approval.\n\n"
+                     . "Name: $firstName $lastName\n"
+                     . ($email  ? "Email:    $email\n"  : '')
+                     . ($phone1 ? "Phone #1: $phone1\n" : '')
+                     . ($notes  ? "Notes:    $notes\n"  : '')
+                     . "\nPlease log in to approve or reject:\n$adminUrl";
+            $headers = implode("\r\n", [
+              'From: SheepSite.com <noreply@sheepsite.com>',
+              'Reply-To: noreply@sheepsite.com',
+              'Content-Type: text/plain; charset=UTF-8',
+            ]);
+            mail($toEmail, $subject, $body2, $headers);
+          }
+          echo json_encode(['ok' => true]);
+
+        } else {
+          // Remove / Name correction — email-only, no queue
+          $toEmail = $contactEmail;
+          if (!$toEmail) {
+            $pdo  = getDB();
+            $stmt = $pdo->prepare(
+              "SELECT email FROM residents WHERE building = ? AND board_role = 'President' AND email != '' LIMIT 1"
+            );
+            $stmt->execute([$building]);
+            $toEmail = $stmt->fetchColumn() ?: '';
+          }
+          if (!$toEmail) {
+            echo json_encode(['error' => 'No contact email found. Set a Building Contact Email in admin → Building Settings.']);
+            exit;
+          }
+          $fullTime = !empty($body['fullTime']) ? 'Yes' : 'No';
+          $resident = !empty($body['resident']) ? 'Yes' : 'No';
+          $owner    = !empty($body['owner'])    ? 'Yes' : 'No';
+          $subject  = "[$buildLabel] Resident change request from Unit $unit";
+          $lines    = [
+            'A resident change request was submitted via the building website.',
+            '',
+            "Building:     $buildLabel",
+            "Unit:         $unit",
+            "Submitted by: $residentName",
+            '',
+            "Request type: $reqType",
+            "Name:         $firstName $lastName",
+          ];
+          if ($email)  $lines[] = "Email:        $email";
+          if ($phone1) $lines[] = "Phone #1:     $phone1";
+          if ($phone2) $lines[] = "Phone #2:     $phone2";
+          $lines[] = "Full Time:    $fullTime";
+          $lines[] = "Resident:     $resident";
+          $lines[] = "Owner:        $owner";
+          if ($notes) $lines[] = "Notes:        $notes";
+          $lines[] = '';
+          $lines[] = "Please log in to the admin panel and open Manage Residents/Owners → Unit $unit to make the change.";
+          $lines[] = '';
+          $lines[] = $adminUrl;
+          $headers = implode("\r\n", [
+            'From: SheepSite.com <noreply@sheepsite.com>',
+            'Reply-To: noreply@sheepsite.com',
+            'Content-Type: text/plain; charset=UTF-8',
+          ]);
+          $sent = mail($toEmail, $subject, implode("\n", $lines), $headers);
+          echo json_encode($sent ? ['ok' => true] : ['error' => 'Failed to send email.']);
+        }
+      } else {
+        echo json_encode(gasPost($webAppURL, array_merge($body, [
+          'action'       => 'sendChangeRequest',
+          'token'        => OWNER_IMPORT_TOKEN,
+          'buildingName' => $buildLabel,
+          'contactEmail' => $contactEmail,
+          'adminUrl'     => $adminUrl,
+        ])));
+      }
       exit;
     }
   }

@@ -238,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existingIdx = array_key_last($users);
       }
 
-      // Try to email the temp password via Apps Script (works for both new and existing residents)
+      // Try to email the temp password
       $webAppURL = $buildings[$building]['webAppURL'] ?? '';
       $scheme    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
       $dir       = rtrim(dirname($_SERVER['PHP_SELF']), '/');
@@ -246,7 +246,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  . '/display-private-dir.php?building=' . urlencode($building);
 
       $emailSent = false;
-      if ($webAppURL) {
+      if ($useLocalDB) {
+        $residentEmail = dbGetEmailByUsername($building, $user);
+        if ($residentEmail) {
+          $emailSent = sendTempPasswordEmail($residentEmail, $user, $pass, $loginURL, $buildLabel);
+        }
+      } elseif ($webAppURL) {
         $resetURL  = $webAppURL
                    . '?page=resetpw'
                    . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
@@ -373,8 +378,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tmpHash  = password_hash($tmpPw, PASSWORD_DEFAULT);
         $users[]  = ['user' => $m['user'], 'pass' => $tmpHash, 'mustChange' => true];
         $added++;
-        // Email the new temp password via Apps Script (skipped in DB mode)
-        if (!$useLocalDB && $webAppURL) {
+        // Email the new temp password
+        if ($useLocalDB) {
+          $residentEmail = dbGetEmailByUsername($building, $m['user']);
+          if ($residentEmail && sendTempPasswordEmail($residentEmail, $m['user'], $tmpPw, $loginURL, $buildLabel, true)) {
+            $emailed++;
+          }
+        } elseif ($webAppURL) {
           $resetURL = $webAppURL
                     . '?page=resetpw'
                     . '&token='    . urlencode(OWNER_IMPORT_TOKEN)
@@ -417,19 +427,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $message = 'New password cannot be empty.';
       $messageType = 'error';
     } else {
-      $users = loadUsers($building);
-      $found = false;
-      foreach ($users as &$u) {
-        if ($u['user'] === $user) {
-          $u['pass'] = password_hash($newpass, PASSWORD_DEFAULT);
-          $found = true;
-          break;
-        }
+      $users    = loadUsers($building);
+      $foundIdx = null;
+      foreach ($users as $i => $u) {
+        if ($u['user'] === $user) { $foundIdx = $i; break; }
       }
-      unset($u);
-      if ($found) {
+      if ($foundIdx !== null) {
+        $users[$foundIdx]['pass'] = password_hash($newpass, PASSWORD_DEFAULT);
+
+        // Email the new password if resident has an email in the DB
+        $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $dir      = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+        $loginURL = $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir
+                  . '/display-private-dir.php?building=' . urlencode($building);
+        $emailSent = false;
+        if ($useLocalDB) {
+          $residentEmail = dbGetEmailByUsername($building, $user);
+          if ($residentEmail) {
+            $emailSent = sendTempPasswordEmail($residentEmail, $user, $newpass, $loginURL, $buildLabel);
+          }
+        }
+        if ($emailSent) {
+          $users[$foundIdx]['mustChange'] = true;
+        }
         saveUsers($building, $users);
-        $message = "Password updated for \"$user\".";
+        $message = $emailSent
+          ? "Password updated for \"$user\" — temporary password emailed to resident."
+          : "Password updated for \"$user\".";
       } else {
         $message = "Resident \"$user\" not found.";
         $messageType = 'error';
