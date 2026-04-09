@@ -1029,11 +1029,45 @@ docs/Sheepsite-Architecture.html
 4. Delete `import-sheet-to-db.php` from server
 5. Note: first login after deploy invalidates legacy `true` sessions — users re-login once
 
+### Session 32 — Cron diagnosis, ToS improvements, master-admin UI (April 9, 2026)
+
+**Cron path diagnosed and fixed:**
+- Built `cron-test.php` diagnostic script to identify server paths via cPanel cron
+- Confirmed cPanel cron format: 5-field (minute is smallest unit, 5-min minimum)
+- PHP binary for cron: `/usr/local/bin/php`
+- Script path: `/home/qgscrmoq/sheepsite.com/Scripts/`
+- `storage-cron.php` nightly cron configured: `0 2 * * * /usr/local/bin/php /home/qgscrmoq/sheepsite.com/Scripts/storage-cron.php`
+- `cron-test.php` to be deleted from server after confirming
+
+**Terms of Service improvements:**
+- Added Section 13: Domain Names and Web Addresses
+  - SheepSite subdomains owned by SheepSite LLC
+  - Association-owned domains remain association property
+  - $250 transfer fee on domain handoff
+- Updated Section 2: "Associations should never upload..." (was "Residents")
+- Updated Section 3 & 6: credential distribution wording updated to reflect system-issued creds with mandatory reset
+- Removed "Google" references from Section 12 (termination) and Section 5 (security)
+- Removed internal operator note at bottom of document
+- Sections renumbered: 13→17 (Contact is now 17)
+- `tos-accept.php`: Added "View full document ↗" link (opens in new tab for print/save)
+- `tos-accept.php`: Enhanced acceptance statement — 4-point legal acknowledgement
+- `tos-accept.php`: Added full name input field; name stored in signature record (replaces "admin")
+
+**master-admin.php UI:**
+- Assume Admin button renamed to "Admin Proxy"
+- Manage and Admin Proxy buttons now stacked vertically (was side-by-side, broke card layout)
+
+**Confirmed working:**
+- Billing flow: renewal date advances on payment (`markInvoicePaid()`), NOT when cron generates invoice
+- ToS task from session 19 closed — ToS is admin-only, no user manual section needed
+
 ### Outstanding items
-- **Invoice cron** — `storage-cron.php` renewal invoice generation not working; not yet diagnosed
-- **ToS user manual** — Task 5 from session 19 still pending (document ToS flow in manual)
+- Deploy `feature/resident-browser-cache` branch files to production (see branch for file list)
+- Create `cache/` directory on server (chmod 755)
+- Run DB import for LyndhurstH, LyndhurstI, SampleSite via `import-sheet-to-db.php`
+- Delete `cron-test.php` from server once confirmed working
 
 ---
 
-*Snapshot updated: April 8, 2026 (session 31 — multi-admin, Assume Admin, self-serve reset, DB-only docs)*
+*Snapshot updated: April 9, 2026 (session 32 — cron path, ToS improvements, master-admin UI)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

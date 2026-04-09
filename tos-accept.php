@@ -49,8 +49,10 @@ function saveBuildingConfig(string $building, array $config): void {
   file_put_contents(CONFIG_DIR . $building . '.json', json_encode($config, JSON_PRETTY_PRINT));
 }
 
-$buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
-$declined   = false;
+$buildLabel  = ucwords(str_replace(['_', '-'], ' ', $building));
+$declined    = false;
+$signerError = '';
+$signerName  = '';
 
 // -------------------------------------------------------
 // Handle POST
@@ -58,28 +60,33 @@ $declined   = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if (isset($_POST['accept'])) {
-    $now    = date('c');
-    $config = loadBuildingConfig($building);
-    $config['tosAccepted'] = [
-      'version' => $tosVersion,
-      'date'    => $now,
-      'who'     => 'admin',
-    ];
-    saveBuildingConfig($building, $config);
+    $signerName = trim($_POST['signer_name'] ?? '');
+    if ($signerName === '') {
+      $signerError = 'Please enter your full name before accepting.';
+    } else {
+      $now    = date('c');
+      $config = loadBuildingConfig($building);
+      $config['tosAccepted'] = [
+        'version' => $tosVersion,
+        'date'    => $now,
+        'who'     => $signerName,
+      ];
+      saveBuildingConfig($building, $config);
 
-    // Append to signature archive
-    $sigFile = CONFIG_DIR . 'tos_signatures.json';
-    $sigs    = file_exists($sigFile) ? json_decode(file_get_contents($sigFile), true) ?? [] : [];
-    $sigs[]  = [
-      'building' => $building,
-      'version'  => $tosVersion,
-      'date'     => $now,
-      'who'      => 'admin',
-    ];
-    file_put_contents($sigFile, json_encode($sigs, JSON_PRETTY_PRINT));
+      // Append to signature archive
+      $sigFile = CONFIG_DIR . 'tos_signatures.json';
+      $sigs    = file_exists($sigFile) ? json_decode(file_get_contents($sigFile), true) ?? [] : [];
+      $sigs[]  = [
+        'building' => $building,
+        'version'  => $tosVersion,
+        'date'     => $now,
+        'who'      => $signerName,
+      ];
+      file_put_contents($sigFile, json_encode($sigs, JSON_PRETTY_PRINT));
 
-    header('Location: admin.php?building=' . urlencode($building));
-    exit;
+      header('Location: admin.php?building=' . urlencode($building));
+      exit;
+    }
   }
 
   if (isset($_POST['decline'])) {
@@ -151,6 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($tosDate): ?>
       <span><strong>Effective Date:</strong> <?= htmlspecialchars($tosDate) ?></span>
     <?php endif; ?>
+    <span><a href="<?= htmlspecialchars($docPath) ?>" target="_blank" style="color:#0070f3;font-size:0.85rem;text-decoration:none;">View full document ↗</a></span>
   </div>
 
   <div class="doc-frame">
@@ -159,11 +167,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <form method="post" action="tos-accept.php?building=<?= urlencode($building) ?>">
     <div class="action-bar">
-      <p>By clicking <strong>I Accept</strong> you confirm that you are the authorized administrator for
-         <strong><?= htmlspecialchars($buildLabel) ?></strong> and that you accept these Terms of Service
-         on behalf of the association. Your acceptance will be recorded with a timestamp.</p>
-      <button type="submit" name="accept" class="btn-accept">I Accept</button>
-      <button type="submit" name="decline" class="btn-decline">Decline &amp; Log Out</button>
+      <p>By clicking <strong>I Accept</strong> below, I confirm that: (1) I have read and fully understand
+         the SheepSite LLC Terms of Service and License Agreement in their entirety; (2) I am duly
+         authorized by the board of <strong><?= htmlspecialchars($buildLabel) ?></strong> to enter into
+         this Agreement on the association's behalf; (3) I agree that the association is bound by all
+         terms and conditions contained herein; and (4) I understand that this electronic acceptance
+         constitutes a legally binding acknowledgement, recorded with my name and a timestamp.</p>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;min-width:220px;">
+        <div>
+          <label style="font-size:0.8rem;font-weight:bold;color:#333;display:block;margin-bottom:0.25rem;">Your full name</label>
+          <input type="text" name="signer_name" value="<?= htmlspecialchars($signerName) ?>"
+                 placeholder="First and last name" required
+                 style="width:100%;padding:0.45rem 0.6rem;border:1px solid <?= $signerError ? '#dc2626' : '#ccc' ?>;border-radius:4px;font-size:0.9rem;">
+          <?php if ($signerError): ?>
+            <div style="color:#dc2626;font-size:0.8rem;margin-top:0.2rem;"><?= htmlspecialchars($signerError) ?></div>
+          <?php endif; ?>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+          <button type="submit" name="accept" class="btn-accept">I Accept</button>
+          <button type="submit" name="decline" class="btn-decline">Decline &amp; Log Out</button>
+        </div>
+      </div>
     </div>
   </form>
 

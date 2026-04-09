@@ -404,11 +404,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
         <span style="color:#16a34a;font-size:1rem;" title="<?= $bldInvoices ? 'All paid' : 'No invoices' ?>">✓</span>
       <?php endif; ?>
     </div>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
-      <a href="building-detail.php?building=<?= urlencode($b) ?>" class="manage-btn">Manage →</a>
+    <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:stretch;">
+      <a href="building-detail.php?building=<?= urlencode($b) ?>" class="manage-btn" style="text-align:center;">Manage →</a>
       <form method="post" style="margin:0;">
         <input type="hidden" name="assume_building" value="<?= htmlspecialchars($b) ?>">
-        <button type="submit" class="manage-btn" style="background:#6b7280;">Assume Admin</button>
+        <button type="submit" class="manage-btn" style="background:#6b7280;width:100%;">Admin Proxy</button>
       </form>
     </div>
   </div>
