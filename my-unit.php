@@ -170,6 +170,36 @@ if ($action) {
       exit;
     }
 
+    // Add emergency contact
+    case 'addEmergencyRow': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode($useLocalDB
+        ? dbAddEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'addEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
+      exit;
+    }
+
+    // Edit emergency contact
+    case 'editEmergencyRow': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode($useLocalDB
+        ? dbEditEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'editEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
+      exit;
+    }
+
+    // Delete emergency contact
+    case 'deleteEmergencyRow': {
+      $body = json_decode(file_get_contents('php://input'), true) ?? [];
+      echo json_encode($useLocalDB
+        ? dbDeleteEmergency($building, $body)
+        : gasPost($webAppURL, array_merge($body, ['action' => 'deleteEmergencyRow', 'token' => OWNER_IMPORT_TOKEN]))
+      );
+      exit;
+    }
+
     // Send change request email
     case 'sendChangeRequest': {
       $body         = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -332,9 +362,6 @@ if ($action) {
     .top-links a { color: #0070f3; text-decoration: none; }
     .top-links a:hover { text-decoration: underline; }
 
-    .section-header { font-size: 1rem; font-weight: 700; margin: 1.5rem 0 0.75rem;
-                      padding-bottom: 0.4rem; border-bottom: 2px solid #eee; }
-
     .person-card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem;
                    margin-bottom: 0.75rem; background: #fff; }
     .person-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.6rem; }
@@ -372,6 +399,14 @@ if ($action) {
     .msg.ok     { background: #e6f4ea; color: #1a7f37; }
     .msg.error  { background: #ffeef0; color: #c00; }
     .msg.info   { background: #eff6ff; color: #1d4ed8; }
+
+    .tabs           { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 1.25rem; }
+    .tab-btn        { padding: 0.5rem 1.1rem; font-size: 0.875rem; border: none; background: none;
+                      cursor: pointer; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab-btn:hover  { color: #0070f3; }
+    .tab-btn.active { color: #0070f3; border-bottom-color: #0070f3; font-weight: 600; }
+    .tab-panel      { display: none; }
+    .tab-panel.active { display: block; }
 
     /* Toast */
     #toast          { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%);
@@ -461,6 +496,8 @@ const SCRIPT_BASE = 'my-unit.php?building=' + encodeURIComponent(BUILDING);
 
 let myUnit      = null;
 let myResidents = [];
+let myEmergency = [];
+let currentTab  = 'tab-residents';
 
 async function init() {
   const res = await apiFetch('getMyUnit');
@@ -469,34 +506,72 @@ async function init() {
       `<div class="msg error">${esc(res.error)}</div>`;
     return;
   }
-
   myUnit      = res.unit;
-  myResidents = res.residents || [];
-
-  renderPage(myUnit, myResidents, res.car || {}, res.unitInfo || {});
+  myResidents = res.residents  || [];
+  myEmergency = res.emergency  || [];
+  renderPage(myUnit, myResidents, res.car || {}, res.unitInfo || {}, myEmergency);
 }
 
 // -------------------------------------------------------
-// Render
+// Tab switcher
 // -------------------------------------------------------
-function renderPage(unit, residents, car, unitInfo) {
+function switchTab(btn, tabId) {
+  currentTab = tabId;
+  document.querySelectorAll('#main-content .tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#main-content .tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+}
+
+// -------------------------------------------------------
+// Render — 4 tabs matching admin view
+// -------------------------------------------------------
+function renderPage(unit, residents, car, unitInfo, emergency) {
   const main = document.getElementById('main-content');
   main.innerHTML = `
-    <div style="font-size:0.9rem;color:#888;margin-bottom:1rem;">Unit ${esc(unit)}</div>
-
-    <div class="section-header">
-      Residents
-      <button class="btn btn-primary btn-sm" style="margin-left:1rem;font-size:0.8rem;"
-        onclick="openRequestPopup('${esc(unit)}')">Add/Remove Resident</button>
+    <div style="font-size:0.9rem;color:#888;margin-bottom:0.75rem;">Unit ${esc(unit)}</div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'tab-residents')">
+        Residents (${residents.length})
+      </button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-unitinfo')">Unit Info</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-car')">Vehicle &amp; Parking</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-emergency')">
+        Emergency (${emergency.length})
+      </button>
     </div>
-    ${residents.map(r => residentCardHtml(unit, r)).join('') || '<p style="color:#888;font-size:0.9rem;">No residents on file.</p>'}
-
-    <div class="section-header">Unit Information</div>
-    ${unitInfoSectionHtml(unit, unitInfo)}
-
-    <div class="section-header">Vehicle &amp; Parking</div>
-    ${carSectionHtml(unit, car)}
+    <div class="tab-panel active" id="tab-residents">
+      ${residentsTabHtml(unit, residents)}
+    </div>
+    <div class="tab-panel" id="tab-unitinfo">
+      ${unitInfoSectionHtml(unit, unitInfo)}
+    </div>
+    <div class="tab-panel" id="tab-car">
+      ${carSectionHtml(unit, car)}
+    </div>
+    <div class="tab-panel" id="tab-emergency">
+      ${emergencyTabHtml(unit, emergency)}
+    </div>
   `;
+  // Restore previously active tab
+  if (currentTab !== 'tab-residents') {
+    const btn = [...document.querySelectorAll('#main-content .tab-btn')]
+      .find(b => (b.getAttribute('onclick') || '').includes(currentTab));
+    if (btn) switchTab(btn, currentTab);
+  }
+}
+
+// -------------------------------------------------------
+// Residents tab
+// -------------------------------------------------------
+function residentsTabHtml(unit, residents) {
+  const cards = residents.map(r => residentCardHtml(unit, r)).join('');
+  return `${cards || '<p style="color:#888;font-size:0.9rem;">No residents on file.</p>'}
+    <div style="margin-top:0.75rem;">
+      <button class="btn btn-secondary btn-sm" onclick="openRequestPopup('${esc(unit)}')">
+        Request Add / Remove Resident
+      </button>
+    </div>`;
 }
 
 // -------------------------------------------------------
@@ -572,11 +647,11 @@ async function saveResident(unit, first, last, id) {
     'Full Time':   document.getElementById('ef-ft-'    + id).checked,
   });
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  document.getElementById('ef-' + id).style.display = 'none';
   const refresh = await apiFetch('getMyUnit');
   if (!refresh.error) {
     myResidents = refresh.residents || [];
-    renderPage(myUnit, myResidents, refresh.car || {}, refresh.unitInfo || {});
+    myEmergency = refresh.emergency || [];
+    renderPage(myUnit, myResidents, refresh.car || {}, refresh.unitInfo || {}, myEmergency);
   }
   toast('✓ Your info has been saved.');
 }
@@ -628,9 +703,11 @@ async function saveUnitInfo(unit) {
     'Water Tank':   document.getElementById('ui-wt').value,
   });
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  document.getElementById('unit-info-edit-form').style.display = 'none';
   const refresh = await apiFetch('getMyUnit');
-  if (!refresh.error) renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {});
+  if (!refresh.error) {
+    myEmergency = refresh.emergency || [];
+    renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {}, myEmergency);
+  }
   toast('✓ Unit information has been saved.');
 }
 
@@ -685,10 +762,152 @@ async function saveCar(unit) {
     'Notes':        document.getElementById('cf-notes').value.trim(),
   });
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
-  document.getElementById('car-edit-form').style.display = 'none';
   const refresh = await apiFetch('getMyUnit');
-  if (!refresh.error) renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {});
+  if (!refresh.error) {
+    myEmergency = refresh.emergency || [];
+    renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {}, myEmergency);
+  }
   toast('✓ Vehicle info has been saved.');
+}
+
+// -------------------------------------------------------
+// Emergency contacts tab
+// -------------------------------------------------------
+function emergencyTabHtml(unit, contacts) {
+  const cards = contacts.map(c => emergencyCardHtml(unit, c)).join('');
+  return `${cards || '<p style="color:#888;font-size:0.9rem;">No emergency contacts on file.</p>'}
+    <div id="em-add-form-${esc(unit)}" class="edit-form" style="display:none;margin-top:0.75rem;">
+      <div style="font-weight:600;margin-bottom:0.75rem;font-size:0.9rem;">Add Emergency Contact / Condo Sitter</div>
+      <div class="field-grid">
+        <div><label>First Name *</label><input type="text" id="emn-first-${esc(unit)}" placeholder="Required"></div>
+        <div><label>Last Name *</label><input type="text" id="emn-last-${esc(unit)}" placeholder="Required"></div>
+        <div><label>Email</label><input type="text" id="emn-email-${esc(unit)}"></div>
+        <div><label>Phone 1</label><input type="text" id="emn-ph1-${esc(unit)}"></div>
+        <div><label>Phone 2</label><input type="text" id="emn-ph2-${esc(unit)}"></div>
+      </div>
+      <div style="margin-top:0.5rem;">
+        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.85rem;font-weight:600;">
+          <input type="checkbox" id="emn-cs-${esc(unit)}"> Condo Sitter
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm" onclick="saveAddEmergency('${esc(unit)}')">Add</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleAddEmergency('${esc(unit)}')">Cancel</button>
+      </div>
+      <div id="emn-msg-${esc(unit)}" style="margin-top:0.5rem;"></div>
+    </div>
+    <div style="margin-top:0.75rem;">
+      <button class="btn btn-secondary btn-sm" onclick="toggleAddEmergency('${esc(unit)}')">+ Add Contact</button>
+    </div>`;
+}
+
+function emergencyCardHtml(unit, c) {
+  const name  = `${c['First Name']} ${c['Last Name']}`.trim();
+  const label = c['Condo Sitter'] ? 'Condo Sitter' : 'Emergency Contact';
+  const id    = `em-${esc(unit)}-${esc(c['First Name'])}-${esc(c['Last Name'])}`.replace(/[^a-z0-9-]/gi, '_');
+  return `<div class="person-card" id="${id}">
+    <div class="person-name">${esc(name)} <span style="font-size:0.78rem;color:#888;font-weight:400;">${label}</span></div>
+    <div class="field-grid">
+      ${fieldPair('Email',   c['eMail'])}
+      ${fieldPair('Phone 1', c['Phone1'])}
+      ${fieldPair('Phone 2', c['Phone2'])}
+    </div>
+    <div class="person-actions">
+      <button class="btn btn-primary btn-sm"
+        onclick="showEditEmergency('${esc(unit)}', '${esc(c['First Name'])}', '${esc(c['Last Name'])}', '${id}')">Edit</button>
+      <button class="btn btn-secondary btn-sm"
+        onclick="deleteEmergency('${esc(unit)}', '${esc(c['First Name'])}', '${esc(c['Last Name'])}', '${esc(name)}')">Remove</button>
+    </div>
+    <div class="edit-form" id="em-edit-${id}" style="display:none;margin-top:0.75rem;">
+      <div class="field-grid">
+        <div><label>First Name</label><input type="text" id="emf-first-${id}" value="${esc(c['First Name'])}"></div>
+        <div><label>Last Name</label><input type="text" id="emf-last-${id}" value="${esc(c['Last Name'])}"></div>
+        <div><label>Email</label><input type="text" id="emf-email-${id}" value="${esc(c['eMail'])}"></div>
+        <div><label>Phone 1</label><input type="text" id="emf-ph1-${id}" value="${esc(c['Phone1'])}"></div>
+        <div><label>Phone 2</label><input type="text" id="emf-ph2-${id}" value="${esc(c['Phone2'])}"></div>
+      </div>
+      <div style="margin-top:0.5rem;">
+        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.85rem;font-weight:600;">
+          <input type="checkbox" id="emf-cs-${id}"${c['Condo Sitter'] ? ' checked' : ''}> Condo Sitter
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm"
+          onclick="saveEditEmergency('${esc(unit)}', '${esc(c['First Name'])}', '${esc(c['Last Name'])}', '${id}')">Save</button>
+        <button class="btn btn-secondary btn-sm"
+          onclick="document.getElementById('em-edit-${id}').style.display='none'">Cancel</button>
+      </div>
+      <div id="emf-msg-${id}" style="margin-top:0.5rem;"></div>
+    </div>
+  </div>`;
+}
+
+function toggleAddEmergency(unit) {
+  const el = document.getElementById('em-add-form-' + unit);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function showEditEmergency(unit, first, last, id) {
+  document.getElementById('em-edit-' + id).style.display = 'block';
+}
+
+async function saveAddEmergency(unit) {
+  const first = document.getElementById('emn-first-' + unit).value.trim();
+  const last  = document.getElementById('emn-last-'  + unit).value.trim();
+  const msgEl = document.getElementById('emn-msg-'   + unit);
+  if (!first || !last) { showMsg(msgEl, 'First and last name are required.', 'error'); return; }
+  showMsg(msgEl, 'Saving…', 'info');
+  const res = await apiPost('addEmergencyRow', {
+    'Unit #':       unit,
+    'First Name':   first,
+    'Last Name':    last,
+    'eMail':        document.getElementById('emn-email-' + unit).value.trim(),
+    'Phone1':       document.getElementById('emn-ph1-'   + unit).value.trim(),
+    'Phone2':       document.getElementById('emn-ph2-'   + unit).value.trim(),
+    'Condo Sitter': document.getElementById('emn-cs-'    + unit).checked,
+  });
+  if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
+  const refresh = await apiFetch('getMyUnit');
+  if (!refresh.error) {
+    myEmergency = refresh.emergency || [];
+    renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {}, myEmergency);
+  }
+  toast('✓ Emergency contact added.');
+}
+
+async function saveEditEmergency(unit, origFirst, origLast, id) {
+  const msgEl = document.getElementById('emf-msg-' + id);
+  showMsg(msgEl, 'Saving…', 'info');
+  const res = await apiPost('editEmergencyRow', {
+    matchUnit:      unit,
+    matchFirst:     origFirst,
+    matchLast:      origLast,
+    'First Name':   document.getElementById('emf-first-' + id).value.trim(),
+    'Last Name':    document.getElementById('emf-last-'  + id).value.trim(),
+    'eMail':        document.getElementById('emf-email-' + id).value.trim(),
+    'Phone1':       document.getElementById('emf-ph1-'   + id).value.trim(),
+    'Phone2':       document.getElementById('emf-ph2-'   + id).value.trim(),
+    'Condo Sitter': document.getElementById('emf-cs-'    + id).checked,
+  });
+  if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
+  const refresh = await apiFetch('getMyUnit');
+  if (!refresh.error) {
+    myEmergency = refresh.emergency || [];
+    renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {}, myEmergency);
+  }
+  toast('✓ Emergency contact updated.');
+}
+
+async function deleteEmergency(unit, first, last, displayName) {
+  if (!confirm(`Remove ${displayName} from your emergency contacts?`)) return;
+  const res = await apiPost('deleteEmergencyRow', { matchUnit: unit, matchFirst: first, matchLast: last });
+  if (res.error) { toast('Error: ' + res.error, 'error'); return; }
+  const refresh = await apiFetch('getMyUnit');
+  if (!refresh.error) {
+    myEmergency = refresh.emergency || [];
+    renderPage(myUnit, refresh.residents || [], refresh.car || {}, refresh.unitInfo || {}, myEmergency);
+  }
+  toast('✓ Emergency contact removed.');
 }
 
 // -------------------------------------------------------
