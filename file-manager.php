@@ -165,6 +165,34 @@ if (isset($_GET['json']) && $_GET['json'] === 'storage_refresh') {
 }
 
 // -------------------------------------------------------
+// JSON: warm the public/private resident listing cache
+// Called in background by JS after every admin write.
+// Makes the same GAS call the resident browser would make
+// and stores the result so the next visitor gets a cache hit.
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'warm') {
+  header('Content-Type: application/json');
+  $tree   = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
+  $wPath  = trim($_GET['path'] ?? '', '/');
+  $wFid   = $tree === 'private' ? $config['privateFolderId'] : $config['publicFolderId'];
+  $action = $tree === 'private' ? 'listPrivate' : 'list';
+
+  $warmUrl = APPS_SCRIPT_URL . '?action=' . $action
+           . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
+           . '&folderId=' . urlencode($wFid)
+           . ($wPath ? '&subdir=' . urlencode($wPath) : '');
+
+  $resp = @file_get_contents($warmUrl);
+  if ($resp !== false) {
+    lcSet($tree === 'private' ? 'priv' : 'pub', $building, $wPath, $resp);
+    echo json_encode(['ok' => true]);
+  } else {
+    echo json_encode(['ok' => false]);
+  }
+  exit;
+}
+
+// -------------------------------------------------------
 // JSON: set up BigUploads quarantine subfolder in Drive
 // Returns {ok, folderId} — the Drive folder to open
 // -------------------------------------------------------
@@ -732,6 +760,10 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   }
   function bustCache() {
     try { sessionStorage.removeItem(cacheKey()); } catch (e) {}
+    // Re-warm the public/private resident cache in the background
+    fetch(base + '&json=warm&tree=' + currentTree
+        + (currentPath ? '&path=' + encodeURIComponent(currentPath) : ''))
+      .catch(function () {});
   }
 
   // -------------------------------------------------------
