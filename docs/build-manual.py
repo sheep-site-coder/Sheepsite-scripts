@@ -178,8 +178,10 @@ html = f"""<!DOCTYPE html>
 
 {section("Section 2 &mdash; The Admin Dashboard")}
 
-<p>After logging in, you will see the Admin Dashboard with the following options:</p>
+<p>After logging in, you will see the Admin Dashboard. It is organized into two tabs:</p>
 
+<h3>Dashboard Tab</h3>
+<p>The Dashboard tab contains all the main feature cards:</p>
 <table>
   <tr><th>Card</th><th>What It Does</th></tr>
   <tr><td><strong>Manage Residents/Owners</strong></td><td>Add, edit, and remove residents across all units. Manage contact info, vehicles, and emergency contacts. Bulk import from CSV. Copy all resident email addresses for community-wide email.</td></tr>
@@ -188,13 +190,20 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
   <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
   <tr><td><strong>Woolsy AI Assistant</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
-  <tr><td><strong>Admin Accounts</strong></td><td>View and manage all administrator accounts for this building. Add new admins, update email addresses for notifications, or remove accounts. Each admin has a separate username, password, and email address.</td></tr>
-  <tr><td><strong>Building Settings</strong></td><td>Update the building&rsquo;s <strong>billing contact email</strong> address (used for invoices). The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
 
+<h3>Settings Tab</h3>
+<p>Click <strong>Settings</strong> at the top to switch to the Settings tab, which contains building configuration and admin account management:</p>
+<table>
+  <tr><th>Section</th><th>What It Does</th></tr>
+  <tr><td><strong>Building Settings</strong></td><td>Update the building&rsquo;s <strong>billing contact email</strong> address (used for invoices). The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
+  <tr><td><strong>Admin Accounts</strong></td><td>View and manage all administrator accounts for this building. Add new admins, update email addresses for notifications, or remove accounts. Each admin has a separate username, password, and email address.</td></tr>
+  <tr><td><strong>Change Admin Password</strong></td><td>Change your own admin password. Enter your current password, then your new password twice.</td></tr>
+</table>
+
 <h3>Admin Accounts</h3>
-<p>Each building can have more than one administrator account. All admin accounts are listed in the <strong>Admin Accounts</strong> section at the bottom of the Admin Dashboard. Each account shows its username and a field to set the email address used for resident change-request notifications.</p>
+<p>Each building can have more than one administrator account. All admin accounts are listed in the <strong>Admin Accounts</strong> section of the <strong>Settings</strong> tab. Each account shows its username and a field to set the email address used for resident change-request notifications.</p>
 
 <h4>Changing Your Email Address</h4>
 <p>Find your account in the list and update the email field, then click <strong>Save</strong>. This email receives notifications when a resident submits a change request from the My Unit page.</p>
@@ -211,7 +220,7 @@ html = f"""<!DOCTYPE html>
 <p>Click <strong>Remove</strong> next to any account that should no longer have access. You cannot remove your own account, and at least one admin account must remain at all times.</p>
 
 <h4>Changing Your Own Password</h4>
-<p>Use the <strong>Change Admin Password</strong> form at the very bottom of the page. Enter your current password, then your new password twice. The new password must be at least 8 characters.</p>
+<p>Use the <strong>Change Admin Password</strong> form at the bottom of the <strong>Settings</strong> tab. Enter your current password, then your new password twice. The new password must be at least 8 characters.</p>
 
 {divider()}
 
@@ -221,10 +230,11 @@ html = f"""<!DOCTYPE html>
 <p>All owner and resident data is managed from the Admin Dashboard via <strong>Manage Residents/Owners</strong>. This gives you a full in-site editor for every unit &mdash; no need to open a spreadsheet for day-to-day changes.</p>
 
 <h3>The Unit View</h3>
-<p>Units are grouped by floor. Click any unit to expand it and see three tabs:</p>
+<p>Units are grouped by floor. Click any unit to expand it and see four tabs:</p>
 <table>
   <tr><th>Tab</th><th>What it contains</th></tr>
-  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time), email, phones, insurance, appliance dates</td></tr>
+  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time), email, phones</td></tr>
+  <tr><td><strong>Unit Info</strong></td><td>Insurance company and policy number, AC replacement date, water tank replacement date, unit notes</td></tr>
   <tr><td><strong>Vehicle &amp; Parking</strong></td><td>Car make/model/color, license plate, parking spot, notes</td></tr>
   <tr><td><strong>Emergency</strong></td><td>Emergency contacts and condo sitters &mdash; name, email, phones</td></tr>
 </table>
@@ -338,6 +348,7 @@ html = f"""<!DOCTYPE html>
 
 <h3>The File Manager</h3>
 <p>The built-in file manager lets you upload, organize, and delete documents without leaving the website. Access it from the Admin Dashboard via the <strong>File Management</strong> card, or directly from any document browser page on your site.</p>
+<p>Folder listings are remembered during your session &mdash; the first time you open a folder the system fetches it from Google Drive, and every subsequent visit within the same session is instant. The listing is automatically refreshed any time you upload, delete, rename, or move files.</p>
 
 <h4>Uploading Files</h4>
 <ul>

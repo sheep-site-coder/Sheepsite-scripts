@@ -661,6 +661,23 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   var currentFiles    = [];   // flat list of { id, name } for duplicate detection
   var renamingId        = null;
   var renamingFolderId  = null;
+  var storageRefreshFired = false;
+
+  // -------------------------------------------------------
+  // sessionStorage listing cache
+  // -------------------------------------------------------
+  function cacheKey() {
+    return 'fm_' + building + '_' + currentTree + '_' + currentPath;
+  }
+  function getCached() {
+    try { var v = sessionStorage.getItem(cacheKey()); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+  function setCached(data) {
+    try { sessionStorage.setItem(cacheKey(), JSON.stringify(data)); } catch (e) {}
+  }
+  function bustCache() {
+    try { sessionStorage.removeItem(cacheKey()); } catch (e) {}
+  }
 
   // -------------------------------------------------------
   // Bootstrap
@@ -700,8 +717,18 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   // Fetch + render listing
   // -------------------------------------------------------
   function loadListing() {
-    document.getElementById('listing').innerHTML = '<p class="loading">Loading\u2026</p>';
     renderBreadcrumb();
+
+    // Serve from cache instantly if available
+    var cached = getCached();
+    if (cached) {
+      currentFolderId = cached.currentFolderId || null;
+      currentFiles    = cached.files || [];
+      renderListing(cached);
+      return;
+    }
+
+    document.getElementById('listing').innerHTML = '<p class="loading">Loading\u2026</p>';
 
     var url = base + '&json=list&tree=' + currentTree
             + (currentPath ? '&path=' + encodeURIComponent(currentPath) : '');
@@ -711,7 +738,13 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
       .then(function (d) {
         currentFolderId = d.currentFolderId || null;
         currentFiles    = d.files || [];
+        setCached(d);
         renderListing(d);
+        // Fire storage refresh once, after the initial listing loads (not competing with it)
+        if (!storageRefreshFired) {
+          storageRefreshFired = true;
+          fetch(base + '&json=storage_refresh').catch(function () {});
+        }
       })
       .catch(function () {
         document.getElementById('listing').innerHTML = '<p class="error">Could not load folder.</p>';
@@ -915,6 +948,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
         .then(function () {
           dropLabel.style.display = '';
           progress.style.display  = 'none';
+          bustCache();
           loadListing();
         });
     };
@@ -964,6 +998,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     post({ action: 'rename', fileId: fileId, newName: newName })
       .then(function (d) {
         if (d.ok) {
+          bustCache();
           document.getElementById('fname-' + fileId).textContent = newName;
           cancelRename(fileId);
         } else {
@@ -1023,6 +1058,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
       .then(function (d) {
         if (d.ok) {
           renamingFolderId = null;
+          bustCache();
           loadListing();
         } else {
           alert('Rename failed: ' + (d.error || 'Unknown error'));
@@ -1058,6 +1094,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     post({ action: 'delete', fileId: fileId })
       .then(function (d) {
         if (d.ok) {
+          bustCache();
           row.remove();
         } else {
           alert('Delete failed: ' + (d.error || 'Unknown error'));
@@ -1088,6 +1125,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     post({ action: 'deleteFolder', folderId: folderId })
       .then(function (d) {
         if (d.ok) {
+          bustCache();
           loadListing();
         } else {
           alert('Delete failed: ' + (d.error || 'Unknown error'));
@@ -1109,6 +1147,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     post({ action: 'createFolder', parentFolderId: currentFolderId, name: name.trim() })
       .then(function (d) {
         if (d.ok) {
+          bustCache();
           loadListing();
         } else {
           alert('Could not create folder: ' + (d.error || 'Unknown error'));
@@ -1416,6 +1455,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
         if (errors.length) {
           alert('Some files failed to upload:\n' + errors.join('\n'));
         }
+        bustCache();
         loadListing();
         return;
       }
@@ -1559,14 +1599,6 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   </div>
 </div>
 
-<script>
-// Background storage refresh — fires once on page load, no spinner, no UI impact.
-// Updates config/{building}.json so the upload limit check stays current.
-document.addEventListener('DOMContentLoaded', function () {
-  fetch('file-manager.php?building=<?= urlencode($building) ?>&json=storage_refresh')
-    .catch(function () {}); // fire and forget — silently ignore errors
-});
-</script>
 
 </body>
 </html>

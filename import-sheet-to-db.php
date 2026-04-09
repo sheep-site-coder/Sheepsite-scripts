@@ -106,19 +106,52 @@ foreach ($rows as $r) {
 out("Added $resAdded residents, skipped $resSkipped duplicates.");
 
 // -------------------------------------------------------
-// Step 2: Cars, Unit Info, Emergency — one getUnit per unit
+// Step 2: Cars, Unit Info, Emergency — all units in parallel
 // -------------------------------------------------------
-out('<strong>Step 2: Cars, Unit Info &amp; Emergency contacts</strong>');
+out('<strong>Step 2: Cars, Unit Info &amp; Emergency contacts (parallel fetch)</strong>');
 $carAdded  = 0; $unitAdded = 0; $emAdded = 0;
 
-foreach (array_keys($units) as $unit) {
-  out("  Unit $unit...");
-  $res = gasGet($webAppURL, ['page' => 'getUnit', 'token' => OWNER_IMPORT_TOKEN, 'unit' => $unit]);
-  if (!empty($res['error'])) {
-    $errors[] = "Unit $unit getUnit error: " . $res['error'];
-    continue;
-  }
+$unitKeys = array_keys($units);
+$unitData = []; // unit => decoded response
 
+// Fetch all units simultaneously via curl_multi
+$mh   = curl_multi_init();
+$chs  = [];
+foreach ($unitKeys as $unit) {
+  $url = $webAppURL . '?' . http_build_query([
+    'page'  => 'getUnit',
+    'token' => OWNER_IMPORT_TOKEN,
+    'unit'  => $unit,
+  ]);
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_TIMEOUT        => 60,
+  ]);
+  curl_multi_add_handle($mh, $ch);
+  $chs[$unit] = $ch;
+}
+
+do { curl_multi_exec($mh, $running); curl_multi_select($mh); } while ($running);
+
+foreach ($unitKeys as $unit) {
+  $ch   = $chs[$unit];
+  $body = curl_multi_getcontent($ch);
+  $data = $body ? (json_decode($body, true) ?? []) : [];
+  if (!empty($data['error'])) {
+    $errors[] = "Unit $unit getUnit error: " . $data['error'];
+  } else {
+    $unitData[$unit] = $data;
+  }
+  curl_multi_remove_handle($mh, $ch);
+  curl_close($ch);
+}
+curl_multi_close($mh);
+
+out('Fetched ' . count($unitData) . ' of ' . count($unitKeys) . ' units. Processing...');
+
+foreach ($unitData as $unit => $res) {
   // Car
   if (!empty($res['car'])) {
     try {
@@ -156,8 +189,6 @@ foreach (array_keys($units) as $unit) {
       else $emAdded++;
     } catch (Exception $e) { $errors[] = "Unit $unit emergency: " . $e->getMessage(); }
   }
-
-  usleep(200000); // 0.2s pause between units to avoid Apps Script rate limits
 }
 
 out("Cars: $carAdded upserted. Unit info: $unitAdded upserted. Emergency contacts: $emAdded added.");
