@@ -289,7 +289,7 @@ if ($isTestSite) {
         <input type="text" id="admin_username" name="admin_username" autocomplete="username"
                autocapitalize="none" autofocus style="margin-bottom:1rem;"
                value="<?= htmlspecialchars($_POST['admin_username'] ?? '') ?>">
-        <label for="secret_num">Secret # (President's unit number)</label>
+        <label for="secret_num">Secret #</label>
         <input type="text" id="secret_num" name="secret_num" autocomplete="off"
                inputmode="numeric" style="margin-bottom:1rem;">
         <button type="submit" class="reset-btn">Send temporary password</button>

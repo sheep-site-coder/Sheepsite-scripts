@@ -201,9 +201,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_admin'])) {
     $adminsMessage     = 'That username already exists.';
     $adminsMessageType = 'error';
   } else {
-    $newCreds[] = ['user' => $newUser, 'pass' => password_hash($newPass, PASSWORD_DEFAULT), 'email' => $newEmail];
+    $newCreds[] = [
+      'user'       => $newUser,
+      'pass'       => password_hash($newPass, PASSWORD_DEFAULT),
+      'email'      => $newEmail,
+      'mustChange' => true,
+    ];
     if (saveAdminCreds($adminCredFile, $newCreds)) {
       $adminsMessage = 'Admin account "' . htmlspecialchars($newUser) . '" created.';
+      if ($newEmail) {
+        $scheme2        = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $dir2           = rtrim(dirname($_SERVER['PHP_SELF']), '/');
+        $adminLoginUrl  = $scheme2 . '://' . $_SERVER['HTTP_HOST'] . $dir2 . '/admin.php?building=' . urlencode($building);
+        $emailSubject   = 'Admin Account Created – ' . $buildLabel;
+        $emailBody      = "An admin account has been created for you.\n\n"
+                        . "    username --> $newUser   (note: all lower case)\n"
+                        . "    password --> $newPass\n\n"
+                        . "Please log in at the link below — you will be prompted to set a new password:\n"
+                        . "$adminLoginUrl\n\n"
+                        . "If you have any questions, please contact the site administrator.";
+        $emailHeaders   = implode("\r\n", [
+          'From: SheepSite.com <noreply@sheepsite.com>',
+          'Reply-To: noreply@sheepsite.com',
+          'Content-Type: text/plain; charset=UTF-8',
+        ]);
+        mail($newEmail, $emailSubject, $emailBody, $emailHeaders);
+        $adminsMessage .= ' A welcome email has been sent.';
+      }
     } else {
       $adminsMessage     = 'Could not save — check that the credentials/ folder is writable.';
       $adminsMessageType = 'error';
@@ -343,6 +367,11 @@ $billingTokenPayUrl = $hasBillingToken
   : null;
 
 
+// Active tab: 'dashboard' or 'settings'
+// Auto-switch to settings if any settings message was generated (e.g. after POST)
+$activeTab = (($_GET['tab'] ?? '') === 'settings') ? 'settings' : 'dashboard';
+if ($adminsMessage || $pwMessage || $settingsMessage) $activeTab = 'settings';
+
 // -------------------------------------------------------
 // ToS gate — only when logged in and no mustChange pending
 // -------------------------------------------------------
@@ -395,6 +424,11 @@ if (!$mustChange) {
     .message.error { background: #ffeef0; color: #c00; }
     .low-credit-warn { padding: 0.4rem 0.7rem; background: #fffbeb;
                        border: 1px solid #f59e0b; border-radius: 4px; font-size: 0.82rem; color: #92400e; }
+    .tab-nav        { display: flex; gap: 0; border-bottom: 2px solid #eee; margin-bottom: 1.75rem; }
+    .tab-link       { padding: 0.5rem 1.1rem; font-size: 0.9rem; font-weight: 600; text-decoration: none;
+                      color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab-link:hover { color: #0070f3; }
+    .tab-link.active { color: #0070f3; border-bottom-color: #0070f3; }
   </style>
 </head>
 <body>
@@ -403,7 +437,7 @@ if (!$mustChange) {
   <h1><?= htmlspecialchars($buildLabel) ?> – Admin</h1>
   <div style="display:flex;align-items:center;gap:1.5rem;">
     <?php if (!empty($bldCfg['siteURL'])): ?>
-      <a href="<?= htmlspecialchars($bldCfg['siteURL']) ?>" style="font-size:0.9rem;color:#555;text-decoration:none;">← Back to site</a>
+      <a href="<?= htmlspecialchars($bldCfg['siteURL']) ?>" style="font-size:0.9rem;color:#0070f3;text-decoration:none;">← Back to site</a>
     <?php endif; ?>
     <a href="admin.php?building=<?= urlencode($building) ?>&logout=1" class="logout">Log out</a>
   </div>
@@ -427,6 +461,13 @@ if (!$mustChange) {
     You are logged in with a temporary password. Please set a new password to continue.
   </div>
 <?php else: ?>
+
+<nav class="tab-nav">
+  <a href="admin.php?building=<?= urlencode($building) ?>" class="tab-link <?= $activeTab === 'dashboard' ? 'active' : '' ?>">Dashboard</a>
+  <a href="admin.php?building=<?= urlencode($building) ?>&tab=settings" class="tab-link <?= $activeTab === 'settings' ? 'active' : '' ?>">Settings</a>
+</nav>
+
+<?php if ($activeTab === 'dashboard'): ?>
   <div class="subtitle">Building administration tools</div>
 
   <a href="database-admin.php?building=<?= urlencode($building) ?>" class="card">
@@ -607,6 +648,9 @@ if (!$mustChange) {
   </div>
   <?php endif; ?>
 
+<?php endif; // end dashboard tab ?>
+
+<?php if ($activeTab === 'settings'): ?>
   <?php
     $contactEmail = htmlspecialchars($bldCfg['contactEmail'] ?? '');
     $siteURL      = htmlspecialchars($bldCfg['siteURL']      ?? '');
@@ -622,7 +666,7 @@ if (!$mustChange) {
     <?php if ($settingsMessage): ?>
       <div class="message <?= $settingsMessageType ?>"><?= htmlspecialchars($settingsMessage) ?></div>
     <?php endif; ?>
-    <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+    <form method="post" action="admin.php?building=<?= urlencode($building) ?>&tab=settings"
           style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.25rem;">
       <div style="flex:1;min-width:220px;">
         <label for="contact_email" style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
@@ -654,7 +698,6 @@ if (!$mustChange) {
   </div>
 
   <hr>
-<?php endif; ?>
 
 <!-- ── Manage Admins ── -->
 <h2>Admin Accounts</h2>
@@ -687,7 +730,7 @@ if (!$mustChange) {
         <?php endif; ?>
       </td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">
-        <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+        <form method="post" action="admin.php?building=<?= urlencode($building) ?>&tab=settings"
               style="display:flex;gap:0.4rem;align-items:center;">
           <input type="hidden" name="edit_admin_user" value="<?= htmlspecialchars($adm['user']) ?>">
           <input type="text" name="edit_admin_email"
@@ -699,7 +742,7 @@ if (!$mustChange) {
       </td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;">
         <?php if ($adm['user'] !== $loggedInUser && count($currentAdmins) > 1): ?>
-          <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+          <form method="post" action="admin.php?building=<?= urlencode($building) ?>&tab=settings"
                 onsubmit="return confirm('Remove admin account <?= htmlspecialchars(addslashes($adm['user'])) ?>?');">
             <input type="hidden" name="remove_admin_user" value="<?= htmlspecialchars($adm['user']) ?>">
             <button type="submit" name="remove_admin" style="background:none;border:none;color:#dc2626;font-size:0.85rem;cursor:pointer;padding:0;">Remove</button>
@@ -713,7 +756,7 @@ if (!$mustChange) {
 
 <details style="margin-bottom:2rem;">
   <summary style="cursor:pointer;font-size:0.9rem;color:#0070f3;font-weight:600;margin-bottom:0.75rem;">+ Add admin account</summary>
-  <form method="post" action="admin.php?building=<?= urlencode($building) ?>"
+  <form method="post" action="admin.php?building=<?= urlencode($building) ?>&tab=settings"
         style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end;margin-top:0.75rem;max-width:640px;">
     <div style="flex:1;min-width:140px;">
       <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Username</label>
@@ -728,11 +771,19 @@ if (!$mustChange) {
     </div>
     <div style="flex:2;min-width:160px;">
       <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Password</label>
-      <input type="password" name="new_admin_pass" autocomplete="new-password"
-             style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+      <div style="position:relative;">
+        <input type="password" id="new_admin_pass" name="new_admin_pass" autocomplete="new-password"
+               style="width:100%;padding:0.4rem 2.5rem 0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;margin-bottom:0;">
+        <button type="button" onclick="togglePwVis(this)" tabindex="-1"
+                style="position:absolute;right:0.4rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:0.78rem;color:#666;padding:0;">Show</button>
+      </div>
     </div>
     <button type="submit" name="add_admin" class="save-btn">Add</button>
   </form>
+  <p style="font-size:0.78rem;color:#999;margin:0.5rem 0 0;">
+    A welcome email with the username and password will be sent to the email address provided.
+    The new admin will be required to set a new password on first login.
+  </p>
 </details>
 
 <hr>
@@ -749,20 +800,46 @@ if (!$mustChange) {
   <div class="message <?= $pwMessageType ?>"><?= htmlspecialchars($pwMessage) ?></div>
 <?php endif; ?>
 
-<form method="post" action="admin.php?building=<?= urlencode($building) ?>" style="max-width:320px;">
+<form method="post" action="admin.php?building=<?= urlencode($building) ?>&tab=settings" style="max-width:320px;">
   <label for="current_pass">Current password</label>
-  <input type="password" id="current_pass" name="current_pass" autocomplete="current-password">
+  <div style="position:relative;margin-bottom:1rem;">
+    <input type="password" id="current_pass" name="current_pass" autocomplete="current-password"
+           style="width:100%;box-sizing:border-box;padding:0.5rem 2.5rem 0.5rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;margin-bottom:0;">
+    <button type="button" onclick="togglePwVis(this)" tabindex="-1"
+            style="position:absolute;right:0.4rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:0.78rem;color:#666;padding:0;">Show</button>
+  </div>
 
   <label for="new_pass">New password</label>
-  <input type="password" id="new_pass" name="new_pass" autocomplete="new-password">
+  <div style="position:relative;margin-bottom:1rem;">
+    <input type="password" id="new_pass" name="new_pass" autocomplete="new-password"
+           style="width:100%;box-sizing:border-box;padding:0.5rem 2.5rem 0.5rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;margin-bottom:0;">
+    <button type="button" onclick="togglePwVis(this)" tabindex="-1"
+            style="position:absolute;right:0.4rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:0.78rem;color:#666;padding:0;">Show</button>
+  </div>
 
   <label for="confirm_pass">Confirm new password</label>
-  <input type="password" id="confirm_pass" name="confirm_pass" autocomplete="new-password">
+  <div style="position:relative;margin-bottom:1rem;">
+    <input type="password" id="confirm_pass" name="confirm_pass" autocomplete="new-password"
+           style="width:100%;box-sizing:border-box;padding:0.5rem 2.5rem 0.5rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;margin-bottom:0;">
+    <button type="button" onclick="togglePwVis(this)" tabindex="-1"
+            style="position:absolute;right:0.4rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:0.78rem;color:#666;padding:0;">Show</button>
+  </div>
 
   <button type="submit" name="change_admin_pass" class="save-btn">Update password</button>
 </form>
 <?php endif; ?>
 
+<?php endif; // settings tab ?>
+<?php endif; // not mustChange ?>
+
+<script>
+function togglePwVis(btn) {
+  const inp = btn.previousElementSibling;
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+}
+</script>
 
 </body>
 </html>

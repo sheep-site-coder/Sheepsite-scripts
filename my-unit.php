@@ -218,26 +218,37 @@ if ($action) {
           if (!$toEmail) {
             $pdo  = getDB();
             $stmt = $pdo->prepare(
-              "SELECT email FROM residents WHERE building = ? AND board_role = 'President' AND email != '' LIMIT 1"
+              "SELECT email FROM residents WHERE building = ? AND LOWER(board_role) = 'president' AND email != '' LIMIT 1"
             );
             $stmt->execute([$building]);
             $toEmail = $stmt->fetchColumn() ?: '';
           }
           if ($toEmail) {
             $subject = "[$buildLabel] Pending: Add resident request from Unit $unit";
-            $body2   = "A request to add a resident was submitted by $residentName (Unit $unit) "
-                     . "and is waiting for your approval.\n\n"
-                     . "Name: $firstName $lastName\n"
-                     . ($email  ? "Email:    $email\n"  : '')
-                     . ($phone1 ? "Phone #1: $phone1\n" : '')
-                     . ($notes  ? "Notes:    $notes\n"  : '')
-                     . "\nPlease log in to approve or reject:\n$adminUrl";
+            $addLines = [
+              'A resident addition request was submitted via the building website and is waiting for your approval.',
+              '',
+              "Building:     $buildLabel",
+              "Unit:         $unit",
+              "Submitted by: $residentName",
+              '',
+              "Request type: Add resident",
+              "Name:         $firstName $lastName",
+            ];
+            if ($email)  $addLines[] = "Email:        $email";
+            if ($phone1) $addLines[] = "Phone #1:     $phone1";
+            if ($phone2) $addLines[] = "Phone #2:     $phone2";
+            if ($notes)  $addLines[] = "Notes:        $notes";
+            $addLines[] = '';
+            $addLines[] = "Please log in to the admin panel to approve or reject:";
+            $addLines[] = '';
+            $addLines[] = $adminUrl;
             $headers = implode("\r\n", [
               'From: SheepSite.com <noreply@sheepsite.com>',
               'Reply-To: noreply@sheepsite.com',
               'Content-Type: text/plain; charset=UTF-8',
             ]);
-            mail($toEmail, $subject, $body2, $headers);
+            mail($toEmail, $subject, implode("\n", $addLines), $headers);
           }
           echo json_encode(['ok' => true]);
 
@@ -247,7 +258,7 @@ if ($action) {
           if (!$toEmail) {
             $pdo  = getDB();
             $stmt = $pdo->prepare(
-              "SELECT email FROM residents WHERE building = ? AND board_role = 'President' AND email != '' LIMIT 1"
+              "SELECT email FROM residents WHERE building = ? AND LOWER(board_role) = 'president' AND email != '' LIMIT 1"
             );
             $stmt->execute([$building]);
             $toEmail = $stmt->fetchColumn() ?: '';
@@ -331,6 +342,7 @@ if ($action) {
     .badge       { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 99px;
                    background: #e8f4ea; color: #1a7f37; font-weight: 600; }
     .badge.readonly { background: #f0f0f0; color: #888; }
+    .badge.blue  { background: #eff6ff; color: #1d4ed8; }
 
     .field-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
     .field-pair  { display: flex; flex-direction: column; gap: 0.15rem; }
@@ -493,16 +505,16 @@ function renderPage(unit, residents, car, unitInfo) {
 function residentCardHtml(unit, r) {
   const name    = `${r['First Name']} ${r['Last Name']}`.trim();
   const badges  = [
-    r['Full Time'] ? 'Full Time' : null,
-    r['Resident']  ? 'Resident'  : null,
-    r['Owner']     ? 'Owner'     : null,
+    r['Full Time'] ? { label: 'Full Time', blue: false } : null,
+    r['Resident']  ? { label: 'Resident',  blue: true  } : null,
+    r['Owner']     ? { label: 'Owner',     blue: true  } : null,
   ].filter(Boolean);
   const id      = `res-${esc(unit)}-${esc(r['First Name'])}-${esc(r['Last Name'])}`.replace(/[^a-z0-9-]/gi, '_');
 
   return `<div class="person-card" id="${id}">
     <div class="person-name">${esc(name)}</div>
     <div class="badges">
-      ${badges.map(b => `<span class="badge readonly">${esc(b)}</span>`).join('')}
+      ${badges.map(b => `<span class="badge${b.blue ? ' blue' : ' readonly'}">${esc(b.label)}</span>`).join('')}
     </div>
     <div class="field-grid">
       ${fieldPair('Email',   r['eMail'])}
@@ -640,7 +652,7 @@ function carSectionHtml(unit, c) {
     </div>
     <div class="edit-form" id="car-edit-form">
       <div class="field-grid">
-        <div><label>Parking Spot</label><input type="text" id="cf-spot" value="${esc(c['Parking Spot'])}"></div>
+        <div><label>Parking Spot</label><input type="text" value="${esc(c['Parking Spot'])}" disabled style="background:#f5f5f5;color:#888;cursor:not-allowed;"></div>
         <div><label>Car Make</label><input type="text" id="cf-make" value="${esc(c['Car Make'])}"></div>
         <div><label>Car Model</label><input type="text" id="cf-model" value="${esc(c['Car Model'])}"></div>
         <div><label>Car Color</label><input type="text" id="cf-color" value="${esc(c['Car Color'])}"></div>
@@ -666,7 +678,6 @@ async function saveCar(unit) {
   showMsg(msgEl, 'Saving…', 'info');
   const res = await apiPost('editCarRow', {
     'Unit #':       unit,
-    'Parking Spot': document.getElementById('cf-spot').value.trim(),
     'Car Make':     document.getElementById('cf-make').value.trim(),
     'Car Model':    document.getElementById('cf-model').value.trim(),
     'Car Color':    document.getElementById('cf-color').value.trim(),

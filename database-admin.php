@@ -847,14 +847,11 @@ async function toggleUnit(row, unit) {
   detail.classList.add('open');
   icon.textContent = '▾';
 
-  if (!detail.dataset.loaded) {
-    detail.innerHTML = '<div class="detail-loading">Loading…</div>';
-    const res = await apiFetch('getUnit', { unit });
-    if (res.error) { detail.innerHTML = `<div class="msg error">${esc(res.error)}</div>`; return; }
-    detail.dataset.loaded = '1';
-    unitCache[unit] = res;
-    renderUnitDetail(detail, res);
-  }
+  detail.innerHTML = '<div class="detail-loading">Loading…</div>';
+  const res = await apiFetch('getUnit', { unit });
+  if (res.error) { detail.innerHTML = `<div class="msg error">${esc(res.error)}</div>`; return; }
+  unitCache[unit] = res;
+  renderUnitDetail(detail, res);
 }
 
 // -------------------------------------------------------
@@ -910,15 +907,21 @@ function renderResidentTab(unit, residents) {
 
 function residentCardHtml(unit, r) {
   const name       = `${r['First Name']} ${r['Last Name']}`.trim();
-  const flags      = [r['Full Time'] ? 'Full Time' : '', r['Resident'] ? 'Resident' : '', r['Owner'] ? 'Owner' : '']
-                      .filter(Boolean).join(', ');
+  const flagParts  = [
+    r['Full Time'] ? 'Full Time' : '',
+    r['Resident']  ? `<span style="color:#1d4ed8;font-weight:600;">Resident</span>` : '',
+    r['Owner']     ? `<span style="color:#1d4ed8;font-weight:600;">Owner</span>` : '',
+  ].filter(Boolean);
   const board      = r['Board'] ? `<span style="color:#7c3aed;font-size:0.78rem;font-weight:600;">${esc(r['Board'])}</span>` : '';
   const id         = `card-${esc(unit)}-${esc(r['First Name'])}-${esc(r['Last Name'])}`.replace(/[^a-z0-9-]/gi, '_');
 
   return `<div class="person-card" id="${id}">
     <div class="person-name">${esc(name)} ${board}</div>
     <div class="field-grid">
-      ${fieldPair('Status', flags || '—')}
+      <div class="field-pair">
+        <div class="field-label">Status</div>
+        <div class="field-val${flagParts.length ? '' : ' empty'}">${flagParts.length ? flagParts.join(', ') : '—'}</div>
+      </div>
       ${fieldPair('Email',  r['eMail'])}
       ${fieldPair('Phone 1', r['Phone #1'])}
       ${fieldPair('Phone 2', r['Phone #2'])}
@@ -1184,23 +1187,27 @@ function addEmergencyFormHtml(unit) {
 // -------------------------------------------------------
 // "Add to Unit" (global toolbar button — for units not yet in list)
 // -------------------------------------------------------
-function showAddUnit() {
+async function showAddUnit() {
   const unit = prompt('Enter the unit number to add a resident to:');
   if (!unit) return;
-  // If unit exists, open it
-  if (unitMap[unit.trim()]) {
-    const row = document.querySelector(`.unit-row[data-unit="${unit.trim()}"]`);
-    if (row) row.click();
-  } else {
-    // Add as new unit stub then show add form
-    unitOrder.push(unit.trim());
-    unitMap[unit.trim()] = [];
+  const u = unit.trim();
+  if (!unitMap[u]) {
+    // New unit: add stub so the row appears
+    unitOrder.push(u);
+    unitMap[u] = [];
     renderUnits(unitOrder);
-    const row = document.querySelector(`.unit-row[data-unit="${unit.trim()}"]`);
-    if (row) {
-      row.click();
-      setTimeout(() => toggleAddPerson(unit.trim()), 300);
-    }
+  }
+  // Open (or re-open) the unit panel, then show the Add Resident form
+  const row = document.querySelector(`.unit-row[data-unit="${u}"]`);
+  if (!row) return;
+  // Ensure panel is open (toggleUnit closes if already open, so force-open)
+  const detail = document.getElementById('detail-' + u);
+  if (detail && detail.classList.contains('open')) {
+    // Already open — just show the add form
+    toggleAddPerson(u);
+  } else {
+    await toggleUnit(row, u);
+    toggleAddPerson(u);
   }
 }
 

@@ -150,7 +150,7 @@ function dbGetUnit(string $building, string $unit): array {
   $pdo = getDB();
 
   $stmt = $pdo->prepare(
-    'SELECT * FROM residents WHERE building = ? AND unit = ? ORDER BY last_name, first_name'
+    'SELECT * FROM residents WHERE building = ? AND unit = ? ORDER BY is_owner DESC, last_name, first_name'
   );
   $stmt->execute([$building, $unit]);
   $residents = array_map('residentToGas_', $stmt->fetchAll());
