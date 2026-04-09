@@ -131,6 +131,7 @@ by PHP + MySQL (see <a href="#mysql">Section 5</a>).</p>
   <tr><th>Path</th><th>Contents</th></tr>
   <tr><td><code>/sheepsite.com/Scripts/</code></td><td>All PHP scripts, JS files, and GAS reference files</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/credentials/</code></td><td>Per-building JSON credential files (not in git, writable by PHP)</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/cache/</code></td><td>Server-side Drive listing cache (not in git, writable by PHP). JSON files named <code>{prefix}_{building}_{md5(path)}.json</code>. Busted by admin writes; pre-populated by warm-cache.php.</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/faqs/</code></td><td>Woolsy knowledge base files, document indexes, credit balances</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin manual (<code>Sheepsite-Admin-Manual.html</code>), Resident manual (<code>Sheepsite-Resident-Manual.html</code>), Architecture manual. Built from <code>build-manual.py</code>, <code>build-resident.py</code>, <code>build-architecture.py</code> respectively. Manuals embed all images as base64. Resident manual linked from my-account.php and from the marketing get-started page.</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/sheets/</code></td><td>Google Apps Script source files (for reference; deployed via Google)</td></tr>
@@ -216,6 +217,27 @@ so the web app endpoint is not open to the public.</p>
 doc changes and cache results in Script Properties. A <code>keepWarm()</code> trigger fires every
 few minutes to prevent cold starts on the web app.</p>
 
+<h3>Server-Side Listing Cache</h3>
+<p>GAS listing calls add 2&ndash;8 seconds per folder. To eliminate this for repeat visits, all folder listing responses are cached on the server filesystem in <code>cache/</code>:</p>
+<pre>Browser
+  |
+  v
+PHP (?json endpoint)
+  |-- cache HIT  → return JSON from cache/ instantly (milliseconds)
+  |
+  `-- cache MISS → call GAS → store in cache/ → return JSON
+                                    |
+                         next visitor: cache HIT</pre>
+<table>
+  <tr><th>Cache prefix</th><th>Used by</th><th>GAS action</th></tr>
+  <tr><td><code>pub</code></td><td>display-public-dir.php</td><td><code>list</code></td></tr>
+  <tr><td><code>priv</code></td><td>display-private-dir.php</td><td><code>listPrivate</code></td></tr>
+  <tr><td><code>adm</code></td><td>file-manager.php</td><td><code>listAdmin</code></td></tr>
+</table>
+<p><strong>Cache invalidation:</strong> no TTL. Cache is busted explicitly when an admin writes to a folder (upload, delete, rename, folder create/delete/rename, quarantine publish). After busting, file-manager.php immediately fires a background <code>?json=warm</code> request to re-populate the <code>pub</code>/<code>priv</code> caches for that folder, so the next resident visitor still gets a cache hit.</p>
+<p><strong>Cold start:</strong> <code>warm-cache.php</code> pre-populates all caches for a building by BFS-walking both trees. Called automatically after new association creation; run manually once for existing buildings.</p>
+<p><strong>Admin is always the cache warmer</strong> &mdash; since only admins upload files, every admin write re-warms the affected folder. Residents are pure cache consumers and never trigger a GAS call.</p>
+
 <h3>Sheets Web App: building-script.gs &mdash; Decommissioned</h3>
 <div class="warn"><strong>No longer used.</strong> All report generation (elevator, parking, resident, board), owner
 import, and password reset emails are handled by PHP + MySQL. The per-building Sheets web app is not called
@@ -288,9 +310,9 @@ present on the server (which they always are on the live site). All buildings op
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>display-public-dir.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Browsable public Google Drive folder. No auth. Calls dir-display-bridge.gs to list files. Download links open via the GAS download action.</td></tr>
+      <td>Browsable public Google Drive folder. No auth. JSON endpoint (<code>?json</code>) checks server-side listing cache first; on miss, calls GAS <code>list</code> action and caches result indefinitely. Cache busted by admin write operations. Download links served via GAS download action.</td></tr>
   <tr><td><code>display-private-dir.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Private Drive folder browser. Session-based resident login. <code>mustChange</code> flag forces password change on first login.</td></tr>
+      <td>Private Drive folder browser. Session-based resident login. <code>mustChange</code> flag forces password change on first login. JSON endpoint checks server-side listing cache first; on miss, calls GAS <code>listPrivate</code> and caches result. Cache busted by admin write operations.</td></tr>
   <tr><td><code>protected-report.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Resident-authenticated reports (elevator, parking, resident). Reuses <code>private_auth_{building}</code> session. Queries MySQL directly and renders inline HTML. Elevator report: server-side grouping by unit+last_name with first names joined (&ldquo;John &amp; Jane&rdquo;); two-column layout. Resident and Parking: JSON-embedded data for client-side JS sort.</td></tr>
   <tr><td><code>public-report.php</code> <span class="tag tag-php">PHP</span></td>
@@ -331,7 +353,11 @@ present on the server (which they always are on the live site). All buildings op
   <tr><td><code>suspension.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Shared suspension check. Included by all resident-facing pages after <code>$building</code> is validated. Reads <code>config/{building}.json</code>; auto-sets <code>suspended:true</code> if <code>renewalDate</code> has passed. Outputs a "Service Unavailable" page (or JSON error for API endpoints) and exits.</td></tr>
   <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Admin file management tool for Drive folders. Upload, rename, delete files; create/delete/rename subfolders; large-file quarantine flow. Folder listings are cached in <code>sessionStorage</code> (keyed by building+tree+path) &mdash; repeat visits within the same session are instant. Cache is busted on every write (upload, delete, rename, folder create/delete/rename). Background storage refresh fires once after the initial listing loads (not competing with it).</td></tr>
+      <td>Admin file management tool for Drive folders. Upload, rename, delete files; create/delete/rename subfolders; large-file quarantine flow. Folder listings cached in both <code>sessionStorage</code> (client, keyed by building+tree+path) and server-side cache (see <code>listing-cache.php</code>). On every write: busts both caches for the affected folder and fires <code>?json=warm</code> to re-populate the <code>pub</code>/<code>priv</code> resident caches in the background. Storage refresh deferred until after first listing loads.</td></tr>
+  <tr><td><code>listing-cache.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Server-side Drive listing cache helper. Stores GAS listing responses as JSON files in <code>cache/</code> keyed by prefix+building+md5(path). Three prefixes: <code>pub</code> (public browser), <code>priv</code> (private browser), <code>adm</code> (admin file manager). No TTL &mdash; cache is valid indefinitely and busted explicitly on admin writes via <code>lcBustFolder()</code>. Included by display-public-dir.php, display-private-dir.php, file-manager.php, and warm-cache.php.</td></tr>
+  <tr><td><code>warm-cache.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>One-shot cache warmer. BFS-walks the full public and private folder trees using curl_multi (parallel per level), caching every listing. Requires master admin session. Called automatically (fire-and-forget) from building-detail.php after new association Drive folders are created. Can also be triggered manually via the browser console for existing buildings: <code>fetch('warm-cache.php', {method:'POST', body: new URLSearchParams({building:'X'})}).then(r=&gt;r.json()).then(console.log)</code>.</td></tr>
   <tr><td><code>tag-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Admin interface for tagging documents (search feature).</td></tr>
   <tr><td><code>search.php</code> <span class="tag tag-php">PHP</span></td>
