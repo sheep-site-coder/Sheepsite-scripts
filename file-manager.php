@@ -15,6 +15,7 @@ define('CONFIG_DIR',        __DIR__ . '/config/');
 define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
 define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
 define('MAX_UPLOAD_BYTES',  30 * 1024 * 1024); // 30 MB
+require_once __DIR__ . '/listing-cache.php';
 
 // -------------------------------------------------------
 // Validate building + session
@@ -236,6 +237,21 @@ if (isset($_GET['json']) && $_GET['json'] === 'publish_quarantine') {
     if ($result['ok'] ?? false) { $deleted++; } else { $errors++; }
   }
 
+  // Bust cache for every distinct folder that received a published file
+  $busted = [];
+  foreach ($toPublish as $i => $fileId) {
+    $tp = $targetPaths[$i] ?? '';
+    if (!$tp) continue;
+    $parts     = explode('/', $tp, 2);
+    $cTree     = strtolower($parts[0]) === 'private' ? 'private' : 'public';
+    $cPath     = $parts[1] ?? '';
+    $bustKey   = $cTree . ':' . $cPath;
+    if (!isset($busted[$bustKey])) {
+      lcBustFolder($building, $cTree, $cPath);
+      $busted[$bustKey] = true;
+    }
+  }
+
   echo json_encode(['ok' => $errors === 0, 'published' => $published, 'deleted' => $deleted, 'errors' => $errors]);
   exit;
 }
@@ -268,6 +284,16 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
   $path     = trim($_GET['path'] ?? '', '/');
   $folderId = $tree === 'private' ? $config['privateFolderId'] : $config['publicFolderId'];
 
+  // Serve from server-side cache if available
+  $cachedRaw = lcGet('adm', $building, $tree . ':' . $path);
+  if ($cachedRaw !== null) {
+    $data = json_decode($cachedRaw, true);
+    // Re-apply deletable/protected annotations (stored in cache pre-annotated)
+    header('Content-Type: application/json');
+    echo $cachedRaw;
+    exit;
+  }
+
   $url = APPS_SCRIPT_URL
        . '?action=listAdmin'
        . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
@@ -299,8 +325,10 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
     unset($f);
   }
 
+  $annotated = json_encode($data);
+  lcSet('adm', $building, $tree . ':' . $path, $annotated);
   header('Content-Type: application/json');
-  echo json_encode($data);
+  echo $annotated;
   exit;
 }
 
@@ -352,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mimeType = mime_content_type($file['tmp_name']) ?: 'application/octet-stream';
     $data     = base64_encode(file_get_contents($file['tmp_name']));
 
-    echo appsScriptPost([
+    $result = appsScriptPost([
       'action'   => 'uploadFile',
       'token'    => APPS_SCRIPT_TOKEN,
       'folderId' => $folderId,
@@ -360,6 +388,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       'mimeType' => $mimeType,
       'data'     => $data,
     ]);
+    $res = json_decode($result, true);
+    if (!empty($res['ok'])) {
+      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+      $cPath = trim($_POST['cachePath'] ?? '', '/');
+      lcBustFolder($building, $cTree, $cPath);
+    }
+    echo $result;
     exit;
   }
 
@@ -370,11 +405,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok' => false, 'error' => 'Invalid file ID']);
       exit;
     }
-    $url = APPS_SCRIPT_URL
-         . '?action=deleteFile'
-         . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
-         . '&fileId=' . urlencode($fileId);
-    echo appsScriptGet($url);
+    $url    = APPS_SCRIPT_URL
+            . '?action=deleteFile'
+            . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
+            . '&fileId=' . urlencode($fileId);
+    $result = appsScriptGet($url);
+    $res    = json_decode($result, true);
+    if (!empty($res['ok'])) {
+      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+      $cPath = trim($_POST['cachePath'] ?? '', '/');
+      lcBustFolder($building, $cTree, $cPath);
+    }
+    echo $result;
     exit;
   }
 
@@ -390,12 +432,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok' => false, 'error' => 'Invalid file name']);
       exit;
     }
-    $url = APPS_SCRIPT_URL
-         . '?action=renameFile'
-         . '&token='   . urlencode(APPS_SCRIPT_TOKEN)
-         . '&fileId='  . urlencode($fileId)
-         . '&newName=' . urlencode($newName);
-    echo appsScriptGet($url);
+    $url    = APPS_SCRIPT_URL
+            . '?action=renameFile'
+            . '&token='   . urlencode(APPS_SCRIPT_TOKEN)
+            . '&fileId='  . urlencode($fileId)
+            . '&newName=' . urlencode($newName);
+    $result = appsScriptGet($url);
+    $res    = json_decode($result, true);
+    if (!empty($res['ok'])) {
+      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+      $cPath = trim($_POST['cachePath'] ?? '', '/');
+      lcBustFolder($building, $cTree, $cPath);
+    }
+    echo $result;
     exit;
   }
 
@@ -452,6 +501,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $ids   = loadCreatedFolders($building);
       $ids[] = $resp['id'];
       saveCreatedFolders($building, $ids);
+      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+      $cPath = trim($_POST['cachePath'] ?? '', '/');
+      lcBustFolder($building, $cTree, $cPath);
     }
     echo $raw;
     exit;
@@ -480,6 +532,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($resp['ok'])) {
       $ids = array_values(array_filter($ids, fn($id) => $id !== $folderId));
       saveCreatedFolders($building, $ids);
+      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+      $cPath = trim($_POST['cachePath'] ?? '', '/');
+      lcBustFolder($building, $cTree, $cPath);
     }
     echo $raw;
     exit;
@@ -911,10 +966,12 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     text.textContent = 'Uploading replacement\u2026 0%';
 
     var fd = new FormData();
-    fd.append('action',   'upload');
-    fd.append('folderId', currentFolderId);
-    fd.append('tree',     currentTree);
-    fd.append('file',     file);
+    fd.append('action',     'upload');
+    fd.append('folderId',   currentFolderId);
+    fd.append('tree',       currentTree);
+    fd.append('cacheTree',  currentTree);
+    fd.append('cachePath',  currentPath);
+    fd.append('file',       file);
 
     var xhr = new XMLHttpRequest();
     xhr.upload.onprogress = function (e) {
@@ -995,7 +1052,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     saveBtn.disabled    = true;
     saveBtn.textContent = 'Saving\u2026';
 
-    post({ action: 'rename', fileId: fileId, newName: newName })
+    post({ action: 'rename', fileId: fileId, newName: newName, cacheTree: currentTree, cachePath: currentPath })
       .then(function (d) {
         if (d.ok) {
           bustCache();
@@ -1054,7 +1111,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     saveBtn.disabled    = true;
     saveBtn.textContent = 'Saving\u2026';
 
-    post({ action: 'rename', fileId: folderId, newName: newName })
+    post({ action: 'rename', fileId: folderId, newName: newName, cacheTree: currentTree, cachePath: currentPath })
       .then(function (d) {
         if (d.ok) {
           renamingFolderId = null;
@@ -1091,7 +1148,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     row.style.opacity       = '0.4';
     row.style.pointerEvents = 'none';
 
-    post({ action: 'delete', fileId: fileId })
+    post({ action: 'delete', fileId: fileId, cacheTree: currentTree, cachePath: currentPath })
       .then(function (d) {
         if (d.ok) {
           bustCache();
@@ -1122,7 +1179,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   };
 
   function _doDeleteFolder(folderId, folderName) {
-    post({ action: 'deleteFolder', folderId: folderId })
+    post({ action: 'deleteFolder', folderId: folderId, cacheTree: currentTree, cachePath: currentPath })
       .then(function (d) {
         if (d.ok) {
           bustCache();
@@ -1144,7 +1201,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     var name = prompt('New folder name:');
     if (!name || !name.trim()) return;
 
-    post({ action: 'createFolder', parentFolderId: currentFolderId, name: name.trim() })
+    post({ action: 'createFolder', parentFolderId: currentFolderId, name: name.trim(), cacheTree: currentTree, cachePath: currentPath })
       .then(function (d) {
         if (d.ok) {
           bustCache();

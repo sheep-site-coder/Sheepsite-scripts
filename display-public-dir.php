@@ -23,13 +23,23 @@ if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
 // JSON mode — called by browser fetch, returns listing
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
+  require_once __DIR__ . '/listing-cache.php';
+  header('Content-Type: application/json');
+
+  $cached = lcGet('pub', $building, $subdir);
+  if ($cached !== null) { echo $cached; exit; }
+
   $url = $appsScriptURL
        . '?action=list'
        . '&folderId=' . urlencode($folderId)
        . ($subdir ? '&subdir=' . urlencode($subdir) : '');
   $response = @file_get_contents($url);
-  header('Content-Type: application/json');
-  echo $response ?: json_encode(['error' => 'Could not reach Apps Script']);
+  if ($response !== false) {
+    lcSet('pub', $building, $subdir, $response);
+    echo $response;
+  } else {
+    echo json_encode(['error' => 'Could not reach Apps Script']);
+  }
   exit;
 }
 

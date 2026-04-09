@@ -183,14 +183,24 @@ if (!isset($_GET['json']) && !isset($_GET['fileId'])) {
 // Auth check above already passed before reaching here
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
+  require_once __DIR__ . '/listing-cache.php';
+  header('Content-Type: application/json');
+
+  $cached = lcGet('priv', $building, $path);
+  if ($cached !== null) { echo $cached; exit; }
+
   $scriptURL = APPS_SCRIPT_URL
              . '?action=listPrivate'
              . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
              . '&folderId=' . urlencode($buildingConfig['privateFolderId'])
              . ($path ? '&subdir=' . urlencode($path) : '');
   $response = @file_get_contents($scriptURL);
-  header('Content-Type: application/json');
-  echo $response ?: json_encode(['error' => 'Could not reach Apps Script']);
+  if ($response !== false) {
+    lcSet('priv', $building, $path, $response);
+    echo $response;
+  } else {
+    echo json_encode(['error' => 'Could not reach Apps Script']);
+  }
   exit;
 }
 

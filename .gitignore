@@ -13,3 +13,6 @@ Sharefolder/
 
 # Local deployment staging — never commit
 _deploy/
+
+# Server-side Drive listing cache — runtime files, not in git
+cache/
