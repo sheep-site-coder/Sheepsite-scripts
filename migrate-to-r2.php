@@ -216,14 +216,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_
     <?php if (!$isR2 && $status === 'complete'): ?>
       <span style="font-size:0.82rem;color:#6b7280;">Ready to switch — add <code>'storage'=>'r2'</code> to buildings.php</span>
     <?php endif; ?>
-    <button class="btn-scan" onclick="startScan(<?= json_encode($name) ?>)">Scan Drive</button>
+    <button class="btn-scan" onclick="startScan(<?= htmlspecialchars(json_encode($name)) ?>)">Scan Drive</button>
   </div>
 
   <div class="progress-area" id="progress-<?= htmlspecialchars($name) ?>">
     <div class="progress-bar"><div class="progress-fill" id="bar-<?= htmlspecialchars($name) ?>" style="width:0%"></div></div>
     <div id="progress-label-<?= htmlspecialchars($name) ?>" style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;"></div>
     <button class="btn-migrate" id="btn-migrate-<?= htmlspecialchars($name) ?>" disabled
-            onclick="startMigrate(<?= json_encode($name) ?>)">Migrate All Files</button>
+            onclick="startMigrate(<?= htmlspecialchars(json_encode($name)) ?>)">Migrate All Files</button>
     <div class="note" id="note-<?= htmlspecialchars($name) ?>"></div>
     <div class="progress-log" id="log-<?= htmlspecialchars($name) ?>"></div>
     <div class="summary" id="summary-<?= htmlspecialchars($name) ?>"></div>
