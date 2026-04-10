@@ -5,9 +5,8 @@
 // -------------------------------------------------------
 session_start();
 
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
+require_once __DIR__ . '/storage/storage.php';
 define('LOGIN_STATS_FILE',  __DIR__ . '/credentials/login_stats.json');
 
 function logLogin(string $building, string $username): void {
@@ -189,18 +188,9 @@ if (isset($_GET['json'])) {
   $cached = lcGet('priv', $building, $path);
   if ($cached !== null) { echo $cached; exit; }
 
-  $scriptURL = APPS_SCRIPT_URL
-             . '?action=listPrivate'
-             . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-             . '&folderId=' . urlencode($buildingConfig['privateFolderId'])
-             . ($path ? '&subdir=' . urlencode($path) : '');
-  $response = @file_get_contents($scriptURL);
-  if ($response !== false) {
-    lcSet('priv', $building, $path, $response);
-    echo $response;
-  } else {
-    echo json_encode(['error' => 'Could not reach Apps Script']);
-  }
+  $response = stListFolder($building, $path, 'private', 'priv');
+  lcSet('priv', $building, $path, $response);
+  echo $response;
   exit;
 }
 
@@ -211,29 +201,26 @@ if (isset($_GET['json'])) {
 if (isset($_GET['fileId'])) {
   $fileId = $_GET['fileId'];
 
-  if (!preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
+  if (!preg_match('/^[a-zA-Z0-9_\/-]+$/', $fileId)) {
     die('<p style="color:red;">Invalid file ID.</p>');
   }
 
-  $scriptURL = APPS_SCRIPT_URL
-             . '?action=download'
-             . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
-             . '&fileId=' . urlencode($fileId);
+  $info = stGetDownloadInfo($building, $fileId, 'private');
 
-  $response = @file_get_contents($scriptURL);
-  if ($response === false) {
-    die('<p style="color:red;">Could not retrieve file.</p>');
+  if ($info['type'] === 'error') {
+    die('<p style="color:red;">' . htmlspecialchars($info['message']) . '</p>');
   }
 
-  $data = json_decode($response, true);
-  if (!empty($data['error'])) {
-    die('<p style="color:red;">' . htmlspecialchars($data['error']) . '</p>');
+  if ($info['type'] === 'redirect') {
+    header('Location: ' . $info['url']);
+    exit;
   }
 
+  // type === 'proxy'
   $disposition = isset($_GET['inline']) ? 'inline' : 'attachment';
-  header('Content-Type: ' . $data['mimeType']);
-  header('Content-Disposition: ' . $disposition . '; filename="' . str_replace('"', '\\"', $data['name']) . '"');
-  echo base64_decode($data['data']);
+  header('Content-Type: ' . $info['mimeType']);
+  header('Content-Disposition: ' . $disposition . '; filename="' . str_replace('"', '\\"', $info['name']) . '"');
+  echo base64_decode($info['data']);
   exit;
 }
 

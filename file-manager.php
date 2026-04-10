@@ -12,10 +12,9 @@ session_start();
 
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('CONFIG_DIR',        __DIR__ . '/config/');
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
-define('MAX_UPLOAD_BYTES',  30 * 1024 * 1024); // 30 MB
+define('MAX_UPLOAD_BYTES',  30 * 1024 * 1024); // 30 MB (GAS limit — removed in Phase 5)
 require_once __DIR__ . '/listing-cache.php';
+require_once __DIR__ . '/storage/storage.php';
 
 // -------------------------------------------------------
 // Validate building + session
@@ -47,49 +46,6 @@ $config     = $buildings[$building];
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 
 // -------------------------------------------------------
-// Helper: GET request to Apps Script
-// -------------------------------------------------------
-function appsScriptGet(string $url): string {
-  $resp = @file_get_contents($url);
-  return $resp !== false ? $resp : json_encode(['error' => 'Could not reach Apps Script']);
-}
-
-// -------------------------------------------------------
-// Helper: POST JSON to Apps Script (used for uploads)
-// -------------------------------------------------------
-function appsScriptPost(array $payload): string {
-  $json = json_encode($payload);
-
-  if (function_exists('curl_init')) {
-    $ch = curl_init(APPS_SCRIPT_URL);
-    curl_setopt_array($ch, [
-      CURLOPT_POST           => true,
-      CURLOPT_POSTFIELDS     => $json,
-      CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_FOLLOWLOCATION => true,
-      CURLOPT_TIMEOUT        => 270,
-    ]);
-    $resp = curl_exec($ch);
-    curl_close($ch);
-    return $resp !== false ? $resp : json_encode(['ok' => false, 'error' => 'Request failed']);
-  }
-
-  // Fallback: stream_context_create
-  $opts = [
-    'http' => [
-      'method'          => 'POST',
-      'header'          => "Content-Type: application/json\r\n",
-      'content'         => $json,
-      'follow_location' => 1,
-      'ignore_errors'   => true,
-    ]
-  ];
-  $resp = @file_get_contents(APPS_SCRIPT_URL, false, stream_context_create($opts));
-  return $resp !== false ? $resp : json_encode(['ok' => false, 'error' => 'Request failed']);
-}
-
-// -------------------------------------------------------
 // Config helpers: track app-created folder IDs
 // Stored in config/{building}_folders.json as a flat array of IDs.
 // Only these folders ever get a Delete button in the UI.
@@ -119,40 +75,7 @@ function loadBuildingCfg(string $building): array {
 if (isset($_GET['json']) && $_GET['json'] === 'storage_refresh') {
   header('Content-Type: application/json');
 
-  $pubUrl  = APPS_SCRIPT_URL . '?action=storageReport'
-           . '&folderId=' . urlencode($config['publicFolderId'])
-           . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
-  $privUrl = APPS_SCRIPT_URL . '?action=storageReport'
-           . '&folderId=' . urlencode($config['privateFolderId'])
-           . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
-
-  // Fetch both in parallel via curl_multi
-  $mh   = curl_multi_init();
-  $chs  = [];
-  foreach ([$pubUrl, $privUrl] as $url) {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_FOLLOWLOCATION => true,
-      CURLOPT_TIMEOUT        => 55,
-    ]);
-    curl_multi_add_handle($mh, $ch);
-    $chs[] = $ch;
-  }
-
-  do { curl_multi_exec($mh, $running); curl_multi_select($mh); } while ($running);
-
-  $total = 0;
-  foreach ($chs as $ch) {
-    $resp = curl_multi_getcontent($ch);
-    $data = $resp ? json_decode($resp, true) : null;
-    if (isset($data['total'])) $total += (int)$data['total'];
-    curl_multi_remove_handle($mh, $ch);
-    curl_close($ch);
-  }
-  curl_multi_close($mh);
-
-  // Write to building config
+  $total   = stStorageUsed($building);
   $cfgFile = CONFIG_DIR . $building . '.json';
   $cfg     = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
   $cfg['storageUsed']    = $total;
@@ -172,23 +95,12 @@ if (isset($_GET['json']) && $_GET['json'] === 'storage_refresh') {
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'warm') {
   header('Content-Type: application/json');
-  $tree   = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
-  $wPath  = trim($_GET['path'] ?? '', '/');
-  $wFid   = $tree === 'private' ? $config['privateFolderId'] : $config['publicFolderId'];
-  $action = $tree === 'private' ? 'listPrivate' : 'list';
-
-  $warmUrl = APPS_SCRIPT_URL . '?action=' . $action
-           . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-           . '&folderId=' . urlencode($wFid)
-           . ($wPath ? '&subdir=' . urlencode($wPath) : '');
-
-  $resp = @file_get_contents($warmUrl);
-  if ($resp !== false) {
-    lcSet($tree === 'private' ? 'priv' : 'pub', $building, $wPath, $resp);
-    echo json_encode(['ok' => true]);
-  } else {
-    echo json_encode(['ok' => false]);
-  }
+  $tree  = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
+  $wPath = trim($_GET['path'] ?? '', '/');
+  $ctx   = $tree === 'private' ? 'priv' : 'pub';
+  $resp  = stListFolder($building, $wPath, $tree, $ctx);
+  lcSet($ctx, $building, $wPath, $resp);
+  echo json_encode(['ok' => true]);
   exit;
 }
 
@@ -202,13 +114,13 @@ if (isset($_GET['json']) && $_GET['json'] === 'setup_big_upload') {
   $path       = trim($_GET['path'] ?? '', '/');
   $targetPath = $path ? $tree . '/' . $path : $tree;
 
-  $url = APPS_SCRIPT_URL
+  $url = GAS_URL
        . '?action=setupBigUploadFolder'
-       . '&token='          . urlencode(APPS_SCRIPT_TOKEN)
+       . '&token='          . urlencode(GAS_TOKEN)
        . '&publicFolderId=' . urlencode($config['publicFolderId'])
        . '&targetPath='     . urlencode($targetPath);
 
-  echo appsScriptGet($url);
+  echo _gasGet($url);
   exit;
 }
 
@@ -218,11 +130,11 @@ if (isset($_GET['json']) && $_GET['json'] === 'setup_big_upload') {
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'list_big_uploads') {
   header('Content-Type: application/json');
-  $url = APPS_SCRIPT_URL
+  $url = GAS_URL
        . '?action=listBigUploads'
-       . '&token='          . urlencode(APPS_SCRIPT_TOKEN)
+       . '&token='          . urlencode(GAS_TOKEN)
        . '&publicFolderId=' . urlencode($config['publicFolderId']);
-  echo appsScriptGet($url);
+  echo _gasGet($url);
   exit;
 }
 
@@ -242,26 +154,22 @@ if (isset($_GET['json']) && $_GET['json'] === 'publish_quarantine') {
     $targetPath = $targetPaths[$i] ?? '';
     if (!$fileId || !$targetPath) continue;
 
-    $url = APPS_SCRIPT_URL
+    $url = GAS_URL
          . '?action=publishBigUpload'
-         . '&token='           . urlencode(APPS_SCRIPT_TOKEN)
+         . '&token='           . urlencode(GAS_TOKEN)
          . '&fileId='          . urlencode($fileId)
          . '&targetPath='      . urlencode($targetPath)
          . '&publicFolderId='  . urlencode($config['publicFolderId'])
          . '&privateFolderId=' . urlencode($config['privateFolderId']);
 
-    $result = json_decode(appsScriptGet($url), true);
+    $result = json_decode(_gasGet($url), true);
     if ($result['ok'] ?? false) { $published++; } else { $errors++; }
   }
 
   foreach ($toDelete as $fileId) {
     $fileId = preg_replace('/[^a-zA-Z0-9_-]/', '', $fileId);
     if (!$fileId) continue;
-    $url = APPS_SCRIPT_URL
-         . '?action=deleteFile'
-         . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
-         . '&fileId=' . urlencode($fileId);
-    $result = json_decode(appsScriptGet($url), true);
+    $result = json_decode(stDeleteFile($building, $fileId, 'public'), true);
     if ($result['ok'] ?? false) { $deleted++; } else { $errors++; }
   }
 
@@ -308,9 +216,8 @@ if (isset($_GET['json']) && $_GET['json'] === 'billing_url') {
 // JSON: list folder contents (proxied from Apps Script)
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'list') {
-  $tree     = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
-  $path     = trim($_GET['path'] ?? '', '/');
-  $folderId = $tree === 'private' ? $config['privateFolderId'] : $config['publicFolderId'];
+  $tree = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
+  $path = trim($_GET['path'] ?? '', '/');
 
   // Serve from server-side cache if available
   $cachedRaw = lcGet('adm', $building, $tree . ':' . $path);
@@ -322,13 +229,7 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
     exit;
   }
 
-  $url = APPS_SCRIPT_URL
-       . '?action=listAdmin'
-       . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-       . '&folderId=' . urlencode($folderId)
-       . ($path ? '&subdir=' . urlencode($path) : '');
-
-  $raw  = appsScriptGet($url);
+  $raw  = stListFolder($building, $path, $tree, 'adm');
   $data = json_decode($raw, true);
 
   // Annotate deletable folders (only those created via this app)
@@ -406,20 +307,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $fileName = basename($file['name']);
     $mimeType = mime_content_type($file['tmp_name']) ?: 'application/octet-stream';
-    $data     = base64_encode(file_get_contents($file['tmp_name']));
+    $cTree    = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+    $cPath    = trim($_POST['cachePath'] ?? '', '/');
 
-    $result = appsScriptPost([
-      'action'   => 'uploadFile',
-      'token'    => APPS_SCRIPT_TOKEN,
-      'folderId' => $folderId,
-      'fileName' => $fileName,
-      'mimeType' => $mimeType,
-      'data'     => $data,
-    ]);
+    $result = stUploadFile($building, $cTree, $folderId, $cPath, $file['tmp_name'], $fileName, $mimeType);
     $res = json_decode($result, true);
     if (!empty($res['ok'])) {
-      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
-      $cPath = trim($_POST['cachePath'] ?? '', '/');
       lcBustFolder($building, $cTree, $cPath);
     }
     echo $result;
@@ -433,14 +326,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok' => false, 'error' => 'Invalid file ID']);
       exit;
     }
-    $url    = APPS_SCRIPT_URL
-            . '?action=deleteFile'
-            . '&token='  . urlencode(APPS_SCRIPT_TOKEN)
-            . '&fileId=' . urlencode($fileId);
-    $result = appsScriptGet($url);
+    $cTree  = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+    $result = stDeleteFile($building, $fileId, $cTree);
     $res    = json_decode($result, true);
     if (!empty($res['ok'])) {
-      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
       $cPath = trim($_POST['cachePath'] ?? '', '/');
       lcBustFolder($building, $cTree, $cPath);
     }
@@ -460,15 +349,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok' => false, 'error' => 'Invalid file name']);
       exit;
     }
-    $url    = APPS_SCRIPT_URL
-            . '?action=renameFile'
-            . '&token='   . urlencode(APPS_SCRIPT_TOKEN)
-            . '&fileId='  . urlencode($fileId)
-            . '&newName=' . urlencode($newName);
-    $result = appsScriptGet($url);
+    $cTree  = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+    $result = stRenameFile($building, $fileId, $newName, $cTree);
     $res    = json_decode($result, true);
     if (!empty($res['ok'])) {
-      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
       $cPath = trim($_POST['cachePath'] ?? '', '/');
       lcBustFolder($building, $cTree, $cPath);
     }
@@ -517,20 +401,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok' => false, 'error' => 'Invalid folder name']);
       exit;
     }
-    $url = APPS_SCRIPT_URL
-         . '?action=createFolder'
-         . '&token='          . urlencode(APPS_SCRIPT_TOKEN)
-         . '&parentFolderId=' . urlencode($parentFolderId)
-         . '&name='           . urlencode($name);
-    $raw  = appsScriptGet($url);
+    $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+    $cPath = trim($_POST['cachePath'] ?? '', '/');
+    $raw   = stCreateFolder($building, $cTree, $parentFolderId, $cPath, $name);
     $resp = json_decode($raw, true);
     // Track the new folder ID so it can be deleted later
     if (!empty($resp['ok']) && !empty($resp['id'])) {
       $ids   = loadCreatedFolders($building);
       $ids[] = $resp['id'];
       saveCreatedFolders($building, $ids);
-      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
-      $cPath = trim($_POST['cachePath'] ?? '', '/');
       lcBustFolder($building, $cTree, $cPath);
     }
     echo $raw;
@@ -550,17 +429,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       echo json_encode(['ok' => false, 'error' => 'Folder cannot be deleted']);
       exit;
     }
-    $url = APPS_SCRIPT_URL
-         . '?action=deleteFolder'
-         . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-         . '&folderId=' . urlencode($folderId);
-    $raw  = appsScriptGet($url);
-    $resp = json_decode($raw, true);
+    $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
+    $raw   = stDeleteFolder($building, $folderId, $cTree);
+    $resp  = json_decode($raw, true);
     // Remove from tracked list on success
     if (!empty($resp['ok'])) {
       $ids = array_values(array_filter($ids, fn($id) => $id !== $folderId));
       saveCreatedFolders($building, $ids);
-      $cTree = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
       $cPath = trim($_POST['cachePath'] ?? '', '/');
       lcBustFolder($building, $cTree, $cPath);
     }

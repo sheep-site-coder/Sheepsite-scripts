@@ -1,7 +1,6 @@
 <?php
 $buildings = require __DIR__ . '/buildings.php';
-
-$appsScriptURL = 'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec';
+require_once __DIR__ . '/storage/storage.php';
 
 // -------------------------------------------------------
 // Get and validate parameters
@@ -13,7 +12,7 @@ if (!$building || !array_key_exists($building, $buildings)) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 
-$folderId   = $buildings[$building]['publicFolderId'];
+$folderId   = $buildings[$building]['publicFolderId'] ?? '';
 $buildLabel = ucwords(str_replace('_', ' ', $building));
 require __DIR__ . '/suspension.php';
 $returnURL  = $_GET['return'] ?? '';
@@ -29,17 +28,9 @@ if (isset($_GET['json'])) {
   $cached = lcGet('pub', $building, $subdir);
   if ($cached !== null) { echo $cached; exit; }
 
-  $url = $appsScriptURL
-       . '?action=list'
-       . '&folderId=' . urlencode($folderId)
-       . ($subdir ? '&subdir=' . urlencode($subdir) : '');
-  $response = @file_get_contents($url);
-  if ($response !== false) {
-    lcSet('pub', $building, $subdir, $response);
-    echo $response;
-  } else {
-    echo json_encode(['error' => 'Could not reach Apps Script']);
-  }
+  $response = stListFolder($building, $subdir, 'public', 'pub');
+  lcSet('pub', $building, $subdir, $response);
+  echo $response;
   exit;
 }
 
