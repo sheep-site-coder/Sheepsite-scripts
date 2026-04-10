@@ -1,25 +1,18 @@
 <?php
 // -------------------------------------------------------
 // get-doc-byname.php
-// Place this file on sheepsite.com/Scripts/
+// Looks up a file by name in a building's public folder
+// and serves or redirects to a viewable URL.
 //
-// Looks up a file by name in a building's Public folder
-// and redirects to its Google Doc preview URL.
+// Supports both Drive and R2 storage backends.
 //
-// Usage (iframe src):
-//   https://sheepsite.com/Scripts/get-doc-byname.php
-//     ?building=QGscratch
-//     &subdir=Page1Docs
-//     &filename=Announcement+Page1
+// Usage (iframe src or window.open):
+//   get-doc-byname.php?building=QGscratch&subdir=Page1Docs&filename=Announcement+Page1
 // -------------------------------------------------------
 
 $buildings = require __DIR__ . '/buildings.php';
+require_once __DIR__ . '/storage/storage.php';
 
-$appsScriptURL = 'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec';
-
-// -------------------------------------------------------
-// Get and validate parameters
-// -------------------------------------------------------
 $building = $_GET['building'] ?? '';
 $subdir   = trim($_GET['subdir'] ?? '', '/');
 $filename = $_GET['filename'] ?? '';
@@ -30,37 +23,54 @@ if (!$building || !array_key_exists($building, $buildings) || !$filename) {
 }
 
 // -------------------------------------------------------
-// Fetch folder listing from Apps Script
+// Get folder listing via storage abstraction
 // -------------------------------------------------------
-$url = $appsScriptURL
-     . '?action=list'
-     . '&folderId=' . urlencode($buildings[$building]['publicFolderId'])
-     . ($subdir ? '&subdir=' . urlencode($subdir) : '');
-
-$response = @file_get_contents($url);
-$data     = json_decode($response, true);
+$raw  = stListFolder($building, $subdir, 'public', 'pub');
+$data = json_decode($raw, true);
 
 // -------------------------------------------------------
-// Find the file by name and redirect to preview URL
+// Find the file by name.
+// Match exact name first, then base name without extension
+// (R2 files have extensions, Drive native files may not).
 // -------------------------------------------------------
+$matched = null;
 foreach ($data['files'] ?? [] as $file) {
   if ($file['name'] === $filename) {
-    $id       = $file['id'];
-    $mimeType = $file['type'] ?? '';
-    if ($mimeType === 'application/vnd.google-apps.document') {
-      $previewUrl = 'https://docs.google.com/document/d/'     . urlencode($id) . '/preview';
-    } elseif ($mimeType === 'application/vnd.google-apps.spreadsheet') {
-      $previewUrl = 'https://docs.google.com/spreadsheets/d/' . urlencode($id) . '/preview';
-    } elseif ($mimeType === 'application/vnd.google-apps.presentation') {
-      $previewUrl = 'https://docs.google.com/presentation/d/' . urlencode($id) . '/preview';
-    } else {
-      // PDF, Word, or any other uploaded file
-      $previewUrl = 'https://drive.google.com/file/d/'        . urlencode($id) . '/preview';
-    }
-    header('Location: ' . $previewUrl);
-    exit;
+    $matched = $file;
+    break;
+  }
+  // Base-name match: "Announcement Page1" matches "Announcement Page1.pdf"
+  $base = preg_replace('/\.[^.]+$/', '', $file['name']);
+  if ($base === $filename) {
+    $matched = $file;
+    // keep looking for an exact match
   }
 }
 
-http_response_code(404);
-die('File "' . htmlspecialchars($filename) . '" not found in ' . htmlspecialchars($building) . '/' . htmlspecialchars($subdir) . '.');
+if (!$matched) {
+  http_response_code(404);
+  die('File "' . htmlspecialchars($filename) . '" not found in '
+    . htmlspecialchars($building) . '/' . htmlspecialchars($subdir) . '.');
+}
+
+// -------------------------------------------------------
+// Serve the file via storage abstraction
+// -------------------------------------------------------
+$info = stGetDownloadInfo($building, $matched['id'], 'public');
+
+if ($info['type'] === 'redirect') {
+  // R2: redirect to pre-signed URL (browser handles inline display)
+  header('Location: ' . $info['url']);
+  exit;
+}
+
+if ($info['type'] === 'proxy') {
+  // Drive: stream the file inline (GAS-proxied download)
+  header('Content-Type: ' . $info['mimeType']);
+  header('Content-Disposition: inline; filename="' . str_replace('"', '\\"', $info['name']) . '"');
+  echo base64_decode($info['data']);
+  exit;
+}
+
+http_response_code(502);
+die('Could not retrieve file: ' . htmlspecialchars($info['message'] ?? 'unknown error'));

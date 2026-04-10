@@ -33,6 +33,7 @@ function scanDriveTree(array $bldCfg, string $path, string $tree): array {
   $files = [];
   foreach ($data['files'] ?? [] as $f) {
     $files[] = [
+      'type'    => 'file',
       'driveId' => $f['id'],
       'name'    => $f['name'],
       'size'    => $f['size'] ?? '',
@@ -43,7 +44,17 @@ function scanDriveTree(array $bldCfg, string $path, string $tree): array {
   foreach ($data['folders'] ?? [] as $folder) {
     $subPath = $path ? $path . '/' . $folder['name'] : $folder['name'];
     $sub = scanDriveTree($bldCfg, $subPath, $tree);
-    $files = array_merge($files, $sub);
+    if (empty($sub)) {
+      // Empty leaf folder — record it so migration can create a .keep placeholder
+      $files[] = [
+        'type' => 'folder',
+        'name' => $folder['name'],
+        'path' => $path,
+        'tree' => $tree,
+      ];
+    } else {
+      $files = array_merge($files, $sub);
+    }
   }
   return $files;
 }
@@ -88,17 +99,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'migra
   header('Content-Type: application/json');
 
   $building = $_POST['building'] ?? '';
+  $type     = ($_POST['type'] ?? 'file') === 'folder' ? 'folder' : 'file';
   $driveId  = $_POST['driveId']  ?? '';
   $name     = $_POST['name']     ?? '';
   $path     = $_POST['path']     ?? '';
   $tree     = ($_POST['tree'] ?? '') === 'private' ? 'private' : 'public';
 
-  if (!isset($buildings[$building]) || !$driveId || !$name) {
+  if (!isset($buildings[$building]) || !$name) {
     echo json_encode(['ok' => false, 'error' => 'Missing parameters']);
     exit;
   }
 
-  // Fetch from Drive
+  $cfg    = _r2Cfg();
+  $prefix = $building . '/' . $tree . '/' . ($path ? trim($path, '/') . '/' : '');
+
+  // Empty folder — create a .keep placeholder
+  if ($type === 'folder') {
+    $key     = $prefix . $name . '/.keep';
+    $objPath = '/' . $cfg['bucket'] . '/' . $key;
+    [$status, ] = _r2Request('PUT', $objPath, [], ['content-type' => 'text/plain'], '');
+    if ($status === 200 || $status === 204) {
+      echo json_encode(['ok' => true, 'key' => $key]);
+    } else {
+      echo json_encode(['ok' => false, 'error' => 'R2 folder create failed (HTTP ' . $status . ')']);
+    }
+    exit;
+  }
+
+  // File — fetch from Drive
+  if (!$driveId) {
+    echo json_encode(['ok' => false, 'error' => 'Missing driveId']);
+    exit;
+  }
   $info = driveGetDownloadInfo($driveId);
   if ($info['type'] === 'error') {
     echo json_encode(['ok' => false, 'error' => 'Drive: ' . $info['message']]);
@@ -109,9 +141,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'migra
   $tmpFile = tempnam(sys_get_temp_dir(), 'r2mig_');
   file_put_contents($tmpFile, base64_decode($info['data']));
 
-  // Target R2 key
-  $cfg     = _r2Cfg();
-  $prefix  = $building . '/' . $tree . '/' . ($path ? trim($path, '/') . '/' : '');
   $key     = $prefix . $name;
   $objPath = '/' . $cfg['bucket'] . '/' . $key;
 
@@ -153,6 +182,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_
 }
 
 // -------------------------------------------------------
+// AJAX: list stray top-level prefixes under a building
+// (anything that isn't public/ or private/)
+// GET ?action=list_stray&building=X
+// -------------------------------------------------------
+if (isset($_GET['action']) && $_GET['action'] === 'list_stray') {
+  header('Content-Type: application/json');
+  $b = $_GET['building'] ?? '';
+  if (!isset($buildings[$b])) { echo json_encode(['ok' => false, 'error' => 'Invalid building']); exit; }
+
+  $cfg = _r2Cfg();
+  [$status, $body] = _r2Request('GET', '/' . $cfg['bucket'], [
+    'list-type' => '2',
+    'prefix'    => $b . '/',
+    'delimiter' => '/',
+    'max-keys'  => '100',
+  ]);
+  if ($status !== 200) {
+    echo json_encode(['ok' => false, 'error' => 'R2 list failed (HTTP ' . $status . ')']); exit;
+  }
+
+  $sx       = @simplexml_load_string($body);
+  $expected = [$b . '/public/', $b . '/private/'];
+  $stray    = [];
+  if ($sx) {
+    foreach ($sx->CommonPrefixes as $cp) {
+      $p = (string)$cp->Prefix;
+      if (!in_array($p, $expected)) $stray[] = $p;
+    }
+  }
+  echo json_encode(['ok' => true, 'stray' => $stray]);
+  exit;
+}
+
+// -------------------------------------------------------
+// AJAX: delete all objects under a stray prefix
+// POST action=delete_stray, building, prefix
+// Only allowed for prefixes outside public/ and private/
+// -------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_stray') {
+  header('Content-Type: application/json');
+  $b      = $_POST['building'] ?? '';
+  $prefix = $_POST['prefix']   ?? '';
+
+  if (!isset($buildings[$b])) { echo json_encode(['ok' => false, 'error' => 'Invalid building']); exit; }
+  if (!$prefix || strpos($prefix, $b . '/') !== 0) {
+    echo json_encode(['ok' => false, 'error' => 'Invalid prefix']); exit;
+  }
+  if (strpos($prefix, $b . '/public/') === 0 || strpos($prefix, $b . '/private/') === 0) {
+    echo json_encode(['ok' => false, 'error' => 'Use file manager for public/private trees']); exit;
+  }
+
+  $cfg = _r2Cfg();
+  [$status, $body] = _r2Request('GET', '/' . $cfg['bucket'], [
+    'list-type' => '2',
+    'prefix'    => $prefix,
+    'max-keys'  => '1000',
+  ]);
+  if ($status !== 200) {
+    echo json_encode(['ok' => false, 'error' => 'List failed (HTTP ' . $status . ')']); exit;
+  }
+
+  $sx      = @simplexml_load_string($body);
+  $deleted = 0;
+  $errors  = [];
+  if ($sx) {
+    foreach ($sx->Contents as $obj) {
+      $key     = (string)$obj->Key;
+      $objPath = '/' . $cfg['bucket'] . '/' . ltrim($key, '/');
+      [$dStatus, ] = _r2Request('DELETE', $objPath);
+      if ($dStatus === 204 || $dStatus === 200) { $deleted++; }
+      else { $errors[] = $key; }
+    }
+  }
+
+  if (empty($errors)) {
+    echo json_encode(['ok' => true, 'deleted' => $deleted]);
+  } else {
+    echo json_encode(['ok' => false, 'error' => 'Failed to delete: ' . implode(', ', $errors)]);
+  }
+  exit;
+}
+
+// -------------------------------------------------------
 // Page render
 // -------------------------------------------------------
 ?>
@@ -190,6 +302,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_
     .log-info  { color: #6b7280; }
     .summary   { margin-top: 0.75rem; font-weight: bold; }
     .note      { font-size: 0.82rem; color: #6b7280; margin-top: 0.5rem; }
+    .btn-stray { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+    .btn-stray:hover { background: #e5e7eb; }
+    .stray-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+    .btn-del-stray { background: #fee2e2; color: #991b1b; font-size: 0.8rem; padding: 0.15rem 0.6rem; }
+    .btn-del-stray:hover { background: #fca5a5; }
   </style>
 </head>
 <body>
@@ -225,7 +342,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_
       <span style="font-size:0.82rem;color:#6b7280;">Ready to switch — add <code>'storage'=>'r2'</code> to buildings.php</span>
     <?php endif; ?>
     <button class="btn-scan" onclick="startScan(<?= htmlspecialchars(json_encode($name)) ?>)">Scan Drive</button>
+    <button class="btn-stray" onclick="checkStray(<?= htmlspecialchars(json_encode($name)) ?>)">Check Stray Folders</button>
   </div>
+  <div id="stray-<?= htmlspecialchars($name) ?>" style="display:none;margin-top:0.5rem;font-size:0.85rem;"></div>
 
   <div class="progress-area" id="progress-<?= htmlspecialchars($name) ?>">
     <div class="progress-bar"><div class="progress-fill" id="bar-<?= htmlspecialchars($name) ?>" style="width:0%"></div></div>
@@ -260,11 +379,13 @@ function startScan(building) {
     .then(function(data) {
       if (!data.ok) { label.textContent = 'Scan error: ' + (data.error || 'unknown'); return; }
       scanResults[building] = data.files;
-      var pub  = data.files.filter(function(f) { return f.tree === 'public'; }).length;
-      var priv = data.files.filter(function(f) { return f.tree === 'private'; }).length;
-      label.textContent = data.count + ' files found (' + pub + ' public, ' + priv + ' private)';
+      var files   = data.files.filter(function(f) { return f.type !== 'folder'; });
+      var folders = data.files.filter(function(f) { return f.type === 'folder'; });
+      var pub     = data.files.filter(function(f) { return f.tree === 'public'; }).length;
+      var priv    = data.files.filter(function(f) { return f.tree === 'private'; }).length;
+      label.textContent = files.length + ' files + ' + folders.length + ' empty folder(s) found (' + pub + ' public, ' + priv + ' private)';
       note.textContent  = 'Large files (>50 MB) may fail — upload those to R2 manually after migration.';
-      btn.disabled = data.count === 0;
+      btn.disabled = data.files.length === 0;
     })
     .catch(function(e) { label.textContent = 'Scan failed: ' + e.message; });
 }
@@ -295,13 +416,15 @@ function startMigrate(building) {
 
     var f        = files[i];
     var display  = (f.path ? f.path + '/' : '') + f.name;
-    label.textContent = (i + 1) + ' / ' + total + ' — ' + f.tree + '/' + display;
+    var isFolder = f.type === 'folder';
+    label.textContent = (i + 1) + ' / ' + total + ' — ' + (isFolder ? '📁 ' : '') + f.tree + '/' + display + (isFolder ? '/' : '');
     bar.style.width = Math.round((i / total) * 100) + '%';
 
     var body = new URLSearchParams({
       action:   'migrate_file',
       building: building,
-      driveId:  f.driveId,
+      type:     f.type || 'file',
+      driveId:  f.driveId || '',
       name:     f.name,
       path:     f.path,
       tree:     f.tree,
@@ -340,6 +463,48 @@ function markComplete(building) {
         if (badge) { badge.className = 'badge badge-done'; badge.textContent = '✓ Migrated'; }
       }
     });
+}
+
+function checkStray(building) {
+  var el = document.getElementById('stray-' + building);
+  el.style.display = 'block';
+  el.innerHTML = 'Checking R2 for stray folders…';
+  fetch('migrate-to-r2.php?action=list_stray&building=' + encodeURIComponent(building))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) { el.innerHTML = 'Error: ' + (data.error || 'unknown'); return; }
+      if (!data.stray.length) { el.innerHTML = '<span style="color:#059669">✓ No stray folders found.</span>'; return; }
+      var html = '<strong style="color:#92400e">Stray prefixes found:</strong><br>';
+      data.stray.forEach(function(prefix) {
+        var safeB = building.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        var safeP = prefix.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        html += '<div class="stray-row"><code>' + prefix + '</code>'
+              + '<button class="btn-del-stray" data-building="' + safeB + '" data-prefix="' + safeP + '" onclick="deleteStray(this.dataset.building,this.dataset.prefix,this)">Delete</button>'
+              + '</div>';
+      });
+      el.innerHTML = html;
+    })
+    .catch(function(e) { el.innerHTML = 'Failed: ' + e.message; });
+}
+
+function deleteStray(building, prefix, btn) {
+  if (!confirm('Delete all objects under "' + prefix + '"?')) return;
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  var body = new URLSearchParams({ action: 'delete_stray', building: building, prefix: prefix });
+  fetch('migrate-to-r2.php', { method: 'POST', body: body })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var row = btn.closest('.stray-row');
+      if (data.ok) {
+        row.innerHTML = '<span style="color:#059669">✓ Deleted ' + prefix + ' (' + data.deleted + ' object(s))</span>';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+        alert('Error: ' + (data.error || 'unknown'));
+      }
+    })
+    .catch(function(e) { btn.disabled = false; btn.textContent = 'Delete'; alert(e.message); });
 }
 
 function appendLog(el, msg, cls) {

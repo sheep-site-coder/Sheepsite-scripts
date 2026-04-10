@@ -201,7 +201,7 @@ if (isset($_GET['json'])) {
 if (isset($_GET['fileId'])) {
   $fileId = $_GET['fileId'];
 
-  if (!preg_match('/^[a-zA-Z0-9_\/-]+$/', $fileId)) {
+  if (!preg_match('/^[a-zA-Z0-9_.() \/-]+$/', $fileId)) {
     die('<p style="color:red;">Invalid file ID.</p>');
   }
 

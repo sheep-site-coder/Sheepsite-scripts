@@ -35,6 +35,31 @@ if (isset($_GET['json'])) {
 }
 
 // -------------------------------------------------------
+// Direct file open — ?file=subdir/filename.pdf
+// Looks up the file in storage and redirects to it.
+// Replaces the old openDoc(driveId) pattern.
+// -------------------------------------------------------
+if (isset($_GET['file'])) {
+  $filePath = trim($_GET['file'], '/');
+  if (!$filePath || !preg_match('/^[a-zA-Z0-9_.() \/-]+$/', $filePath)) {
+    die('<p style="color:red;">Invalid file path.</p>');
+  }
+  $info = stGetDownloadInfo($building, $filePath, 'public');
+  if ($info['type'] === 'error') {
+    die('<p style="color:red;">File not found.</p>');
+  }
+  if ($info['type'] === 'redirect') {
+    header('Location: ' . $info['url']);
+    exit;
+  }
+  // Drive proxy fallback
+  header('Content-Type: ' . $info['mimeType']);
+  header('Content-Disposition: inline; filename="' . str_replace('"', '\\"', $info['name']) . '"');
+  echo base64_decode($info['data']);
+  exit;
+}
+
+// -------------------------------------------------------
 // Build breadcrumb from subdir path
 // -------------------------------------------------------
 $parts      = $subdir ? explode('/', $subdir) : [];
@@ -132,9 +157,8 @@ $baseURL = '?building=' . urlencode($building) . ($returnURL ? '&return=' . urle
       if (data.files && data.files.length) {
         html += '<div class="section-title">Files</div>';
         data.files.forEach(function (f) {
-          var previewURL = 'https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view';
           html += '<div class="file-card">'
-                + '<a href="' + esc(previewURL) + '" target="_blank" class="file-name">' + esc(f.name) + '</a>'
+                + '<a href="' + esc(f.url) + '" target="_blank" class="file-name">' + esc(f.name) + '</a>'
                 + '<span class="file-info">' + esc(f.size) + '</span>'
                 + '<a href="' + esc(f.url) + '" class="download-btn">Download</a>'
                 + '</div>';

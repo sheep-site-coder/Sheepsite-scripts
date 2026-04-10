@@ -273,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     set_time_limit(300);
     $folderId = trim($_POST['folderId'] ?? '');
 
-    if (!$folderId || !preg_match('/^[a-zA-Z0-9_-]+$/', $folderId)) {
+    if (!$folderId || str_contains($folderId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $folderId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid folder ID']);
       exit;
     }
@@ -419,7 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // ---- Delete Folder ----
   if ($action === 'deleteFolder') {
     $folderId = trim($_POST['folderId'] ?? '');
-    if (!$folderId || !preg_match('/^[a-zA-Z0-9_-]+$/', $folderId)) {
+    if (!$folderId || str_contains($folderId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $folderId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid folder ID']);
       exit;
     }
@@ -1432,10 +1432,12 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
       text.textContent = label + 'Uploading \u201c' + file.name + '\u201d\u2026 0%';
 
       var fd = new FormData();
-      fd.append('action',   'upload');
-      fd.append('folderId', currentFolderId);
-      fd.append('tree',     currentTree);
-      fd.append('file',     file);
+      fd.append('action',    'upload');
+      fd.append('folderId',  currentFolderId);
+      fd.append('tree',      currentTree);
+      fd.append('cacheTree', currentTree);
+      fd.append('cachePath', currentPath);
+      fd.append('file',      file);
 
       var xhr = new XMLHttpRequest();
 
