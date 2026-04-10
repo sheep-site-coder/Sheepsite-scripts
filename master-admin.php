@@ -445,6 +445,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     </div>
   </a>
 
+  <a href="migrate-to-r2.php" class="tool-card">
+    <div class="tool-icon">☁️</div>
+    <div>
+      <div class="tool-title">Migrate to R2</div>
+      <div class="tool-desc">Copy building files from Google Drive to Cloudflare R2.</div>
+    </div>
+  </a>
+
   <a href="docs/Sheepsite-Architecture.html" target="_blank" class="tool-card">
     <div class="tool-icon">🏗️</div>
     <div>
