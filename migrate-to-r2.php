@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'migra
 }
 
 // -------------------------------------------------------
-// AJAX: mark building migration complete
+// AJAX: mark building migration complete + clear listing cache
 // POST action=mark_complete&building=X
 // -------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_complete') {
@@ -140,6 +140,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'mark_
   $cfg     = file_exists($cfgFile) ? (json_decode(file_get_contents($cfgFile), true) ?? []) : [];
   $cfg['r2Migrated'] = true;
   file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT));
+
+  // Clear all listing cache entries for this building
+  $cacheDir = __DIR__ . '/cache/';
+  $safe     = preg_replace('/[^a-zA-Z0-9]/', '', $b);
+  if (is_dir($cacheDir)) {
+    foreach (glob($cacheDir . '*_' . $safe . '_*.json') as $f) @unlink($f);
+  }
+
   echo json_encode(['ok' => true]);
   exit;
 }
