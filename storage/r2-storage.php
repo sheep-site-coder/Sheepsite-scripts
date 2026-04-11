@@ -317,7 +317,7 @@ function r2RenameFile(string $building, string $fileKey, string $newName, string
   $destPath = '/' . $bucket . '/' . $newKey;
 
   [$status, ] = _r2Request('PUT', $destPath, [], [
-    'x-amz-copy-source' => rawurlencode('/' . $bucket . '/' . $fileKey),
+    'x-amz-copy-source' => '/' . $bucket . _r2EncodePath($fileKey),
   ]);
 
   if ($status !== 200 && $status !== 204) {
