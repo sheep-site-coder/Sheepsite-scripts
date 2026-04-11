@@ -1017,7 +1017,7 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     if (storageLimit > 0) {
       var batchSize = files.reduce(function (sum, f) { return sum + f.size; }, 0);
       if ((storageUsed + batchSize) > storageLimit) {
-        alert('Storage limit reached (' + fmtBytes(storageUsed) + ' used of ' + fmtBytes(storageLimit) + '). Please contact your administrator to add more storage.');
+        showStorageLimitModal(storageUsed, storageLimit);
         return;
       }
     }
@@ -1121,6 +1121,13 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
             next();
           }
         } else {
+          if (result.error && result.error.indexOf('Storage limit') === 0) {
+            // Stop the queue and show the billing modal
+            dropLabel.style.display = '';
+            progress.style.display  = 'none';
+            showStorageLimitModal(storageUsed, storageLimit);
+            return;
+          }
           errors.push('\u2022 ' + file.name + ': ' + (result.error || 'Unknown error'));
           index++;
           uploadNext();
@@ -1179,6 +1186,28 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   // -------------------------------------------------------
   // Confirm modal
   // -------------------------------------------------------
+  function showStorageLimitModal(used, limit) {
+    var usedStr  = fmtBytes(used);
+    var limitStr = fmtBytes(limit);
+    var body = used > 0
+      ? '<p>You have used ' + usedStr + ' of your ' + limitStr + ' storage limit.</p>'
+      : '<p>This file exceeds your ' + limitStr + ' storage limit.</p>';
+    showFmConfirm(
+      'Storage limit reached',
+      body + '<p>Add more storage to continue uploading.</p>',
+      'Buy More Storage',
+      function () {
+        fetch(base + '&json=billing_url')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.ok) { window.location.href = d.url; }
+            else { alert('Could not load billing page: ' + (d.error || 'Unknown error')); }
+          })
+          .catch(function () { alert('Could not load billing page. Please try again.'); });
+      }
+    );
+  }
+
   var fmConfirmCb = null;
 
   function showFmConfirm(title, bodyHtml, proceedLabel, onProceed, altLabel, onAlt) {
