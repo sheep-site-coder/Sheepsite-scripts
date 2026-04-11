@@ -183,7 +183,11 @@ if (!isset($_GET['json']) && !isset($_GET['fileId'])) {
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
   header('Content-Type: application/json');
-  echo stListFolder($building, $path, 'private', 'priv');
+  try {
+    echo stListFolder($building, $path, 'private', 'priv');
+  } catch (\Throwable $e) {
+    echo json_encode(['error' => $e->getMessage()]);
+  }
   exit;
 }
 

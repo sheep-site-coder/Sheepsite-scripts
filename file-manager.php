@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // ---- Delete ----
   if ($action === 'delete') {
     $fileId = trim($_POST['fileId'] ?? '');
-    if (!$fileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
+    if (!$fileId || str_contains($fileId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $fileId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid file ID']);
       exit;
     }
@@ -210,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($action === 'rename') {
     $fileId  = trim($_POST['fileId']  ?? '');
     $newName = trim($_POST['newName'] ?? '');
-    if (!$fileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
+    if (!$fileId || str_contains($fileId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $fileId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid file ID']);
       exit;
     }
@@ -228,11 +228,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($action === 'migrateTags') {
     $oldFileId = trim($_POST['oldFileId'] ?? '');
     $newFileId = trim($_POST['newFileId'] ?? '');
-    if (!$oldFileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $oldFileId)) {
+    if (!$oldFileId || str_contains($oldFileId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $oldFileId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid old file ID']);
       exit;
     }
-    if (!$newFileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $newFileId)) {
+    if (!$newFileId || str_contains($newFileId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $newFileId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid new file ID']);
       exit;
     }
@@ -257,7 +257,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($action === 'createFolder') {
     $parentFolderId = trim($_POST['parentFolderId'] ?? '');
     $name           = trim($_POST['name']           ?? '');
-    if (!$parentFolderId || !preg_match('/^[a-zA-Z0-9_-]+$/', $parentFolderId)) {
+    if (!$parentFolderId || str_contains($parentFolderId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $parentFolderId)) {
       echo json_encode(['ok' => false, 'error' => 'Invalid parent folder ID']);
       exit;
     }

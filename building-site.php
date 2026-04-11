@@ -23,6 +23,7 @@ if (!$building || !isset($buildings[$building])) {
 
 $buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
 require __DIR__ . '/suspension.php';
+require_once __DIR__ . '/storage/storage.php';
 
 $page = preg_replace('/[^a-z-]/', '', $_GET['page'] ?? 'home');
 if (!in_array($page, ['home', 'about', 'resources-public', 'resources-private', 'cenclub', 'social'])) {
@@ -87,6 +88,22 @@ function isDropdownActive($p) {
 }
 
 $bldJs = json_encode($building);
+
+// Announcement lookup — done server-side so no extra JS fetch is needed.
+$announceUrl  = null;
+$announceName = null;
+if ($page === 'home') {
+  $raw  = stListFolder($building, 'Page1Docs', 'public', 'pub');
+  $data = json_decode($raw, true);
+  foreach ($data['files'] ?? [] as $f) {
+    $base = preg_replace('/\.[^.]+$/', '', $f['name']);
+    if ($f['name'] === 'Announcement Page1' || $base === 'Announcement Page1') {
+      $announceUrl  = $f['url'];
+      $announceName = $base ?: $f['name'];
+      break;
+    }
+  }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -285,6 +302,31 @@ $bldJs = json_encode($building);
   }
   .btn-search:hover { background: #fff0fb; }
 
+  /* ---- OWNER DIRECTORY CARD ---- */
+  .directory-card {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    padding: 1rem 1.4rem;
+    background: linear-gradient(135deg, #1a0030 0%, #3D0066 60%, #6a0099 100%);
+    border-radius: 8px;
+    margin-bottom: 1.75rem;
+    color: #fff;
+    box-shadow: 0 3px 12px rgba(61,0,102,0.35);
+  }
+  .directory-card img   { height: 62px; border-radius: 5px; flex-shrink: 0; }
+  .directory-card-body  { flex: 1; }
+  .directory-card-title { font-weight: 800; font-size: 1.1rem; letter-spacing: 0.01em; }
+  .directory-card-sub   { font-size: 0.85rem; opacity: 0.75; margin-top: 0.15rem; }
+  .btn-directory {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1.5px solid rgba(255,255,255,0.5);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .btn-directory:hover  { background: rgba(255,255,255,0.28); }
+
   /* ---- ANNOUNCEMENT ---- */
   .announce-head {
     display: flex;
@@ -302,34 +344,32 @@ $bldJs = json_encode($building);
     white-space: nowrap;
   }
 
-  /* ---- IFRAME CONTAINER ---- */
-  .iframe-box {
-    position: relative;
-    width: 100%;
-    height: 340px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    overflow: hidden;
-    background: #f8f8f8;
-  }
-  .iframe-box iframe { width: 100%; height: 100%; border: none; display: none; }
-  .iframe-spinner {
-    position: absolute;
-    inset: 0;
+  /* ---- ANNOUNCEMENT CARD ---- */
+  .announce-card {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    gap: 1.25rem;
+    padding: 1.4rem 1.6rem;
+    background: #faf5ff;
+    border: 1px solid #d0a8e8;
+    border-radius: 8px;
+    min-height: 90px;
   }
+  .announce-card .ac-icon { font-size: 2.4rem; line-height: 1; flex-shrink: 0; }
+  .announce-card .ac-name { flex: 1; font-weight: 600; font-size: 1.05rem; color: #2a003f; }
+  .announce-card .ac-muted { color: #888; font-size: 0.88rem; font-style: italic; }
+  .announce-card-loading { color: #999; font-size: 0.9rem; font-style: italic; padding: 1.5rem 0; text-align: center; }
+
+  /* ---- IFRAME CONTAINER (board of directors About page) ---- */
   .spinner-ring {
     width: 40px; height: 40px;
     border: 4px solid #e0c0f0;
     border-top-color: #7A0099;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+    margin: 0 auto;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .iframe-spinner p { margin-top: 10px; font-size: 13px; color: #888; font-family: inherit; }
 
   /* ---- RESOURCE ROWS ---- */
   .resource-row {
@@ -421,6 +461,16 @@ $bldJs = json_encode($building);
 
   <button class="btn btn-search" onclick="openSearch()">&#128269; Search ALL Documents</button>
 
+  <!-- Owner Directory -->
+  <div class="directory-card">
+    <img src="<?= htmlspecialchars($scriptsBase) ?>assets/Woolsy_Family_Monochrome.png" alt="Community">
+    <div class="directory-card-body">
+      <div class="directory-card-title">Owner Directory</div>
+      <div class="directory-card-sub">Know your neighbours</div>
+    </div>
+    <button class="btn btn-directory" onclick="openReport('resident')">View &#8594;</button>
+  </div>
+
   <!-- Latest News / Announcement -->
   <div class="section">
     <div class="announce-head">
@@ -428,18 +478,15 @@ $bldJs = json_encode($building);
       <h2>LATEST NEWS /<br>ANNOUNCEMENT</h2>
       <div class="bar"></div>
     </div>
-    <div class="iframe-box">
-      <div class="iframe-spinner" id="doc-loader">
-        <div class="spinner-ring"></div>
-        <p>Loading...</p>
+    <?php if ($announceUrl): ?>
+      <div class="announce-card">
+        <span class="ac-icon">📄</span>
+        <span class="ac-name"><?= htmlspecialchars($announceName) ?></span>
+        <a href="<?= htmlspecialchars($announceUrl) ?>" target="_blank" class="btn btn-primary">View &#8594;</a>
       </div>
-      <iframe
-        data-script="get-doc-byname"
-        data-subdir="Page1Docs"
-        data-filename="Announcement Page1"
-        title="Latest Announcement">
-      </iframe>
-    </div>
+    <?php else: ?>
+      <p class="announce-card-loading">No announcement available.</p>
+    <?php endif; ?>
   </div>
 
   <!-- Mid/End Year Report -->
@@ -659,21 +706,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // Admin links
   document.querySelectorAll('a[href*="admin.php"]').forEach(function (link) {
     link.href = SCRIPTS + 'admin.php?building=' + encodeURIComponent(BUILDING_NAME);
-  });
-
-  // get-doc-byname iframes (announcement, documents)
-  document.querySelectorAll('iframe[data-script="get-doc-byname"]').forEach(function (iframe) {
-    var url = SCRIPTS + 'get-doc-byname.php?building=' + encodeURIComponent(BUILDING_NAME);
-    var subdir   = iframe.getAttribute('data-subdir');
-    var filename = iframe.getAttribute('data-filename');
-    if (subdir)   url += '&subdir='   + encodeURIComponent(subdir);
-    if (filename) url += '&filename=' + encodeURIComponent(filename);
-    iframe.onload = function () {
-      iframe.style.display = 'block';
-      var loader = document.getElementById('doc-loader');
-      if (loader) loader.style.display = 'none';
-    };
-    iframe.src = url;
   });
 
   // Public report iframes (board of directors)

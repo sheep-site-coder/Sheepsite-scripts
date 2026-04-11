@@ -58,6 +58,22 @@ if (!$matched) {
 // -------------------------------------------------------
 $info = stGetDownloadInfo($building, $matched['id'], 'public');
 
+// Info mode — return URL + display name as JSON (used by building-site.php card)
+if (($_GET['mode'] ?? '') === 'info') {
+  header('Content-Type: application/json');
+  $displayName = preg_replace('/\.[^.]+$/', '', $matched['name']);
+  if ($info['type'] === 'redirect') {
+    echo json_encode(['url' => $info['url'], 'displayName' => $displayName]);
+  } else {
+    // Drive fallback: link back to this same script (it will proxy inline)
+    $selfUrl = 'get-doc-byname.php?building=' . urlencode($building)
+             . ($subdir ? '&subdir=' . urlencode($subdir) : '')
+             . '&filename=' . urlencode($filename);
+    echo json_encode(['url' => $selfUrl, 'displayName' => $displayName]);
+  }
+  exit;
+}
+
 if ($info['type'] === 'redirect') {
   // R2: redirect to pre-signed URL (browser handles inline display)
   header('Location: ' . $info['url']);

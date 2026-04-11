@@ -23,7 +23,11 @@ if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
   header('Content-Type: application/json');
-  echo stListFolder($building, $subdir, 'public', 'pub');
+  try {
+    echo stListFolder($building, $subdir, 'public', 'pub');
+  } catch (\Throwable $e) {
+    echo json_encode(['error' => $e->getMessage()]);
+  }
   exit;
 }
 
