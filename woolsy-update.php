@@ -15,11 +15,10 @@
 session_start();
 
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
 define('CREDITS_FILE',      __DIR__ . '/faqs/woolsy_credits.json');
 define('RULES_DIR',         __DIR__ . '/faqs/');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
+require_once __DIR__ . '/storage/r2-storage.php';
 // Increment when the extraction prompt gains new topics/guidelines.
 // Any building whose rules.md was built with an older version will be
 // flagged in the admin card and woolsy-update.php for a rebuild.
@@ -76,24 +75,87 @@ if (!empty($_wuCfg['testSite'])) {
 }
 unset($_wuCfg);
 
-$publicFolderId = $buildings[$building]['publicFolderId'];
+// -------------------------------------------------------
+// R2 helpers for Woolsy training
+// -------------------------------------------------------
 
-// -------------------------------------------------------
-// Helper: call Apps Script (GET)
-// -------------------------------------------------------
-function callAppsScript(array $params, int $timeout = 60): array {
-    $url = APPS_SCRIPT_URL . '?' . http_build_query(
-        array_merge(['token' => APPS_SCRIPT_TOKEN], $params)
-    );
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT        => $timeout,
-    ]);
-    $resp = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($resp ?: '{}', true) ?? ['error' => 'No response'];
+// List all PDFs in the building's public R2 tree.
+// Returns [{id, name, folder, size}] where id is the full R2 key.
+function _woolsyListPdfs(string $building): array {
+    $cfg    = _r2Cfg();
+    $prefix = $building . '/public/';
+    $files  = [];
+    $token  = null;
+    do {
+        $q = ['list-type' => '2', 'prefix' => $prefix, 'max-keys' => '1000'];
+        if ($token) $q['continuation-token'] = $token;
+        [$status, $body] = _r2Request('GET', '/' . $cfg['bucket'], $q);
+        if ($status !== 200) break;
+        $sx = @simplexml_load_string($body);
+        if (!$sx) break;
+        foreach ($sx->Contents as $obj) {
+            $key  = (string)$obj->Key;
+            $size = (int)(string)$obj->Size;
+            $name = basename($key);
+            if ($name === '.keep' || str_ends_with($key, '/')) continue;
+            if (!str_ends_with(strtolower($name), '.pdf')) continue;
+            $rel    = substr($key, strlen($prefix));
+            $parts  = explode('/', $rel);
+            $folder = count($parts) > 1 ? implode('/', array_slice($parts, 0, -1)) : '';
+            $files[] = ['id' => $key, 'name' => $name, 'folder' => $folder, 'size' => $size];
+        }
+        $token = (string)($sx->NextContinuationToken ?? '');
+    } while ($token !== '');
+    return $files;
+}
+
+// Save current R2 file list as baseline (used for change detection).
+function _woolsyStampBaseline(string $building): void {
+    $files = _woolsyListPdfs($building);
+    $index = [];
+    foreach ($files as $f) { $index[$f['id']] = $f['size']; }
+    file_put_contents(RULES_DIR . $building . '_baseline.json',
+        json_encode(['savedAt' => date('c'), 'files' => $index], JSON_PRETTY_PRINT));
+}
+
+// Build document index text from R2 listing and write to _docindex.txt.
+function _woolsyBuildDocIndex(string $building): bool {
+    $files = _woolsyListPdfs($building);
+    if (empty($files)) return false;
+    $byFolder = [];
+    foreach ($files as $f) {
+        $folder = $f['folder'] ?: '(root)';
+        $byFolder[$folder][] = $f['name'];
+    }
+    ksort($byFolder);
+    $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
+    foreach ($byFolder as $folder => $names) {
+        $lines[] = $folder . '/';
+        foreach ($names as $n) { $lines[] = "  \u{2022} " . $n; }
+        $lines[] = '';
+    }
+    return file_put_contents(RULES_DIR . $building . '_docindex.txt', implode("\n", $lines)) !== false;
+}
+
+// Compare current R2 listing against saved baseline. Returns status array.
+function _woolsyCheckChanges(string $building): array {
+    $baselineFile = RULES_DIR . $building . '_baseline.json';
+    if (!file_exists($baselineFile)) return ['notCheckedYet' => true];
+    $baseline  = json_decode(file_get_contents($baselineFile), true) ?? [];
+    $savedAt   = $baseline['savedAt']  ?? null;
+    $baseFiles = $baseline['files']    ?? [];
+    $current   = _woolsyListPdfs($building);
+    $curIndex  = [];
+    foreach ($current as $f) { $curIndex[$f['id']] = $f['size']; }
+    $changes = [];
+    foreach ($curIndex as $key => $size) {
+        if (!isset($baseFiles[$key]))          $changes[] = ['name' => basename($key), 'action' => 'added'];
+        elseif ($baseFiles[$key] !== $size)    $changes[] = ['name' => basename($key), 'action' => 'modified'];
+    }
+    foreach ($baseFiles as $key => $size) {
+        if (!isset($curIndex[$key]))           $changes[] = ['name' => basename($key), 'action' => 'removed'];
+    }
+    return ['status' => empty($changes) ? 'ok' : 'changes', 'changes' => $changes, 'checkedAt' => $savedAt];
 }
 
 // -------------------------------------------------------
@@ -233,36 +295,37 @@ $action = $_GET['action'] ?? '';
 // --- listFiles ---
 if ($action === 'listFiles') {
     header('Content-Type: application/json');
-    $result = callAppsScript([
-        'action'         => 'listDocFiles',
-        'building'       => $building,
-        'publicFolderId' => $publicFolderId,
-    ]);
-    echo json_encode($result);
+    $files = _woolsyListPdfs($building);
+    if (empty($files)) {
+        echo json_encode(['error' => 'No PDF files found in the public folder.']);
+        exit;
+    }
+    echo json_encode(['files' => $files]);
     exit;
 }
 
-// --- probeFile: extract text from one PDF, cache in session ---
+// --- probeFile: verify PDF is accessible + estimate size ---
 if ($action === 'probeFile') {
     header('Content-Type: application/json');
-    set_time_limit(120);
-    $fileId = $_GET['fileId'] ?? '';
-    if (!$fileId || !preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
-        echo json_encode(['error' => 'Invalid fileId']);
+    $fileKey = $_GET['fileId'] ?? '';
+    if (!$fileKey || str_contains($fileKey, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $fileKey)) {
+        echo json_encode(['error' => 'Invalid file key']);
         exit;
     }
-    $result   = callAppsScript(['action' => 'extractDocText', 'fileId' => $fileId], 90);
-    $cacheKey = 'woolsy_text_' . $building . '_' . $fileId;
-    if (!empty($result['text']) && ($result['readable'] ?? false)) {
-        $_SESSION[$cacheKey] = $result['text'];
-    } else {
-        unset($_SESSION[$cacheKey]);
+    if (!str_starts_with($fileKey, $building . '/public/')) {
+        echo json_encode(['error' => 'Invalid file path']);
+        exit;
     }
-    echo json_encode([
-        'readable'  => $result['readable']  ?? false,
-        'charCount' => $result['charCount'] ?? 0,
-        'error'     => $result['error']     ?? null,
-    ]);
+    // Fetch first 4 bytes to confirm %PDF magic
+    $url = _r2PresignedUrl($fileKey, 300);
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_RANGE => '0-3']);
+    $bytes = curl_exec($ch);
+    curl_close($ch);
+    $readable = ($bytes !== false && strlen($bytes) >= 4 && str_starts_with($bytes, '%PDF'));
+    // charCount estimate: PDF bytes ÷ 4 (conservative — Claude sees more than raw text extraction)
+    $charCount = (int)(($_GET['fileSize'] ?? 0) / 4);
+    echo json_encode(['readable' => $readable, 'charCount' => $charCount]);
     exit;
 }
 
@@ -281,28 +344,29 @@ if ($action === 'process' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode         = $body['mode']         ?? 'setup';
     $removedFiles = $body['removedFiles'] ?? [];
 
-    // Collect texts from session cache
-    $docTexts = [];
+    // Download PDFs from R2 and build document content blocks for Claude
+    $docBlocks = [];
     foreach ($files as $file) {
         if (empty($file['readable'])) continue;
-        $cacheKey = 'woolsy_text_' . $building . '_' . ($file['id'] ?? '');
-        if (!empty($_SESSION[$cacheKey])) {
-            $docTexts[] = [
-                'name'   => $file['name'],
-                'folder' => $file['folder'],
-                'text'   => $_SESSION[$cacheKey],
-            ];
-        }
+        $fileKey = $file['id'] ?? '';
+        if (!$fileKey || !str_starts_with($fileKey, $building . '/')) continue;
+        $url  = _r2PresignedUrl($fileKey, 300);
+        $ch   = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60]);
+        $bytes = curl_exec($ch);
+        curl_close($ch);
+        if (!$bytes || !str_starts_with($bytes, '%PDF')) continue;
+        $label = ($file['folder'] ? $file['folder'] . '/' : '') . $file['name'];
+        $docBlocks[] = [
+            'type'   => 'document',
+            'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => base64_encode($bytes)],
+            'title'  => $label,
+        ];
     }
 
-    if (empty($docTexts)) {
+    if (empty($docBlocks)) {
         echo json_encode(['error' => 'No readable documents found. Cannot build knowledge base.']);
         exit;
-    }
-
-    $combinedText = '';
-    foreach ($docTexts as $doc) {
-        $combinedText .= "\n\n=== {$doc['folder']} / {$doc['name']} ===\n\n" . $doc['text'];
     }
 
     $removedNote = '';
@@ -333,12 +397,15 @@ Guidelines:
 
 Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
 PROMPT;
-        $userContent = "CURRENT KNOWLEDGE BASE:\n\n{$existingRules}\n\n---\n\nCURRENT GOVERNING DOCUMENTS:\n{$combinedText}";
+        $userContent = array_merge(
+            [['type' => 'text', 'text' => "CURRENT KNOWLEDGE BASE:\n\n{$existingRules}\n\n---\n\nCURRENT GOVERNING DOCUMENTS:"]],
+            $docBlocks
+        );
     } else {
         $systemPrompt = <<<PROMPT
 You are building a knowledge base for Woolsy, an AI assistant for the {$building} condominium association.
 
-The following governing documents have been extracted from PDFs. Distill them into a structured Markdown reference that Woolsy will use to answer resident questions accurately.
+The following governing documents are attached as PDFs. Distill them into a structured Markdown reference that Woolsy will use to answer resident questions accurately.
 
 Guidelines:
 - Extract every rule, policy, right, or obligation that an owner or resident would care about, need to follow, or might have a question about. If a resident could reasonably ask Woolsy about it, it belongs in the knowledge base.
@@ -352,7 +419,7 @@ Guidelines:
 
 Return ONLY the Markdown content. No preamble, no explanation, no closing remarks.
 PROMPT;
-        $userContent = "GOVERNING DOCUMENTS:\n{$combinedText}";
+        $userContent = $docBlocks;
     }
 
     $apiKey = getenv('ANTHROPIC_API_KEY');
@@ -377,6 +444,7 @@ PROMPT;
             'Content-Type: application/json',
             'x-api-key: '          . $apiKey,
             'anthropic-version: 2023-06-01',
+            'anthropic-beta: pdfs-2024-09-25',
         ],
         CURLOPT_TIMEOUT        => 240,
     ]);
@@ -453,32 +521,15 @@ if ($action === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // Stamp baseline in Apps Script
-    callAppsScript([
-        'action'         => 'stampBaseline',
-        'building'       => $building,
-        'publicFolderId' => $publicFolderId,
-    ], 30);
-
-    // Rebuild document index automatically after each save
-    $indexResult = callAppsScript(['action' => 'buildDocIndex', 'publicFolderId' => $publicFolderId], 30);
-    if (!empty($indexResult['sections'])) {
-        $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
-        foreach ($indexResult['sections'] as $section) {
-            $lines[] = $section['path'] . '/';
-            foreach ($section['files'] as $file) { $lines[] = "  \u{2022} " . $file; }
-            $lines[] = '';
-        }
-        file_put_contents(RULES_DIR . $building . '_docindex.txt', implode("\n", $lines));
-    }
+    // Stamp baseline and rebuild document index from R2 listing
+    _woolsyStampBaseline($building);
+    _woolsyBuildDocIndex($building);
 
     // Clear session caches
-    $prefix = 'woolsy_text_' . $building . '_';
     foreach (array_keys($_SESSION) as $key) {
-        if (strpos($key, $prefix) === 0
-            || $key === 'woolsy_new_sections_' . $building
-            || $key === 'woolsy_old_sections_' . $building
-            || $key === 'woolsy_delta_'        . $building) {
+        if ($key === 'woolsy_new_sections_' . $building
+         || $key === 'woolsy_old_sections_' . $building
+         || $key === 'woolsy_delta_'        . $building) {
             unset($_SESSION[$key]);
         }
     }
@@ -498,7 +549,7 @@ $changedFiles   = [];
 $lastChecked    = '';
 
 if ($mode === 'update' || $mode === 'rebuild') {
-    $checkResult  = callAppsScript(['action' => 'docCheckResult', 'building' => $building], 15);
+    $checkResult  = _woolsyCheckChanges($building);
     $changedFiles = $checkResult['changes']   ?? [];
     $lastChecked  = $checkResult['checkedAt'] ?? '';
 }
@@ -728,9 +779,7 @@ async function startProbe() {
   }
   if (data.error) { showError(data.error); return; }
 
-  const inc   = (data.IncorporationDocs || []).map(f => ({...f, folder: 'IncorporationDocs', status: 'pending'}));
-  const rules = (data.RulesDocs         || []).map(f => ({...f, folder: 'RulesDocs',         status: 'pending'}));
-  allFiles = [...inc, ...rules];
+  allFiles = (data.files || []).map(f => ({...f, status: 'pending'}));
 
   if (allFiles.length === 0) {
     showError('No documents found in IncorporationDocs or RulesDocs folders.');
@@ -753,7 +802,7 @@ async function probeAllFiles() {
     updateRow(file);
 
     try {
-      const resp = await fetch(BASE_URL + '&action=probeFile&fileId=' + encodeURIComponent(file.id));
+      const resp = await fetch(BASE_URL + '&action=probeFile&fileId=' + encodeURIComponent(file.id) + '&fileSize=' + (file.size || 0));
       const data = await resp.json();
       file.readable  = data.readable === true;
       file.charCount = data.charCount || 0;

@@ -708,14 +708,7 @@ function createFolders() {
       nbSheetUrl  = d.sheetUrl        || '';
       var sheetNote = nbSheetUrl ? ' Owner DB sheet copied.' : '';
       res.innerHTML = '<div class="nb-success">&#10003; Drive folders created.' + sheetNote + '</div>';
-      // Pre-warm the resident listing cache in the background
-      if (nbPublicId && nbPrivateId) {
-        var warmFd = new FormData();
-        warmFd.append('building',        key);
-        warmFd.append('publicFolderId',  nbPublicId);
-        warmFd.append('privateFolderId', nbPrivateId);
-        fetch('warm-cache.php', { method: 'POST', body: warmFd }).catch(function () {});
-      }
+
       updateChecklist();
       document.getElementById('nb_checklist').style.display = '';
       document.getElementById('nb_checklist').scrollIntoView({ behavior: 'smooth', block: 'start' });

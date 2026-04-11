@@ -13,10 +13,9 @@
 // Schedule: once daily is sufficient (e.g. 3:00 AM)
 // -------------------------------------------------------
 
-define('CONFIG_DIR',        __DIR__ . '/config/');
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
-define('CRON_TOKEN',        'sh33pCr0nN0jje59dd26');  // change this; used for HTTP-triggered runs only
+define('CONFIG_DIR',  __DIR__ . '/config/');
+define('CRON_TOKEN', 'sh33pCr0nN0jje59dd26');  // change this; used for HTTP-triggered runs only
+require_once __DIR__ . '/storage/r2-storage.php';
 
 // -------------------------------------------------------
 // Auth: CLI always allowed; HTTP requires token
@@ -48,18 +47,6 @@ function log_line(string $msg): void {
   file_put_contents($logFile, $line, FILE_APPEND);
 }
 
-function fetch_folder_bytes(string $folderId): ?int {
-  $url = APPS_SCRIPT_URL
-       . '?action=storageReport'
-       . '&folderId=' . urlencode($folderId)
-       . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
-  $ctx = stream_context_create(['http' => ['timeout' => 60]]);
-  $r   = @file_get_contents($url, false, $ctx);
-  if ($r === false) return null;
-  $d = json_decode($r, true);
-  return isset($d['total']) ? (int)$d['total'] : null;
-}
-
 require_once __DIR__ . '/invoice-helpers.php';
 
 // -------------------------------------------------------
@@ -74,22 +61,15 @@ log_line('Storage cron started — ' . count($buildings) . ' building(s)');
 $ok      = 0;
 $failed  = 0;
 
+$r2cfg = _r2Cfg();
+
 foreach ($buildings as $key => $cfg) {
-  $pub  = fetch_folder_bytes($cfg['publicFolderId']);
-  if ($pub === null) {
-    log_line("  $key — FAILED (public folder)");
+  $total = _r2SumBytes($key, $r2cfg);
+  if ($total === null) {
+    log_line("  $key — FAILED (R2 storage query)");
     $failed++;
     continue;
   }
-
-  $priv = fetch_folder_bytes($cfg['privateFolderId']);
-  if ($priv === null) {
-    log_line("  $key — FAILED (private folder)");
-    $failed++;
-    continue;
-  }
-
-  $total   = $pub + $priv;
   $cfgFile = CONFIG_DIR . $key . '.json';
   $saved   = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
   $saved['storageUsed']    = $total;

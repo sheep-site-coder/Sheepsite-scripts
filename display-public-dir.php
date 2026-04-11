@@ -22,15 +22,8 @@ if ($returnURL && !preg_match('/^https?:\/\//', $returnURL)) $returnURL = '';
 // JSON mode — called by browser fetch, returns listing
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
-  require_once __DIR__ . '/listing-cache.php';
   header('Content-Type: application/json');
-
-  $cached = lcGet('pub', $building, $subdir);
-  if ($cached !== null) { echo $cached; exit; }
-
-  $response = stListFolder($building, $subdir, 'public', 'pub');
-  lcSet('pub', $building, $subdir, $response);
-  echo $response;
+  echo stListFolder($building, $subdir, 'public', 'pub');
   exit;
 }
 

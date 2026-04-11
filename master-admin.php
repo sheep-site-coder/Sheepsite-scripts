@@ -16,8 +16,7 @@ define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('CONFIG_DIR',        __DIR__ . '/config/');
 require_once __DIR__ . '/invoice-helpers.php';
 define('SESSION_KEY',       'master_admin_auth');
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
+require_once __DIR__ . '/storage/r2-storage.php';
 
 // -------------------------------------------------------
 // Load credentials
@@ -175,24 +174,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     echo json_encode(['error' => 'Unknown building']);
     exit;
   }
-  $bCfg = $buildings[$b];
-  $fetchFolder = function(string $folderId): ?int {
-    $url = APPS_SCRIPT_URL
-         . '?action=storageReport'
-         . '&folderId=' . urlencode($folderId)
-         . '&token='    . urlencode(APPS_SCRIPT_TOKEN);
-    $r = @file_get_contents($url);
-    if ($r === false) return null;
-    $d = json_decode($r, true);
-    return isset($d['total']) ? (int)$d['total'] : null;
-  };
-  $pub  = $fetchFolder($bCfg['publicFolderId']);
-  $priv = $fetchFolder($bCfg['privateFolderId']);
-  if ($pub === null || $priv === null) {
-    echo json_encode(['error' => 'Could not reach Apps Script']);
+  $r2cfg = _r2Cfg();
+  $total = _r2SumBytes($b, $r2cfg);
+  if ($total === null) {
+    echo json_encode(['error' => 'Could not read R2 storage']);
     exit;
   }
-  $total   = $pub + $priv;
   $cfgFile = CONFIG_DIR . $b . '.json';
   $saved   = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
   $saved['storageUsed']    = $total;

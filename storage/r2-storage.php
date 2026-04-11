@@ -35,6 +35,27 @@ function _r2Prefix(string $building, string $tree, string $path): string {
   return $path ? $base . trim($path, '/') . '/' : $base;
 }
 
+// Sum all object sizes under {building}/public/ and {building}/private/.
+// Returns total bytes, or null on R2 error.
+function _r2SumBytes(string $building, array $cfg): ?int {
+  $total = 0;
+  foreach (['public', 'private'] as $tree) {
+    $prefix = $building . '/' . $tree . '/';
+    $token  = null;
+    do {
+      $q = ['list-type' => '2', 'prefix' => $prefix, 'max-keys' => '1000'];
+      if ($token) $q['continuation-token'] = $token;
+      [$status, $body] = _r2Request('GET', '/' . $cfg['bucket'], $q);
+      if ($status !== 200) return null;
+      $sx = @simplexml_load_string($body);
+      if (!$sx) return null;
+      foreach ($sx->Contents as $obj) { $total += (int)(string)$obj->Size; }
+      $token = (string)($sx->NextContinuationToken ?? '');
+    } while ($token !== '');
+  }
+  return $total;
+}
+
 function _r2FmtSize(int $bytes): string {
   if ($bytes >= 1073741824) return number_format($bytes / 1073741824, 2) . ' GB';
   if ($bytes >= 1048576)    return number_format($bytes / 1048576, 1)    . ' MB';

@@ -14,9 +14,8 @@ define('FAQS_DIR',        __DIR__ . '/faqs/');
 define('CREDITS_FILE',    FAQS_DIR . 'woolsy_credits.json');
 define('USAGE_FILE',      FAQS_DIR . 'woolsy_usage.json');
 define('CREDITS_DEFAULT_ALLOCATED', 1.0);
-define('APPS_SCRIPT_URL',   'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');
 define('PROMPT_VERSION', 4);
+require_once __DIR__ . '/storage/r2-storage.php';
 
 // -------------------------------------------------------
 // Validate building + auth
@@ -48,6 +47,57 @@ function getRulesVersion(string $file): int {
     fclose($fh);
     if (preg_match('/woolsy_prompt_version:\s*(\d+)/', $line, $m)) return (int)$m[1];
     return 1;
+}
+
+// List all PDFs in the building's public R2 tree.
+// Returns [{id, name, folder, size}] where id is the full R2 key.
+function _wm_listPdfs(string $building): array {
+    $cfg    = _r2Cfg();
+    $prefix = $building . '/public/';
+    $files  = [];
+    $token  = null;
+    do {
+        $q = ['list-type' => '2', 'prefix' => $prefix, 'max-keys' => '1000'];
+        if ($token) $q['continuation-token'] = $token;
+        [$status, $body] = _r2Request('GET', '/' . $cfg['bucket'], $q);
+        if ($status !== 200) break;
+        $sx = @simplexml_load_string($body);
+        if (!$sx) break;
+        foreach ($sx->Contents as $obj) {
+            $key  = (string)$obj->Key;
+            $size = (int)(string)$obj->Size;
+            $name = basename($key);
+            if ($name === '.keep' || str_ends_with($key, '/')) continue;
+            if (!str_ends_with(strtolower($name), '.pdf')) continue;
+            $rel    = substr($key, strlen($prefix));
+            $parts  = explode('/', $rel);
+            $folder = count($parts) > 1 ? implode('/', array_slice($parts, 0, -1)) : '';
+            $files[] = ['id' => $key, 'name' => $name, 'folder' => $folder, 'size' => $size];
+        }
+        $token = (string)($sx->NextContinuationToken ?? '');
+    } while ($token !== '');
+    return $files;
+}
+
+// Compare current R2 listing against saved baseline. Returns status array.
+function _wm_checkChanges(string $building): array {
+    $baselineFile = FAQS_DIR . $building . '_baseline.json';
+    if (!file_exists($baselineFile)) return ['notCheckedYet' => true];
+    $baseline  = json_decode(file_get_contents($baselineFile), true) ?? [];
+    $savedAt   = $baseline['savedAt']  ?? null;
+    $baseFiles = $baseline['files']    ?? [];
+    $current   = _wm_listPdfs($building);
+    $curIndex  = [];
+    foreach ($current as $f) { $curIndex[$f['id']] = $f['size']; }
+    $changes = [];
+    foreach ($curIndex as $key => $size) {
+        if (!isset($baseFiles[$key]))        $changes[] = ['name' => basename($key), 'action' => 'added'];
+        elseif ($baseFiles[$key] !== $size)  $changes[] = ['name' => basename($key), 'action' => 'modified'];
+    }
+    foreach ($baseFiles as $key => $size) {
+        if (!isset($curIndex[$key]))         $changes[] = ['name' => basename($key), 'action' => 'removed'];
+    }
+    return ['status' => empty($changes) ? 'ok' : 'changes', 'changes' => $changes, 'checkedAt' => $savedAt];
 }
 
 function getCredits(string $building): array {
@@ -87,40 +137,37 @@ if ($action === 'saveFaq' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (in_array($action, ['docStatus', 'docCheck'], true)) {
     header('Content-Type: application/json');
-    $buildings      = require __DIR__ . '/buildings.php';
-    $publicFolderId = $buildings[$building]['publicFolderId'] ?? '';
-    $apAction       = $action === 'docCheck' ? 'docCheck' : 'docCheckResult';
-    $params         = ['action' => $apAction, 'building' => $building, 'token' => APPS_SCRIPT_TOKEN];
-    if ($apAction === 'docCheck') $params['publicFolderId'] = $publicFolderId;
-    $url = APPS_SCRIPT_URL . '?' . http_build_query($params);
-    $ch  = curl_init($url);
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
-    $resp = curl_exec($ch); curl_close($ch);
-    echo $resp ?: json_encode(['error' => 'Could not fetch status']);
+    $rulesFile    = FAQS_DIR . $building . '_rules.md';
+    if (!file_exists($rulesFile)) {
+        echo json_encode(['notInitialized' => true]);
+        exit;
+    }
+    $result = _wm_checkChanges($building);
+    echo json_encode($result);
     exit;
 }
 
 if ($action === 'buildDocIndex') {
     header('Content-Type: application/json');
-    $buildings      = require __DIR__ . '/buildings.php';
-    $publicFolderId = $buildings[$building]['publicFolderId'] ?? '';
-    $url = APPS_SCRIPT_URL . '?' . http_build_query(['action' => 'buildDocIndex', 'publicFolderId' => $publicFolderId, 'token' => APPS_SCRIPT_TOKEN]);
-    $ch  = curl_init($url);
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30]);
-    $resp = curl_exec($ch); curl_close($ch);
-    $data = json_decode($resp ?: '{}', true);
-    if (!empty($data['sections'])) {
-        $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
-        foreach ($data['sections'] as $section) {
-            $lines[] = $section['path'] . '/';
-            foreach ($section['files'] as $f) { $lines[] = "  \u{2022} " . $f; }
-            $lines[] = '';
-        }
-        file_put_contents(FAQS_DIR . $building . '_docindex.txt', implode("\n", $lines));
-        echo json_encode(['ok' => true, 'generated' => date('F j, Y'), 'sectionCount' => count($data['sections'])]);
-    } else {
-        echo json_encode(['error' => $data['error'] ?? 'Failed to build index']);
+    $files = _wm_listPdfs($building);
+    if (empty($files)) {
+        echo json_encode(['error' => 'No PDF files found in the public folder.']);
+        exit;
     }
+    $byFolder = [];
+    foreach ($files as $f) {
+        $folder = $f['folder'] ?: '(root)';
+        $byFolder[$folder][] = $f['name'];
+    }
+    ksort($byFolder);
+    $lines = ["DOCUMENT INDEX — {$building}", "Generated: " . date('F j, Y'), "", "PUBLIC DOCUMENTS", "================", ""];
+    foreach ($byFolder as $folder => $names) {
+        $lines[] = $folder . '/';
+        foreach ($names as $n) { $lines[] = "  \u{2022} " . $n; }
+        $lines[] = '';
+    }
+    file_put_contents(FAQS_DIR . $building . '_docindex.txt', implode("\n", $lines));
+    echo json_encode(['ok' => true, 'generated' => date('F j, Y'), 'sectionCount' => count($byFolder)]);
     exit;
 }
 

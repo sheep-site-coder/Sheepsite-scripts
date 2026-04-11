@@ -1,7 +1,7 @@
 <?php
 // -------------------------------------------------------
 // file-manager.php
-// Admin UI for managing files in Public and Private Drive folders.
+// Admin UI for managing files in Public and Private folders.
 // Upload, delete, rename files, and create subfolders.
 //
 //   https://sheepsite.com/Scripts/file-manager.php?building=LyndhurstH
@@ -12,8 +12,6 @@ session_start();
 
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('CONFIG_DIR',        __DIR__ . '/config/');
-define('MAX_UPLOAD_BYTES',  30 * 1024 * 1024); // 30 MB (GAS limit — removed in Phase 5)
-require_once __DIR__ . '/listing-cache.php';
 require_once __DIR__ . '/storage/storage.php';
 
 // -------------------------------------------------------
@@ -88,111 +86,6 @@ if (isset($_GET['json']) && $_GET['json'] === 'storage_refresh') {
 }
 
 // -------------------------------------------------------
-// JSON: warm the public/private resident listing cache
-// Called in background by JS after every admin write.
-// Makes the same GAS call the resident browser would make
-// and stores the result so the next visitor gets a cache hit.
-// -------------------------------------------------------
-if (isset($_GET['json']) && $_GET['json'] === 'warm') {
-  header('Content-Type: application/json');
-  $tree  = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
-  $wPath = trim($_GET['path'] ?? '', '/');
-  $ctx   = $tree === 'private' ? 'priv' : 'pub';
-  $resp  = stListFolder($building, $wPath, $tree, $ctx);
-  lcSet($ctx, $building, $wPath, $resp);
-  echo json_encode(['ok' => true]);
-  exit;
-}
-
-// -------------------------------------------------------
-// JSON: set up BigUploads quarantine subfolder in Drive
-// Returns {ok, folderId} — the Drive folder to open
-// -------------------------------------------------------
-if (isset($_GET['json']) && $_GET['json'] === 'setup_big_upload') {
-  header('Content-Type: application/json');
-  $tree       = ($_GET['tree'] ?? '') === 'private' ? 'Private' : 'Public';
-  $path       = trim($_GET['path'] ?? '', '/');
-  $targetPath = $path ? $tree . '/' . $path : $tree;
-
-  $url = GAS_URL
-       . '?action=setupBigUploadFolder'
-       . '&token='          . urlencode(GAS_TOKEN)
-       . '&publicFolderId=' . urlencode($config['publicFolderId'])
-       . '&targetPath='     . urlencode($targetPath);
-
-  echo _gasGet($url);
-  exit;
-}
-
-// -------------------------------------------------------
-// JSON: list all quarantined files (BigUploads tree)
-// Returns {ok, files:[{id,name,bytes,size,targetPath}]}
-// -------------------------------------------------------
-if (isset($_GET['json']) && $_GET['json'] === 'list_big_uploads') {
-  header('Content-Type: application/json');
-  $url = GAS_URL
-       . '?action=listBigUploads'
-       . '&token='          . urlencode(GAS_TOKEN)
-       . '&publicFolderId=' . urlencode($config['publicFolderId']);
-  echo _gasGet($url);
-  exit;
-}
-
-// -------------------------------------------------------
-// POST: publish checked quarantine files, delete unchecked
-// Body: publish[]=fileId&targetPath[]=path&delete[]=fileId
-// -------------------------------------------------------
-if (isset($_GET['json']) && $_GET['json'] === 'publish_quarantine') {
-  header('Content-Type: application/json');
-  $toPublish    = $_POST['publish']    ?? [];
-  $targetPaths  = $_POST['targetPath'] ?? [];
-  $toDelete     = $_POST['delete']     ?? [];
-  $published = $deleted = $errors = 0;
-
-  foreach ($toPublish as $i => $fileId) {
-    $fileId     = preg_replace('/[^a-zA-Z0-9_-]/', '', $fileId);
-    $targetPath = $targetPaths[$i] ?? '';
-    if (!$fileId || !$targetPath) continue;
-
-    $url = GAS_URL
-         . '?action=publishBigUpload'
-         . '&token='           . urlencode(GAS_TOKEN)
-         . '&fileId='          . urlencode($fileId)
-         . '&targetPath='      . urlencode($targetPath)
-         . '&publicFolderId='  . urlencode($config['publicFolderId'])
-         . '&privateFolderId=' . urlencode($config['privateFolderId']);
-
-    $result = json_decode(_gasGet($url), true);
-    if ($result['ok'] ?? false) { $published++; } else { $errors++; }
-  }
-
-  foreach ($toDelete as $fileId) {
-    $fileId = preg_replace('/[^a-zA-Z0-9_-]/', '', $fileId);
-    if (!$fileId) continue;
-    $result = json_decode(stDeleteFile($building, $fileId, 'public'), true);
-    if ($result['ok'] ?? false) { $deleted++; } else { $errors++; }
-  }
-
-  // Bust cache for every distinct folder that received a published file
-  $busted = [];
-  foreach ($toPublish as $i => $fileId) {
-    $tp = $targetPaths[$i] ?? '';
-    if (!$tp) continue;
-    $parts     = explode('/', $tp, 2);
-    $cTree     = strtolower($parts[0]) === 'private' ? 'private' : 'public';
-    $cPath     = $parts[1] ?? '';
-    $bustKey   = $cTree . ':' . $cPath;
-    if (!isset($busted[$bustKey])) {
-      lcBustFolder($building, $cTree, $cPath);
-      $busted[$bustKey] = true;
-    }
-  }
-
-  echo json_encode(['ok' => $errors === 0, 'published' => $published, 'deleted' => $deleted, 'errors' => $errors]);
-  exit;
-}
-
-// -------------------------------------------------------
 // JSON: generate a storage billing URL for Buy More Storage
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'billing_url') {
@@ -218,16 +111,6 @@ if (isset($_GET['json']) && $_GET['json'] === 'billing_url') {
 if (isset($_GET['json']) && $_GET['json'] === 'list') {
   $tree = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
   $path = trim($_GET['path'] ?? '', '/');
-
-  // Serve from server-side cache if available
-  $cachedRaw = lcGet('adm', $building, $tree . ':' . $path);
-  if ($cachedRaw !== null) {
-    $data = json_decode($cachedRaw, true);
-    // Re-apply deletable/protected annotations (stored in cache pre-annotated)
-    header('Content-Type: application/json');
-    echo $cachedRaw;
-    exit;
-  }
 
   $raw  = stListFolder($building, $path, $tree, 'adm');
   $data = json_decode($raw, true);
@@ -255,7 +138,6 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
   }
 
   $annotated = json_encode($data);
-  lcSet('adm', $building, $tree . ':' . $path, $annotated);
   header('Content-Type: application/json');
   echo $annotated;
   exit;
@@ -284,10 +166,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $file = $_FILES['file'];
-    if ($file['size'] > MAX_UPLOAD_BYTES) {
-      echo json_encode(['ok' => false, 'error' => 'File exceeds 30 MB limit']);
-      exit;
-    }
 
     // Storage limit check (uses cached value from storage-report.php or cron)
     $bCfg     = loadBuildingCfg($building);
@@ -311,10 +189,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cPath    = trim($_POST['cachePath'] ?? '', '/');
 
     $result = stUploadFile($building, $cTree, $folderId, $cPath, $file['tmp_name'], $fileName, $mimeType);
-    $res = json_decode($result, true);
-    if (!empty($res['ok'])) {
-      lcBustFolder($building, $cTree, $cPath);
-    }
     echo $result;
     exit;
   }
@@ -328,11 +202,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $cTree  = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
     $result = stDeleteFile($building, $fileId, $cTree);
-    $res    = json_decode($result, true);
-    if (!empty($res['ok'])) {
-      $cPath = trim($_POST['cachePath'] ?? '', '/');
-      lcBustFolder($building, $cTree, $cPath);
-    }
     echo $result;
     exit;
   }
@@ -351,11 +220,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $cTree  = ($_POST['cacheTree'] ?? '') === 'private' ? 'private' : 'public';
     $result = stRenameFile($building, $fileId, $newName, $cTree);
-    $res    = json_decode($result, true);
-    if (!empty($res['ok'])) {
-      $cPath = trim($_POST['cachePath'] ?? '', '/');
-      lcBustFolder($building, $cTree, $cPath);
-    }
     echo $result;
     exit;
   }
@@ -410,7 +274,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $ids   = loadCreatedFolders($building);
       $ids[] = $resp['id'];
       saveCreatedFolders($building, $ids);
-      lcBustFolder($building, $cTree, $cPath);
     }
     echo $raw;
     exit;
@@ -436,8 +299,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($resp['ok'])) {
       $ids = array_values(array_filter($ids, fn($id) => $id !== $folderId));
       saveCreatedFolders($building, $ids);
-      $cPath = trim($_POST['cachePath'] ?? '', '/');
-      lcBustFolder($building, $cTree, $cPath);
     }
     echo $raw;
     exit;
@@ -574,13 +435,11 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
 <p style="font-size:0.9rem;color:#555;margin-bottom:1.25rem;">
   Upload, delete, rename, and organize files in the Public and Private folders.
   Drag one or more files onto the drop zone to upload, or click Browse to select.
-  Maximum file size is 30 MB.
 </p>
 
 <div class="tabs">
-  <button class="tab active" id="tab-public"      onclick="switchTree('public')">Public</button>
-  <button class="tab"        id="tab-private"     onclick="switchTree('private')">Private</button>
-  <button class="tab"        id="tab-quarantine"  onclick="switchTree('quarantine')" style="color:#b45309;">Quarantined</button>
+  <button class="tab active" id="tab-public"  onclick="switchTree('public')">Public</button>
+  <button class="tab"        id="tab-private" onclick="switchTree('private')">Private</button>
 </div>
 
 <div class="breadcrumb" id="breadcrumb"></div>
@@ -602,10 +461,6 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
 <input type="file" id="replace-input" style="display:none" onchange="handleReplaceSelect(this)">
 
 <div id="listing"><p class="loading">Loading&hellip;</p></div>
-
-<div id="quarantine-section" style="display:none;">
-  <div id="quarantine-body"><p class="loading">Loading quarantined files&hellip;</p></div>
-</div>
 
 <script>
 (function () {
@@ -635,10 +490,6 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   }
   function bustCache() {
     try { sessionStorage.removeItem(cacheKey()); } catch (e) {}
-    // Re-warm the public/private resident cache in the background
-    fetch(base + '&json=warm&tree=' + currentTree
-        + (currentPath ? '&path=' + encodeURIComponent(currentPath) : ''))
-      .catch(function () {});
   }
 
   // -------------------------------------------------------
@@ -652,19 +503,9 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   window.switchTree = function (tree) {
     currentTree = tree;
     currentPath = '';
-    document.getElementById('tab-public').classList.toggle('active',      tree === 'public');
-    document.getElementById('tab-private').classList.toggle('active',     tree === 'private');
-    document.getElementById('tab-quarantine').classList.toggle('active',  tree === 'quarantine');
-
-    var isQ = tree === 'quarantine';
-    document.getElementById('breadcrumb').style.display   = isQ ? 'none' : '';
-    document.getElementById('toolbar').style.display      = isQ ? 'none' : '';
-    document.getElementById('drop-zone').style.display    = isQ ? 'none' : '';
-    document.getElementById('listing').style.display      = isQ ? 'none' : '';
-    document.getElementById('quarantine-section').style.display = isQ ? '' : 'none';
-
-    if (isQ) loadQuarantine();
-    else loadListing();
+    document.getElementById('tab-public').classList.toggle('active',  tree === 'public');
+    document.getElementById('tab-private').classList.toggle('active', tree === 'private');
+    loadListing();
   };
 
   // -------------------------------------------------------
@@ -1148,223 +989,12 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   };
 
   // -------------------------------------------------------
-  // -------------------------------------------------------
-  // Quarantine tab
-  // -------------------------------------------------------
-  function loadQuarantine() {
-    document.getElementById('quarantine-body').innerHTML = '<p class="loading">Fetching pending files and storage usage&hellip;</p>';
-
-    // Fire storage refresh + file list in parallel
-    var refreshDone = false, listDone = false;
-    var freshUsed = storageUsed;
-    var qFiles    = [];
-
-    function tryRender() {
-      if (!refreshDone || !listDone) return;
-      renderQuarantine(qFiles, freshUsed);
-    }
-
-    fetch(base + '&json=storage_refresh')
-      .then(function(r) { return r.json(); })
-      .then(function(d) { if (d.total) freshUsed = d.total; })
-      .catch(function() {})
-      .then(function() { refreshDone = true; tryRender(); });
-
-    fetch(base + '&json=list_big_uploads')
-      .then(function(r) { return r.json(); })
-      .then(function(d) { qFiles = d.files || []; })
-      .catch(function() {})
-      .then(function() { listDone = true; tryRender(); });
-  }
-
-  function renderQuarantine(files, usedBytes) {
-    var body = document.getElementById('quarantine-body');
-
-    if (!files.length) {
-      body.innerHTML = '<p style="color:#555;margin-top:1rem;">No large files are waiting in quarantine.</p>';
-      return;
-    }
-
-    var remaining = storageLimit > 0 ? storageLimit - usedBytes : Infinity;
-
-    var rows = files.map(function(f, i) {
-      return '<tr id="qrow-' + i + '">'
-        + '<td style="padding:7px 8px;"><input type="checkbox" id="qchk-' + i + '" checked onchange="updateQuarantineMath()"></td>'
-        + '<td style="padding:7px 8px;">' + esc(f.name) + '</td>'
-        + '<td style="padding:7px 8px;white-space:nowrap;">' + esc(f.size) + '</td>'
-        + '<td style="padding:7px 8px;color:#777;font-size:0.82rem;">' + (f.targetPath ? '\u2192 ' + esc(f.targetPath) : '\u2014') + '</td>'
-        + '</tr>';
-    }).join('');
-
-    body.innerHTML = ''
-      + '<div id="q-storage-bar" style="margin:1rem 0 0.5rem;font-size:0.88rem;color:#555;"></div>'
-      + '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-bottom:1rem;">'
-      + '<thead><tr>'
-      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;width:32px;"></th>'
-      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;">File</th>'
-      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;">Size</th>'
-      + '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #eee;">Publishes to</th>'
-      + '</tr></thead>'
-      + '<tbody>' + rows + '</tbody>'
-      + '</table>'
-      + '<div id="q-over-msg" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;padding:0.6rem 0.85rem;font-size:0.875rem;color:#92400e;margin-bottom:0.75rem;">'
-      + 'The checked files exceed your available storage. Uncheck files to fit within your limit, or upgrade your storage.'
-      + '</div>'
-      + '<div style="display:flex;gap:0.75rem;flex-wrap:wrap;">'
-      + '<button id="q-publish-btn" class="toolbar-btn" onclick="confirmQuarantinePublish()">Publish checked &amp; delete unchecked</button>'
-      + '<button id="q-buy-btn" class="toolbar-btn" style="display:none;background:#b45309;" onclick="buyMoreStorage()">Buy More Storage &rarr;</button>'
-      + '</div>';
-
-    // Store file data for publish step
-    window._qFiles    = files;
-    window._qRemaining = remaining;
-    updateQuarantineMath();
-  }
-
-  window.updateQuarantineMath = function() {
-    var files     = window._qFiles || [];
-    var remaining = window._qRemaining !== undefined ? window._qRemaining : Infinity;
-    var checkedTotal = 0;
-    files.forEach(function(f, i) {
-      if (document.getElementById('qchk-' + i) && document.getElementById('qchk-' + i).checked) {
-        checkedTotal += f.bytes;
-      }
-    });
-
-    var overLimit = storageLimit > 0 && checkedTotal > remaining;
-    var barColor  = overLimit ? '#dc2626' : '#1a7f37';
-    var barText   = storageLimit > 0
-      ? fmtSize(checkedTotal) + ' of ' + fmtSize(remaining) + ' remaining'
-      : fmtSize(checkedTotal) + ' selected';
-
-    var bar = document.getElementById('q-storage-bar');
-    if (bar) bar.innerHTML = '<span style="color:' + barColor + ';font-weight:600;">' + barText + '</span>';
-
-    var publishBtn = document.getElementById('q-publish-btn');
-    var buyBtn     = document.getElementById('q-buy-btn');
-    var overMsg    = document.getElementById('q-over-msg');
-    if (publishBtn) publishBtn.disabled = overLimit;
-    if (buyBtn)     buyBtn.style.display = overLimit ? '' : 'none';
-    if (overMsg)    overMsg.style.display = overLimit ? '' : 'none';
-  };
-
-  window.confirmQuarantinePublish = function() {
-    var files    = window._qFiles || [];
-    var toPublish = [], toDelete = [];
-    files.forEach(function(f, i) {
-      var chk = document.getElementById('qchk-' + i);
-      if (chk && chk.checked) toPublish.push(f); else toDelete.push(f);
-    });
-
-    var pubList = toPublish.map(function(f) {
-      return '<li><strong>' + esc(f.name) + '</strong>' + (f.targetPath ? ' \u2192 ' + esc(f.targetPath) : '') + '</li>';
-    }).join('');
-    var delList = toDelete.map(function(f) {
-      return '<li>' + esc(f.name) + '</li>';
-    }).join('');
-
-    var bodyHtml = '<p><strong>Will be published (' + toPublish.length + '):</strong></p>'
-      + (pubList ? '<ul style="margin:0.25rem 0 0.75rem;">' + pubList + '</ul>' : '<p style="color:#777;font-size:0.88rem;">None</p>')
-      + (toDelete.length ? '<p><strong>Will be deleted (' + toDelete.length + '):</strong></p><ul style="margin:0.25rem 0;">' + delList + '</ul>' : '');
-
-    showFmConfirm('Confirm Publish', bodyHtml, 'Publish', function() {
-      executeQuarantinePublish(toPublish, toDelete);
-    });
-  };
-
-  function executeQuarantinePublish(toPublish, toDelete) {
-    document.getElementById('quarantine-body').innerHTML = '<p class="loading">Publishing&hellip;</p>';
-    var fd = new FormData();
-    toPublish.forEach(function(f) {
-      fd.append('publish[]',    f.id);
-      fd.append('targetPath[]', f.targetPath);
-    });
-    toDelete.forEach(function(f) { fd.append('delete[]', f.id); });
-
-    fetch(base + '&json=publish_quarantine', { method: 'POST', body: fd })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.errors) {
-          document.getElementById('quarantine-body').innerHTML =
-            '<p style="color:#c00;">' + d.errors + ' operation(s) failed. Published: ' + d.published + ', Deleted: ' + d.deleted + '.</p>';
-        }
-        loadQuarantine();
-      })
-      .catch(function() {
-        document.getElementById('quarantine-body').innerHTML = '<p style="color:#c00;">Network error — please try again.</p>';
-      });
-  }
-
-  window.buyMoreStorage = function() {
-    var win = window.open('', '_blank'); // open immediately while in user gesture
-    fetch(base + '&json=billing_url')
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.ok && d.url) { win.location.href = d.url; }
-        else { win.close(); alert(d.error || 'Could not generate billing link.'); }
-      })
-      .catch(function() { win.close(); alert('Network error — please try again'); });
-  };
-
-  // -------------------------------------------------------
   // Upload queue — processes files one at a time
   // -------------------------------------------------------
   function uploadQueue(files) {
-    var MAX     = 30 * 1024 * 1024;
     var total   = files.length;
     var index   = 0;
     var errors  = [];
-
-    // Validate all files up front — catch oversized files before upload attempt
-    var tooBig     = files.filter(function (f) { return f.size > MAX; });
-    var smallFiles = files.filter(function (f) { return f.size <= MAX; });
-    if (tooBig.length) {
-      // Storage check: would big files + small files exceed the remaining space?
-      if (storageUsed > 0 && storageLimit > 0) {
-        var smallTotal    = smallFiles.reduce(function (s, f) { return s + f.size; }, 0);
-        var tooBigTotal   = tooBig.reduce(function (s, f) { return s + f.size; }, 0);
-        var effectiveLeft = storageLimit - storageUsed - smallTotal;
-        if (tooBigTotal > effectiveLeft) {
-          showFmConfirm(
-            'Storage limit reached',
-            '<p>These files cannot be uploaded — they would exceed your storage limit.</p>',
-            'Buy More Storage \u2192',
-            function () { buyMoreStorage(); },
-            null, null
-          );
-          return;
-        }
-      }
-
-      var fileList = tooBig.map(function (f) {
-        return '<li><strong>' + esc(f.name) + '</strong> (' + fmtSize(f.size) + ')</li>';
-      }).join('');
-      showFmConfirm(
-        tooBig.length === 1 ? 'File too large' : 'Files too large',
-        (tooBig.length === 1
-          ? '<p>This file exceeds the 30 MB limit and cannot be uploaded through the file manager:</p>'
-          : '<p>These files exceed the 30 MB limit and cannot be uploaded through the file manager:</p>')
-        + '<ul style="margin:0.5rem 0;">' + fileList + '</ul>'
-        + '<p style="font-size:0.88rem;color:#555;margin-top:0.75rem;">Click <strong>Open in Google Drive</strong> to upload directly there. Afterwards, return here and open the <strong>Quarantined</strong> tab to review and publish the file(s).</p>',
-        'Open in Google Drive \u2192',
-        function () {
-          var win = window.open('', '_blank'); // open immediately while in user gesture
-          var url = base + '&json=setup_big_upload&tree=' + currentTree
-                  + (currentPath ? '&path=' + encodeURIComponent(currentPath) : '');
-          fetch(url).then(function(r) { return r.json(); }).then(function(d) {
-            if (d.ok && d.folderId) {
-              win.location.href = 'https://drive.google.com/drive/folders/' + d.folderId;
-            } else {
-              win.close();
-              alert('Could not prepare upload folder: ' + (d.error || 'Unknown error'));
-            }
-          }).catch(function() { win.close(); alert('Network error — please try again'); });
-        },
-        smallFiles.length ? ('Upload ' + (smallFiles.length === 1 ? '1 other file' : smallFiles.length + ' other files')) : null,
-        smallFiles.length ? function () { continueWithFiles(smallFiles); } : null
-      );
-      return;
-    }
 
     continueWithFiles(files);
 

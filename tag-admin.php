@@ -12,8 +12,7 @@ session_start();
 
 define('CREDENTIALS_DIR',  __DIR__ . '/credentials/');
 define('TAGS_DIR',         __DIR__ . '/tags/');
-define('APPS_SCRIPT_URL',  'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
+require_once __DIR__ . '/storage/storage.php';
 
 // -------------------------------------------------------
 // Validate building + session
@@ -55,28 +54,13 @@ if (!file_exists($htaccess)) {
 }
 
 // -------------------------------------------------------
-// JSON: list folder contents (proxied from Apps Script)
+// JSON: list folder contents
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'list') {
   $tree = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
   $path = trim($_GET['path'] ?? '', '/');
-
-  if ($tree === 'private') {
-    $url = APPS_SCRIPT_URL
-         . '?action=listPrivate'
-         . '&token='    . urlencode(APPS_SCRIPT_TOKEN)
-         . '&folderId=' . urlencode($config['privateFolderId'])
-         . ($path ? '&subdir=' . urlencode($path) : '');
-  } else {
-    $url = APPS_SCRIPT_URL
-         . '?action=list'
-         . '&folderId=' . urlencode($config['publicFolderId'])
-         . ($path ? '&subdir=' . urlencode($path) : '');
-  }
-
-  $response = @file_get_contents($url);
   header('Content-Type: application/json');
-  echo $response !== false ? $response : json_encode(['error' => 'Could not reach Apps Script']);
+  echo stListFolder($building, $path, $tree, 'adm');
   exit;
 }
 
@@ -102,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
   $fileName = trim($_POST['fileName'] ?? '');
   $tree     = ($_POST['tree'] ?? '') === 'private' ? 'private' : 'public';
 
-  if (!preg_match('/^[a-zA-Z0-9_-]+$/', $fileId)) {
+  if (!$fileId || str_contains($fileId, '..') || !preg_match('/^[a-zA-Z0-9_.() \/@&\/-]+$/', $fileId)) {
     echo json_encode(['ok' => false, 'error' => 'Invalid fileId']);
     exit;
   }

@@ -10,10 +10,9 @@
 // -------------------------------------------------------
 session_start();
 
-define('APPS_SCRIPT_URL',  'https://script.google.com/macros/s/AKfycbz6AnLGRWvm6ibJC-Mi4mc4JuNholXDcBIF6I04uTSH_ybe14xcRoMr4OIDDUBbOAaP/exec');
-define('APPS_SCRIPT_TOKEN', 'wX7#mK2$pN9vQ4@hR6jT1!uL8eB3sF5c');  // must match SECRET_TOKEN in dir-display-bridge.gs
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('TAGS_DIR',          __DIR__ . '/tags/');
+require_once __DIR__ . '/storage/r2-storage.php';
 
 $buildings = require __DIR__ . '/buildings.php';
 
@@ -164,8 +163,7 @@ foreach ($allUsers as $u) {
 }
 
 // -------------------------------------------------------
-// JSON search — called by client-side fetch
-// Queries Apps Script for filename matches, then merges tag matches.
+// JSON search — filename scan via R2 listing + tag index
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'search') {
   header('Content-Type: application/json');
@@ -176,22 +174,33 @@ if (isset($_GET['json']) && $_GET['json'] === 'search') {
     exit;
   }
 
-  // --- Filename search via Apps Script ---
-  $url = APPS_SCRIPT_URL
-       . '?action=search'
-       . '&token='           . urlencode(APPS_SCRIPT_TOKEN)
-       . '&publicFolderId='  . urlencode($config['publicFolderId'])
-       . '&privateFolderId=' . urlencode($config['privateFolderId'])
-       . '&query='           . urlencode($query);
+  $r2cfg = _r2Cfg();
+  $seen  = [];
 
-  $response = @file_get_contents($url);
-  $nameData = $response !== false ? json_decode($response, true) : null;
-  $nameResults = (!$nameData || !empty($nameData['error'])) ? [] : ($nameData['results'] ?? []);
-
-  // Index filename results by fileId for dedup
-  $seen = [];
-  foreach ($nameResults as $r) {
-    $seen[$r['id']] = true;
+  // --- Filename search: flat R2 listing scan for both trees ---
+  $nameResults = [];
+  foreach (['public', 'private'] as $tree) {
+    $prefix = $building . '/' . $tree . '/';
+    $token  = null;
+    do {
+      $q2 = ['list-type' => '2', 'prefix' => $prefix, 'max-keys' => '1000'];
+      if ($token) $q2['continuation-token'] = $token;
+      [$status, $body] = _r2Request('GET', '/' . $r2cfg['bucket'], $q2);
+      if ($status !== 200) break;
+      $sx = @simplexml_load_string($body);
+      if (!$sx) break;
+      foreach ($sx->Contents as $obj) {
+        $key  = (string)$obj->Key;
+        $size = (int)(string)$obj->Size;
+        $name = basename($key);
+        if ($name === '.keep' || str_ends_with($key, '/')) continue;
+        if (stripos($name, $query) !== false) {
+          $nameResults[] = ['id' => $key, 'name' => $name, 'size' => _r2FmtSize($size), 'tree' => $tree, 'via' => 'name'];
+          $seen[$key]    = true;
+        }
+      }
+      $token = (string)($sx->NextContinuationToken ?? '');
+    } while ($token !== '');
   }
 
   // --- Tag search ---
@@ -203,7 +212,6 @@ if (isset($_GET['json']) && $_GET['json'] === 'search') {
 
   $tagResults = [];
   foreach ($allTags as $fileId => $entry) {
-    // Support both new {tags,name,tree} format and legacy [tags] format
     $fileTags = is_array($entry) && isset($entry['tags']) ? $entry['tags'] : (is_array($entry) ? $entry : []);
     $fileName = is_array($entry) && isset($entry['name']) ? $entry['name'] : '';
     $tree     = is_array($entry) && isset($entry['tree']) ? $entry['tree'] : 'private';
@@ -215,35 +223,19 @@ if (isset($_GET['json']) && $_GET['json'] === 'search') {
     foreach ($words as $word) {
       $wordFound = false;
       foreach ($fileTags as $tag) {
-        if (strpos(strtolower($tag), $word) !== false) {
-          $wordFound = true;
-          break;
-        }
+        if (strpos(strtolower($tag), $word) !== false) { $wordFound = true; break; }
       }
       if (!$wordFound) { $allWordsMatch = false; break; }
     }
 
     if ($allWordsMatch) {
-      $result = [
-        'id'   => $fileId,
-        'name' => $fileName ?: '(unnamed)',
-        'size' => '',
-        'tree' => $tree,
-        'via'  => 'tag',
-        'tags' => $fileTags,
-      ];
-      if ($tree === 'public') {
-        // Public files can link directly (no proxy needed)
-        $result['url'] = 'https://drive.google.com/uc?export=download&id=' . rawurlencode($fileId);
-      }
-      $tagResults[] = $result;
+      $tagResults[] = ['id' => $fileId, 'name' => $fileName ?: '(unnamed)', 'size' => '', 'tree' => $tree, 'via' => 'tag', 'tags' => $fileTags];
       $seen[$fileId] = true;
     }
   }
 
-  // Mark filename results with their matching tags if any
+  // Annotate filename results with their tags
   foreach ($nameResults as &$r) {
-    $r['via'] = 'name';
     if (!empty($allTags[$r['id']])) {
       $entry = $allTags[$r['id']];
       $r['tags'] = isset($entry['tags']) ? $entry['tags'] : (is_array($entry) ? $entry : []);
@@ -251,12 +243,8 @@ if (isset($_GET['json']) && $_GET['json'] === 'search') {
   }
   unset($r);
 
-  // Merge: filename results first (already sorted by Apps Script), then tag-only results
-  usort($tagResults, fn($a,$b) => strcmp($a['name'],$b['name']));
-  $tagResults = array_values($tagResults);
-  $merged = array_merge($nameResults, $tagResults);
-
-  echo json_encode(['results' => $merged]);
+  usort($tagResults, fn($a, $b) => strcmp($a['name'], $b['name']));
+  echo json_encode(['results' => array_merge($nameResults, array_values($tagResults))]);
   exit;
 }
 
@@ -399,14 +387,15 @@ $currentUser = $_SESSION[$sessionKey];
         // Build file link/download
         var fileURL, downloadURL;
         if (isPrivate) {
-          // Route through proxy
           var privateBase = 'display-private-dir.php?building=' + encodeURIComponent(building)
                           + (returnURL ? '&return=' + encodeURIComponent(returnURL) : '');
           fileURL     = privateBase + '&fileId=' + encodeURIComponent(f.id) + '&inline=1';
           downloadURL = privateBase + '&fileId=' + encodeURIComponent(f.id);
         } else {
-          fileURL     = 'https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view';
-          downloadURL = f.url || ('https://drive.google.com/uc?export=download&id=' + encodeURIComponent(f.id));
+          var publicBase = 'display-public-dir.php?building=' + encodeURIComponent(building)
+                         + (returnURL ? '&return=' + encodeURIComponent(returnURL) : '');
+          fileURL     = publicBase + '&file=' + encodeURIComponent(f.id);
+          downloadURL = publicBase + '&file=' + encodeURIComponent(f.id);
         }
 
         // Tags

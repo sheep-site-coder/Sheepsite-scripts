@@ -182,15 +182,8 @@ if (!isset($_GET['json']) && !isset($_GET['fileId'])) {
 // Auth check above already passed before reaching here
 // -------------------------------------------------------
 if (isset($_GET['json'])) {
-  require_once __DIR__ . '/listing-cache.php';
   header('Content-Type: application/json');
-
-  $cached = lcGet('priv', $building, $path);
-  if ($cached !== null) { echo $cached; exit; }
-
-  $response = stListFolder($building, $path, 'private', 'priv');
-  lcSet('priv', $building, $path, $response);
-  echo $response;
+  echo stListFolder($building, $path, 'private', 'priv');
   exit;
 }
 

@@ -1061,13 +1061,13 @@ docs/Sheepsite-Architecture.html
 - Billing flow: renewal date advances on payment (`markInvoicePaid()`), NOT when cron generates invoice
 - ToS task from session 19 closed — ToS is admin-only, no user manual section needed
 
-### Outstanding items
-- Deploy `feature/resident-browser-cache` branch files to production (see branch for file list)
-- Create `cache/` directory on server (chmod 755)
-- Run DB import for LyndhurstH, LyndhurstI, SampleSite via `import-sheet-to-db.php`
-- Delete `cron-test.php` from server once confirmed working
+**All session 31/32 outstanding items completed (April 10, 2026):**
+- ✓ `feature/resident-browser-cache` branch deployed to production
+- ✓ `cache/` directory created on server (chmod 755)
+- ✓ DB import run for LyndhurstH, LyndhurstI, SampleSite
+- ✓ `cron-test.php` deleted from server
 
 ---
 
-*Snapshot updated: April 9, 2026 (session 32 — cron path, ToS improvements, master-admin UI)*
+*Snapshot updated: April 10, 2026 (session 33 — deployment complete)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
