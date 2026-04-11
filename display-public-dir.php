@@ -12,7 +12,6 @@ if (!$building || !array_key_exists($building, $buildings)) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 
-$folderId   = $buildings[$building]['publicFolderId'] ?? '';
 $buildLabel = ucwords(str_replace('_', ' ', $building));
 require __DIR__ . '/suspension.php';
 $returnURL  = $_GET['return'] ?? '';
