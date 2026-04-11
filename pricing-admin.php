@@ -94,7 +94,7 @@ $p                = loadPricing();
 $siteMonthly      = (float)($p['siteMonthlyPrice']  ?? 0);
 $domainAnnual     = (float)($p['domainAnnualPrice'] ?? 0);
 $creditPrice      = (float)($p['creditPrice']       ?? 0);
-$defaultLimit     = (int)($p['storageDefaultLimit'] ?? 524288000);
+$defaultLimit     = (int)($p['storageDefaultLimit'] ?? 10737418240);
 $tiers            = $p['storageOptions'] ?? [];
 ?>
 <!DOCTYPE html>

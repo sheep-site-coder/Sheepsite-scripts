@@ -184,6 +184,51 @@ function _r2PresignedUrl(string $objectKey, int $expires = 3600): string {
 }
 
 // -------------------------------------------------------
+// Pre-signed PUT URL (for direct browser → R2 uploads)
+// Signs content-length and content-type so R2 enforces the
+// exact file size and type approved by the PHP endpoint.
+// -------------------------------------------------------
+function _r2PresignedPutUrl(string $objectKey, int $fileSize, string $contentType, int $expires = 1800): string {
+  $cfg      = _r2Cfg();
+  $datetime = _r2Datetime();
+  $date     = substr($datetime, 0, 8);
+  $host     = $cfg['accountId'] . '.r2.cloudflarestorage.com';
+  $path     = '/' . $cfg['bucket'] . '/' . ltrim($objectKey, '/');
+  $scope    = "$date/" . R2_REGION . '/' . R2_SERVICE . '/aws4_request';
+
+  $q = [
+    'X-Amz-Algorithm'     => 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential'    => $cfg['accessKey'] . '/' . $scope,
+    'X-Amz-Date'          => $datetime,
+    'X-Amz-Expires'       => (string)$expires,
+    'X-Amz-SignedHeaders' => 'content-length;content-type;host',
+  ];
+  ksort($q);
+  $cqs = implode('&', array_map(
+    fn($k, $v) => rawurlencode($k) . '=' . rawurlencode($v), array_keys($q), $q
+  ));
+
+  $encodedPath = _r2EncodePath($path);
+  $canonReq    = "PUT\n$encodedPath\n$cqs\n"
+               . "content-length:$fileSize\ncontent-type:$contentType\nhost:$host\n\n"
+               . "content-length;content-type;host\nUNSIGNED-PAYLOAD";
+  $sts = "AWS4-HMAC-SHA256\n$datetime\n$scope\n" . hash('sha256', $canonReq);
+
+  $kDate    = hash_hmac('sha256', $date,          'AWS4' . $cfg['secretKey'], true);
+  $kRegion  = hash_hmac('sha256', R2_REGION,      $kDate,    true);
+  $kService = hash_hmac('sha256', R2_SERVICE,     $kRegion,  true);
+  $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+
+  $q['X-Amz-Signature'] = hash_hmac('sha256', $sts, $kSigning);
+  ksort($q);
+  $qs = implode('&', array_map(
+    fn($k, $v) => rawurlencode($k) . '=' . rawurlencode($v), array_keys($q), $q
+  ));
+
+  return 'https://' . $host . $encodedPath . '?' . $qs;
+}
+
+// -------------------------------------------------------
 // Parse S3 ListObjectsV2 XML into our standard listing format
 // -------------------------------------------------------
 function _r2ParseListing(string $xml, string $prefix, bool $includeUrls): array {

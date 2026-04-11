@@ -113,9 +113,25 @@ function getUsage(string $building): array {
 }
 
 // -------------------------------------------------------
-// AJAX: loadFaq / saveFaq / docStatus / docCheck / buildDocIndex
+// AJAX: loadFaq / saveFaq / docStatus / docCheck / buildDocIndex / woolsyBillingUrl
 // -------------------------------------------------------
 $action = $_GET['action'] ?? '';
+
+if ($action === 'woolsyBillingUrl') {
+    header('Content-Type: application/json');
+    require_once __DIR__ . '/billing-helpers.php';
+    define('CONFIG_DIR', __DIR__ . '/config/');
+    $cfg   = file_exists(CONFIG_DIR . $building . '.json')
+           ? json_decode(file_get_contents(CONFIG_DIR . $building . '.json'), true) ?? []
+           : [];
+    $token = generateBillingToken($building, 'woolsy', $cfg);
+    if (!is_dir(CONFIG_DIR)) mkdir(CONFIG_DIR, 0755, true);
+    file_put_contents(CONFIG_DIR . $building . '.json', json_encode($cfg, JSON_PRETTY_PRINT));
+    echo json_encode(['ok' => true, 'url' => 'billing.php?' . http_build_query([
+        'building' => $building, 'type' => 'woolsy', 'token' => $token,
+    ])]);
+    exit;
+}
 
 if ($action === 'loadFaq') {
     header('Content-Type: application/json');
@@ -259,6 +275,32 @@ $allTimeTotal = array_sum($usageData);
   <a href="admin.php?building=<?= urlencode($building) ?>" class="back-link">← Admin</a>
 </div>
 
+<!-- ===== Credit Usage (top) ===== -->
+<div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;padding:0.75rem 1rem;
+            background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:1.25rem;">
+  <div style="flex:1;min-width:180px;">
+    <div style="font-size:0.8rem;color:#888;margin-bottom:0.25rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Woolsy Credits</div>
+    <div style="font-size:0.9rem;">
+      <?php if ($wPct >= 100): ?>
+        <span style="color:#dc2626;font-weight:600;">⛔ Credits exhausted</span>
+      <?php elseif ($wPct >= 80): ?>
+        <span style="color:#b45309;font-weight:600;">⚠️ <?= round($wRemain, 2) ?> remaining</span>
+        <span style="color:#888;font-size:0.82rem;"> of <?= round($wAlloc, 2) ?> allocated</span>
+      <?php else: ?>
+        <strong><?= round($wRemain, 2) ?></strong> <span style="color:#888;">of <?= round($wAlloc, 2) ?> remaining</span>
+      <?php endif; ?>
+    </div>
+    <div class="credit-bar-wrap" style="margin-top:0.35rem;">
+      <div class="credit-fill <?= $wPct >= 100 ? 'danger' : ($wPct >= 80 ? 'warn' : '') ?>" style="width:<?= $wPct ?>%"></div>
+    </div>
+  </div>
+  <button onclick="buyWoolsyCredits(event)"
+          style="background:#6366f1;color:#fff;border:none;border-radius:5px;
+                 padding:0.4rem 1rem;font-size:0.875rem;cursor:pointer;white-space:nowrap;">
+    Buy Credits &rarr;
+  </button>
+</div>
+
 <?php if ($promptOutdated): ?>
 <div class="warn-banner">
   ⚠️ Woolsy prompt updated (v<?= PROMPT_VERSION ?>) — a rebuild is recommended to cover new topic categories.
@@ -315,23 +357,6 @@ $allTimeTotal = array_sum($usageData);
     <?php endforeach; ?>
     </tbody>
   </table>
-</div>
-
-<!-- ===== Credit Usage ===== -->
-<h2>Credit Usage</h2>
-<div class="section">
-  <div class="status-row">
-    Used <strong><?= number_format($wUsed, 4) ?></strong> of <strong><?= number_format($wAlloc, 2) ?></strong> credits
-    &nbsp;(<?= number_format($wRemain, 4) ?> remaining)
-  </div>
-  <div class="credit-bar-wrap">
-    <div class="credit-fill <?= $wPct >= 100 ? 'danger' : ($wPct >= 80 ? 'warn' : '') ?>" style="width:<?= $wPct ?>%"></div>
-  </div>
-  <?php if ($wPct >= 100): ?>
-    <div class="warn-banner" style="margin-top:0.5rem;">⛔ Credits exhausted — Woolsy is unavailable to residents. Contact SheepSite to top up.</div>
-  <?php elseif ($wPct >= 80): ?>
-    <div class="warn-banner" style="margin-top:0.5rem;">⚠️ Running low on credits. Contact SheepSite to add more.</div>
-  <?php endif; ?>
 </div>
 
 <!-- ===== Building FAQ ===== -->
@@ -448,6 +473,20 @@ function saveFaq() {
 function fmtDate(iso) {
   try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
   catch(e) { return iso; }
+}
+
+function buyWoolsyCredits(e) {
+  e.preventDefault();
+  var btn = e.target;
+  btn.disabled = true;
+  btn.textContent = 'Loading\u2026';
+  fetch(BASE_URL + '&action=woolsyBillingUrl')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.ok) { window.location.href = d.url; }
+      else { btn.disabled = false; btn.textContent = 'Buy Credits \u2192'; alert('Could not generate billing link.'); }
+    })
+    .catch(function () { btn.disabled = false; btn.textContent = 'Buy Credits \u2192'; });
 }
 </script>
 </body>

@@ -71,7 +71,7 @@ function sendBillingEmail(string $building, string $type, array &$cfg): bool {
     $lineItems    = [['description' => 'Woolsy Credits (' . $qty . ' credits)', 'amount' => $total]];
     $invoiceExtra = ['invoiceType' => 'woolsy', 'creditsToAdd' => $qty];
   } else { // storage
-    $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+    $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
     $currentLimit = (int)($cfg['storageLimit'] ?? $defaultLimit);
     $renewalDate  = $cfg['renewalDate'] ?? null;
     $tiers        = $pricing['storageOptions'] ?? [];

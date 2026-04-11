@@ -106,6 +106,48 @@ if (isset($_GET['json']) && $_GET['json'] === 'billing_url') {
 }
 
 // -------------------------------------------------------
+// JSON: issue a presigned PUT URL for direct browser → R2 upload
+// Called by JS before every upload. Validates storage limit here
+// so the URL is only issued for approved files.
+// GET ?json=presign_upload&tree=public&path=...&filename=...&size=...&type=...
+// -------------------------------------------------------
+if (isset($_GET['json']) && $_GET['json'] === 'presign_upload') {
+  header('Content-Type: application/json');
+
+  $tree        = ($_GET['tree'] ?? '') === 'private' ? 'private' : 'public';
+  $path        = trim($_GET['path']     ?? '', '/');
+  $fileName    = basename($_GET['filename'] ?? '');
+  $fileSize    = (int)($_GET['size'] ?? 0);
+  $contentType = $_GET['type'] ?? 'application/octet-stream';
+
+  if (!$fileName || $fileSize <= 0) {
+    echo json_encode(['ok' => false, 'error' => 'Missing filename or size']);
+    exit;
+  }
+
+  // Storage limit check
+  $bCfg        = loadBuildingCfg($building);
+  $pricingFile  = CONFIG_DIR . 'pricing.json';
+  $pricing      = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
+  $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
+  $storageLimit = (int)($bCfg['storageLimit'] ?? $defaultLimit);
+  $storageUsed  = (int)($bCfg['storageUsed']  ?? 0);
+  $wouldExceed  = $storageUsed > 0
+    ? ($storageUsed + $fileSize) > $storageLimit
+    : $fileSize > $storageLimit;
+  if ($wouldExceed) {
+    require_once __DIR__ . '/billing-helpers.php';
+    checkStorageThreshold($building);
+    echo json_encode(['ok' => false, 'error' => 'Storage limit reached']);
+    exit;
+  }
+
+  $result = stPresignedUploadUrl($building, $tree, $path, $fileName, $fileSize, $contentType);
+  echo json_encode(['ok' => true, 'url' => $result['url'], 'key' => $result['key']]);
+  exit;
+}
+
+// -------------------------------------------------------
 // JSON: list folder contents (proxied from Apps Script)
 // -------------------------------------------------------
 if (isset($_GET['json']) && $_GET['json'] === 'list') {
@@ -180,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bCfg        = loadBuildingCfg($building);
     $pricingFile  = CONFIG_DIR . 'pricing.json';
     $pricing      = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
-    $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+    $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
     $storageLimit = (int)($bCfg['storageLimit'] ?? $defaultLimit);
     $storageUsed  = (int)($bCfg['storageUsed']  ?? 0);
     // Always enforce the limit if storageUsed is known; if unknown, still block when the
@@ -323,7 +365,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $_pageBldCfg      = loadBuildingCfg($building);
 $_pagePricing     = file_exists(CONFIG_DIR . 'pricing.json') ? json_decode(file_get_contents(CONFIG_DIR . 'pricing.json'), true) ?? [] : [];
 $_pageStorageUsed  = (int)($_pageBldCfg['storageUsed']  ?? 0);
-$_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing['storageDefaultLimit'] ?? 524288000));
+$_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing['storageDefaultLimit'] ?? 10737418240));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -723,59 +765,75 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
     dropLabel.style.display = 'none';
     progress.style.display  = 'block';
     fill.style.width = '0%';
-    text.textContent = 'Uploading replacement\u2026 0%';
+    text.textContent = 'Preparing replacement\u2026';
 
-    var fd = new FormData();
-    fd.append('action',     'upload');
-    fd.append('folderId',   currentFolderId);
-    fd.append('tree',       currentTree);
-    fd.append('cacheTree',  currentTree);
-    fd.append('cachePath',  currentPath);
-    fd.append('file',       file);
+    // Step 1 — get a presigned PUT URL for the exact target key
+    // (same path + protected name → atomically overwrites existing R2 object)
+    var presignUrl = base
+      + '&json=presign_upload'
+      + '&tree='     + encodeURIComponent(currentTree)
+      + '&path='     + encodeURIComponent(currentPath)
+      + '&filename=' + encodeURIComponent(oldName)
+      + '&size='     + file.size
+      + '&type='     + encodeURIComponent(file.type || 'application/octet-stream');
 
-    var xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = function (e) {
-      if (e.lengthComputable) {
-        var pct = Math.round(e.loaded / e.total * 100);
-        fill.style.width = pct + '%';
-        text.textContent = pct < 100 ? ('Uploading replacement\u2026 ' + pct + '%') : 'Processing\u2026';
-      }
-    };
-    xhr.onload = function () {
-      var result;
-      try { result = JSON.parse(xhr.responseText); } catch (e) { result = {}; }
-      if (!result.ok) {
-        dropLabel.style.display = '';
-        progress.style.display  = 'none';
-        alert('Upload failed: ' + (result.error || 'Unknown error'));
-        return;
-      }
-      var newId = result.id;
-      text.textContent = 'Renaming\u2026';
-      // Rename new file to the exact protected name
-      post({ action: 'rename', fileId: newId, newName: oldName })
-        .then(function () {
-          text.textContent = 'Migrating tags\u2026';
-          return post({ action: 'migrateTags', oldFileId: oldId, newFileId: newId }).catch(function () {});
-        })
-        .then(function () {
-          text.textContent = 'Removing old file\u2026';
-          return post({ action: 'delete', fileId: oldId }).catch(function () {});
-        })
-        .then(function () {
+    fetch(presignUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (presign) {
+        if (!presign.ok) {
           dropLabel.style.display = '';
           progress.style.display  = 'none';
-          bustCache();
-          loadListing();
-        });
-    };
-    xhr.onerror = function () {
-      dropLabel.style.display = '';
-      progress.style.display  = 'none';
-      alert('Network error during upload');
-    };
-    xhr.open('POST', base);
-    xhr.send(fd);
+          if (presign.error && presign.error.indexOf('Storage limit') === 0) {
+            showStorageLimitModal(storageUsed, storageLimit);
+          } else {
+            alert('Upload failed: ' + (presign.error || 'Could not get upload URL'));
+          }
+          return;
+        }
+
+        // Step 2 — PUT directly to R2 (overwrites existing object at same key)
+        var xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = function (e) {
+          if (e.lengthComputable) {
+            var pct = Math.round(e.loaded / e.total * 100);
+            fill.style.width = pct + '%';
+            text.textContent = pct < 100
+              ? ('Uploading replacement\u2026 ' + pct + '%')
+              : 'Finishing\u2026';
+          }
+        };
+        xhr.onload = function () {
+          if (xhr.status === 200 || xhr.status === 204) {
+            var newKey = presign.key;
+            text.textContent = 'Migrating tags\u2026';
+            post({ action: 'migrateTags', oldFileId: oldId, newFileId: newKey })
+              .catch(function () {})
+              .then(function () {
+                dropLabel.style.display = '';
+                progress.style.display  = 'none';
+                bustCache();
+                loadListing();
+              });
+          } else {
+            dropLabel.style.display = '';
+            progress.style.display  = 'none';
+            alert('Replace failed: R2 returned HTTP ' + xhr.status);
+          }
+        };
+        xhr.onerror = function () {
+          dropLabel.style.display = '';
+          progress.style.display  = 'none';
+          alert('Network error during replacement upload');
+        };
+        xhr.open('PUT', presign.url);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
+      })
+      .catch(function () {
+        dropLabel.style.display = '';
+        progress.style.display  = 'none';
+        alert('Could not reach server to prepare upload');
+      });
   };
 
   // -------------------------------------------------------
@@ -1069,6 +1127,8 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
         progress.style.display  = 'none';
         if (errors.length) {
           alert('Some files failed to upload:\n' + errors.join('\n'));
+        } else {
+          showToast('\u2713 Upload complete');
         }
         bustCache();
         loadListing();
@@ -1080,68 +1140,95 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
       var label    = total > 1 ? ('(' + (index + 1) + ' of ' + total + ') ') : '';
 
       fill.style.width = '0%';
-      text.textContent = label + 'Uploading \u201c' + file.name + '\u201d\u2026 0%';
+      text.textContent = label + 'Preparing \u201c' + file.name + '\u201d\u2026';
 
-      var fd = new FormData();
-      fd.append('action',    'upload');
-      fd.append('folderId',  currentFolderId);
-      fd.append('tree',      currentTree);
-      fd.append('cacheTree', currentTree);
-      fd.append('cachePath', currentPath);
-      fd.append('file',      file);
+      // Step 1 — get a presigned PUT URL from PHP (validates storage limit)
+      var presignUrl = base
+        + '&json=presign_upload'
+        + '&tree='     + encodeURIComponent(currentTree)
+        + '&path='     + encodeURIComponent(currentPath)
+        + '&filename=' + encodeURIComponent(file.name)
+        + '&size='     + file.size
+        + '&type='     + encodeURIComponent(file.type || 'application/octet-stream');
 
-      var xhr = new XMLHttpRequest();
-
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) {
-          var pct = Math.round(e.loaded / e.total * 100);
-          fill.style.width = pct + '%';
-          text.textContent = label + (pct < 100
-            ? ('Uploading \u201c' + file.name + '\u201d\u2026 ' + pct + '%')
-            : ('Processing \u201c' + file.name + '\u201d\u2026'));
-        }
-      };
-
-      xhr.onload = function () {
-        var result;
-        try { result = JSON.parse(xhr.responseText); } catch (err) { result = {}; }
-
-        if (result.ok) {
-          var newFileId = result.id;
-          var next = function () { index++; uploadNext(); };
-          if (existing) {
-            // Migrate tags from old file ID to new file ID, then delete old file
-            post({ action: 'migrateTags', oldFileId: existing.id, newFileId: newFileId })
-              .catch(function () {})
-              .then(function () {
-                return post({ action: 'delete', fileId: existing.id }).catch(function () {});
-              })
-              .then(next);
-          } else {
-            next();
-          }
-        } else {
-          if (result.error && result.error.indexOf('Storage limit') === 0) {
-            // Stop the queue and show the billing modal
-            dropLabel.style.display = '';
-            progress.style.display  = 'none';
-            showStorageLimitModal(storageUsed, storageLimit);
+      fetch(presignUrl)
+        .then(function (r) { return r.json(); })
+        .then(function (presign) {
+          if (!presign.ok) {
+            if (presign.error && presign.error.indexOf('Storage limit') === 0) {
+              dropLabel.style.display = '';
+              progress.style.display  = 'none';
+              showStorageLimitModal(storageUsed, storageLimit);
+              return;
+            }
+            errors.push('\u2022 ' + file.name + ': ' + (presign.error || 'Could not get upload URL'));
+            index++;
+            uploadNext();
             return;
           }
-          errors.push('\u2022 ' + file.name + ': ' + (result.error || 'Unknown error'));
+
+          // Step 2 — PUT directly to R2
+          var xhr = new XMLHttpRequest();
+          xhr.upload.onprogress = function (e) {
+            if (e.lengthComputable) {
+              var pct = Math.round(e.loaded / e.total * 100);
+              fill.style.width = pct + '%';
+              text.textContent = label + (pct < 100
+                ? ('Uploading \u201c' + file.name + '\u201d\u2026 ' + pct + '%')
+                : ('Finishing \u201c' + file.name + '\u201d\u2026'));
+            }
+          };
+
+          xhr.onload = function () {
+            if (xhr.status === 200 || xhr.status === 204) {
+              var newKey = presign.key;
+              var next   = function () { index++; uploadNext(); };
+              if (existing) {
+                post({ action: 'migrateTags', oldFileId: existing.id, newFileId: newKey })
+                  .catch(function () {})
+                  .then(function () {
+                    return post({ action: 'delete', fileId: existing.id, cacheTree: currentTree }).catch(function () {});
+                  })
+                  .then(next);
+              } else {
+                next();
+              }
+            } else if (xhr.status === 0) {
+              errors.push('\u2022 ' + file.name + ': upload was interrupted (no response from server)');
+              index++;
+              uploadNext();
+            } else {
+              errors.push('\u2022 ' + file.name + ': R2 returned HTTP ' + xhr.status
+                + (xhr.responseText ? ' \u2014 ' + xhr.responseText.substring(0, 200) : ''));
+              index++;
+              uploadNext();
+            }
+          };
+
+          xhr.onerror = function () {
+            errors.push('\u2022 ' + file.name + ': network error \u2014 connection dropped during upload');
+            index++;
+            uploadNext();
+          };
+
+          xhr.ontimeout = function () {
+            errors.push('\u2022 ' + file.name + ': upload timed out');
+            index++;
+            uploadNext();
+          };
+
+          // 2 hours — large files on slow connections need time
+          xhr.timeout = 7200000;
+
+          xhr.open('PUT', presign.url);
+          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+          xhr.send(file);
+        })
+        .catch(function () {
+          errors.push('\u2022 ' + file.name + ': could not reach server');
           index++;
           uploadNext();
-        }
-      };
-
-      xhr.onerror = function () {
-        errors.push('\u2022 ' + file.name + ': network error');
-        index++;
-        uploadNext();
-      };
-
-      xhr.open('POST', base);
-      xhr.send(fd);
+        });
     }
 
     uploadNext();
@@ -1165,6 +1252,16 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   function fmtSize(bytes) {
     if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
     return Math.round(bytes / 1024) + ' KB';
+  }
+
+  function showToast(msg) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;background:#065f46;color:#fff;'
+      + 'padding:0.6rem 1.1rem;border-radius:6px;font-size:0.9rem;z-index:9999;'
+      + 'box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:opacity 0.4s;';
+    document.body.appendChild(t);
+    setTimeout(function () { t.style.opacity = '0'; setTimeout(function () { t.remove(); }, 400); }, 3000);
   }
 
   function fmtBytes(b) {

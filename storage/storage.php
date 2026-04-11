@@ -107,3 +107,17 @@ function stStorageReport(string $building, string $tree): string {
 function stStorageUsed(string $building): int {
   return r2StorageUsed($building);
 }
+
+// -------------------------------------------------------
+// stPresignedUploadUrl
+// Returns a presigned PUT URL for direct browser → R2 upload.
+// PHP validates storage limits before issuing; the URL signs
+// content-length + content-type so R2 enforces the approved size.
+// Returns array: ['url' => ..., 'key' => ...]
+// -------------------------------------------------------
+function stPresignedUploadUrl(string $building, string $tree, string $path,
+                              string $fileName, int $fileSize, string $contentType): array {
+  $key = _r2Prefix($building, $tree, $path) . $fileName;
+  $url = _r2PresignedPutUrl($key, $fileSize, $contentType, 1800); // 30 min
+  return ['url' => $url, 'key' => $key];
+}

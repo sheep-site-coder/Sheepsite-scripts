@@ -84,7 +84,7 @@ function buildLineItems(array $bldCfg, array $pricing): array {
 
   // Storage upgrade — only if above default limit and matches a priced tier
   $storageLimit = (int)($bldCfg['storageLimit'] ?? 0);
-  $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+  $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
   if ($storageLimit > $defaultLimit) {
     foreach ($pricing['storageOptions'] ?? [] as $tier) {
       if ((int)$tier['bytes'] === $storageLimit && (float)($tier['pricePerMonth'] ?? 0) > 0) {

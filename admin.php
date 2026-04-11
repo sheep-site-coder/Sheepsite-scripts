@@ -349,13 +349,37 @@ if (!$isTestSite && $loggedInAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && i
   }
 }
 // -------------------------------------------------------
+// AJAX: refresh storage usage from R2
+// -------------------------------------------------------
+if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage' && $loggedInAdmin) {
+  header('Content-Type: application/json');
+  require_once __DIR__ . '/storage/r2-storage.php';
+  $r2cfg = _r2Cfg();
+  $total = _r2SumBytes($building, $r2cfg);
+  if ($total === null) {
+    echo json_encode(['error' => 'Could not read R2 storage']);
+    exit;
+  }
+  $cfgFile = CONFIG_DIR . $building . '.json';
+  $saved   = file_exists($cfgFile) ? json_decode(file_get_contents($cfgFile), true) ?? [] : [];
+  $saved['storageUsed']    = $total;
+  $saved['storageUpdated'] = date('c');
+  file_put_contents($cfgFile, json_encode($saved, JSON_PRETTY_PRINT));
+  $pricingFile  = CONFIG_DIR . 'pricing.json';
+  $pricing      = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
+  $limit        = (int)($saved['storageLimit'] ?? (int)($pricing['storageDefaultLimit'] ?? 10737418240));
+  echo json_encode(['ok' => true, 'total' => $total, 'limit' => $limit]);
+  exit;
+}
+
+// -------------------------------------------------------
 // Load pricing, and invoices for storage + billing cards
 // (bldCfg already loaded above)
 $bldCfg      = loadBuildingConfig($building); // reload after any saves
 $pricingFile = CONFIG_DIR . 'pricing.json';
 $pricing     = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
 $storageUsed  = (int)($bldCfg['storageUsed']  ?? 0);
-$storageLimit = (int)($bldCfg['storageLimit'] ?? (int)($pricing['storageDefaultLimit'] ?? 524288000));
+$storageLimit = (int)($bldCfg['storageLimit'] ?? (int)($pricing['storageDefaultLimit'] ?? 10737418240));
 require_once __DIR__ . '/invoice-helpers.php';
 $invoices = loadInvoices($building);
 
@@ -520,10 +544,10 @@ if (!$mustChange) {
       <div class="card-title">Storage Report</div>
       <div class="card-desc">
         View usage for Public and Private folders, broken down by subfolder.
-        <?php if ($storageUsed > 0): ?>
+        <span id="storage-usage-line"><?php if ($storageUsed > 0): ?>
           <br><strong><?= fmtAdminBytes($storageUsed) ?></strong> used
           of <strong><?= fmtAdminBytes($storageLimit) ?></strong> allowed.
-        <?php endif; ?>
+        <?php endif; ?></span>
       </div>
     </div>
   </a>
@@ -631,12 +655,15 @@ if (!$mustChange) {
       <div class="card-title">Woolsy AI Assistant</div>
       <div class="card-desc">
         Knowledge base status, usage statistics, FAQ editor, and credit tracking.
-        <?php if ($wPct >= 100): ?>
+        <?php
+          $wRemaining = max(0, $wAlloc - $wUsed);
+          if ($wPct >= 100):
+        ?>
           <br><span style="color:#dc2626;font-weight:600;">⛔ Credits exhausted — Woolsy unavailable.</span>
         <?php elseif ($wPct >= 80): ?>
-          <br><span style="color:#b45309;font-weight:600;">⚠️ Credits running low.</span>
+          <br><span style="color:#b45309;font-weight:600;">⚠️ <?= round($wRemaining, 2) ?> of <?= round($wAlloc, 2) ?> credits remaining — running low.</span>
         <?php else: ?>
-          <br><span style="color:#888;"><?= $monthCount ?> question<?= $monthCount !== 1 ? 's' : '' ?> this month</span>
+          <br><span style="color:#888;"><?= round($wRemaining, 2) ?> of <?= round($wAlloc, 2) ?> credits remaining &mdash; <?= $monthCount ?> question<?= $monthCount !== 1 ? 's' : '' ?> this month</span>
         <?php endif; ?>
       </div>
     </div>
@@ -839,6 +866,23 @@ function togglePwVis(btn) {
   inp.type = show ? 'text' : 'password';
   btn.textContent = show ? 'Hide' : 'Show';
 }
+
+// Auto-refresh storage usage from R2 on page load
+(function () {
+  function fmtBytes(b) {
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+    if (b >= 1048576)    return (b / 1048576).toFixed(1)    + ' MB';
+    return Math.round(b / 1024) + ' KB';
+  }
+  fetch('admin.php?building=<?= urlencode($building) ?>&action=refreshStorage')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) return;
+      var el = document.getElementById('storage-usage-line');
+      if (el) el.innerHTML = '<br><strong>' + fmtBytes(d.total) + '</strong> used of <strong>' + fmtBytes(d.limit) + '</strong> allowed.';
+    })
+    .catch(function () {});
+})();
 </script>
 
 </body>

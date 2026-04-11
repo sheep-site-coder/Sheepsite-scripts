@@ -161,7 +161,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$stripeReady) {
     $credFile   = __DIR__ . '/faqs/woolsy_credits.json';
     $allCredits = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) ?? [] : [];
     if (!isset($allCredits[$building])) $allCredits[$building] = ['allocated' => 1.0, 'used' => 0.0];
-    $allCredits[$building]['allocated'] = round($allCredits[$building]['allocated'] + $qty, 4);
+    $remaining = max(0, ($allCredits[$building]['allocated'] ?? 0) - ($allCredits[$building]['used'] ?? 0));
+    $allCredits[$building]['allocated'] = round($remaining + $qty, 4);
+    $allCredits[$building]['used']      = 0.0;
     file_put_contents($credFile, json_encode($allCredits, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
     $bCfg = loadConfig($building);
@@ -295,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $stripeReady) {
 // -------------------------------------------------------
 $creditPrice  = (float)($pricing['creditPrice']       ?? 0);
 $storageTiers = $pricing['storageOptions'] ?? [];
-$defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+$defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
 $currentLimit = (int)($cfg['storageLimit'] ?? $defaultLimit);
 $storageUsed  = (int)($cfg['storageUsed']  ?? 0);
 

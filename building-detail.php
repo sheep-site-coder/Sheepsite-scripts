@@ -260,7 +260,7 @@ if (!$isNew) {
   $bldBuilding = $buildings[$buildingKey];
   $label       = ucwords(str_replace(['_', '-'], ' ', $buildingKey));
   $pricing     = loadPricing();
-  $defaultLimit= (int)($pricing['storageDefaultLimit'] ?? 524288000);
+  $defaultLimit= (int)($pricing['storageDefaultLimit'] ?? 10737418240);
 
   // Woolsy
   $allCredits  = loadCredits();

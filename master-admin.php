@@ -138,7 +138,7 @@ $tosScope   = $tos['scope'] ?? [];
 // Pricing (for default storage limit)
 $pricingFile    = CONFIG_DIR . 'pricing.json';
 $pricing        = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
-$defaultLimit   = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+$defaultLimit   = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
 
 // Per-building config loader
 function loadBuildingConfig(string $b): array {
