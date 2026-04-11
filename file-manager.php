@@ -148,6 +148,15 @@ if (isset($_GET['json']) && $_GET['json'] === 'list') {
 // -------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   header('Content-Type: application/json');
+
+  // PHP silently drops $_POST when the request body exceeds post_max_size.
+  // Detect it and return a clear error instead of falling through to "Unknown action".
+  if (empty($_POST) && (int)$_SERVER['CONTENT_LENGTH'] > 0) {
+    $limit = ini_get('post_max_size');
+    echo json_encode(['ok' => false, 'error' => 'File exceeds server upload limit (post_max_size: ' . $limit . '). Increase post_max_size and upload_max_filesize in php.ini or .htaccess.']);
+    exit;
+  }
+
   $action = $_POST['action'] ?? '';
 
   // ---- Upload ----
