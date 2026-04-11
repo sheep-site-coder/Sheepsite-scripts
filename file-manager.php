@@ -176,20 +176,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $file = $_FILES['file'];
 
-    // Storage limit check (uses cached value from storage-report.php or cron)
-    $bCfg     = loadBuildingCfg($building);
-    $storageUsed = (int)($bCfg['storageUsed'] ?? 0);
-    if ($storageUsed > 0) {
-      $pricingFile  = CONFIG_DIR . 'pricing.json';
-      $pricing      = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
-      $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
-      $storageLimit = (int)($bCfg['storageLimit'] ?? $defaultLimit);
-      if (($storageUsed + $file['size']) > $storageLimit) {
-        require_once __DIR__ . '/billing-helpers.php';
-        checkStorageThreshold($building);
-        echo json_encode(['ok' => false, 'error' => 'Storage limit reached. Your administrator has been notified to add more storage.']);
-        exit;
-      }
+    // Storage limit check (uses cached value from storage_refresh or cron)
+    $bCfg        = loadBuildingCfg($building);
+    $pricingFile  = CONFIG_DIR . 'pricing.json';
+    $pricing      = file_exists($pricingFile) ? json_decode(file_get_contents($pricingFile), true) ?? [] : [];
+    $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 524288000);
+    $storageLimit = (int)($bCfg['storageLimit'] ?? $defaultLimit);
+    $storageUsed  = (int)($bCfg['storageUsed']  ?? 0);
+    // Always enforce the limit if storageUsed is known; if unknown, still block when the
+    // file alone would exceed the limit (catches the "never measured" case).
+    $wouldExceed = $storageUsed > 0
+      ? ($storageUsed + $file['size']) > $storageLimit
+      : $file['size'] > $storageLimit;
+    if ($wouldExceed) {
+      require_once __DIR__ . '/billing-helpers.php';
+      checkStorageThreshold($building);
+      echo json_encode(['ok' => false, 'error' => 'Storage limit reached. Your administrator has been notified to add more storage.']);
+      exit;
     }
 
     $fileName = basename($file['name']);
@@ -1010,6 +1013,15 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   function continueWithFiles(files) {
     if (!currentFolderId) { alert('Loading \u2014 please wait'); return; }
 
+    // Client-side storage pre-check (server enforces authoritatively; this is fast UX feedback)
+    if (storageLimit > 0) {
+      var batchSize = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+      if ((storageUsed + batchSize) > storageLimit) {
+        alert('Storage limit reached (' + fmtBytes(storageUsed) + ' used of ' + fmtBytes(storageLimit) + '). Please contact your administrator to add more storage.');
+        return;
+      }
+    }
+
     // Check duplicates for all files at once, build replace map
     var replaceMap = {};  // filename → existing file object
     var toReplace  = files.filter(function (f) {
@@ -1146,6 +1158,13 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
   function fmtSize(bytes) {
     if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
     return Math.round(bytes / 1024) + ' KB';
+  }
+
+  function fmtBytes(b) {
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+    if (b >= 1048576)    return (b / 1048576).toFixed(1)    + ' MB';
+    if (b >= 1024)       return Math.round(b / 1024)        + ' KB';
+    return b + ' B';
   }
 
   function esc(s) {
