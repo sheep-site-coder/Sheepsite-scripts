@@ -431,6 +431,47 @@ function r2StorageReport(string $building, string $tree): string {
 }
 
 // -------------------------------------------------------
+// _r2CopyTree — copy all objects from one prefix to another
+// Used when provisioning a new building from a template.
+// sourcePrefix: e.g. "_template/"
+// destPrefix:   e.g. "LyndhurstJ/"
+// Returns ['copied' => int, 'errors' => string[]]
+// -------------------------------------------------------
+function _r2CopyTree(string $sourcePrefix, string $destPrefix): array {
+  $cfg    = _r2Cfg();
+  $bucket = $cfg['bucket'];
+  $copied = 0;
+  $errors = [];
+  $token  = null;
+
+  do {
+    $q = ['list-type' => '2', 'prefix' => $sourcePrefix, 'max-keys' => '1000'];
+    if ($token) $q['continuation-token'] = $token;
+    [$status, $body] = _r2Request('GET', '/' . $bucket, $q);
+    if ($status !== 200) { $errors[] = 'List failed (HTTP ' . $status . ')'; break; }
+
+    $sx = @simplexml_load_string($body);
+    if (!$sx) { $errors[] = 'List parse failed'; break; }
+
+    foreach ($sx->Contents as $obj) {
+      $srcKey = (string)$obj->Key;
+      $dstKey = $destPrefix . substr($srcKey, strlen($sourcePrefix));
+
+      [$cStatus, ] = _r2Request('PUT', '/' . $bucket . '/' . $dstKey, [], [
+        'x-amz-copy-source' => '/' . $bucket . _r2EncodePath($srcKey),
+      ]);
+
+      if ($cStatus === 200 || $cStatus === 204) { $copied++; }
+      else { $errors[] = basename($srcKey) . ' (HTTP ' . $cStatus . ')'; }
+    }
+
+    $token = (string)($sx->NextContinuationToken ?? '');
+  } while ($token !== '');
+
+  return ['copied' => $copied, 'errors' => $errors];
+}
+
+// -------------------------------------------------------
 // r2StorageUsed — total bytes for a building (both trees)
 // -------------------------------------------------------
 function r2StorageUsed(string $building): int {

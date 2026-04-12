@@ -97,6 +97,88 @@ function saveMasterConfig(array $cfg): void {
 $message     = '';
 $messageType = 'ok';
 
+// -------------------------------------------------------
+// POST — provision a new building
+// -------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isNew) {
+  $newKey      = trim($_POST['building_key'] ?? '');
+  $displayName = trim($_POST['display_name'] ?? '');
+  $state       = strtoupper(trim($_POST['state'] ?? 'FL'));
+  $community   = trim($_POST['community'] ?? '');
+
+  if (!$newKey || !preg_match('/^[a-zA-Z0-9_-]+$/', $newKey)) {
+    $message     = 'Invalid building key — use letters, numbers, hyphens and underscores only.';
+    $messageType = 'error';
+  } elseif (isset($buildings[$newKey])) {
+    $message     = 'Key "' . htmlspecialchars($newKey) . '" already exists in buildings.php.';
+    $messageType = 'error';
+  } else {
+    $provisionErrors = [];
+
+    // 1 — Resident credentials file (empty accounts array)
+    $resFile = CREDENTIALS_DIR . $newKey . '.json';
+    if (!file_exists($resFile)) {
+      if (file_put_contents($resFile, '[]') === false) $provisionErrors[] = 'Could not create credentials/' . $newKey . '.json';
+    }
+
+    // 2 — Admin credentials file (default admin/admin, mustChange)
+    $admFile = CREDENTIALS_DIR . $newKey . '_admin.json';
+    if (!file_exists($admFile)) {
+      $defaultAdmin = [[
+        'user'       => 'admin',
+        'pass'       => password_hash('admin', PASSWORD_BCRYPT),
+        'email'      => '',
+        'mustChange' => true,
+      ]];
+      if (file_put_contents($admFile, json_encode($defaultAdmin, JSON_PRETTY_PRINT)) === false) {
+        $provisionErrors[] = 'Could not create credentials/' . $newKey . '_admin.json';
+      }
+    }
+
+    // 3 — Building config file
+    $cfgFile = CONFIG_DIR . $newKey . '.json';
+    if (!file_exists($cfgFile)) {
+      $pricing      = loadPricing();
+      $defaultLimit = (int)($pricing['storageDefaultLimit'] ?? 10737418240);
+      $newCfg = [
+        'displayName'  => $displayName ?: $newKey,
+        'siteURL'      => '',
+        'contactEmail' => '',
+        'storageLimit' => $defaultLimit,
+        'storageUsed'  => 0,
+      ];
+      if (file_put_contents($cfgFile, json_encode($newCfg, JSON_PRETTY_PRINT)) === false) {
+        $provisionErrors[] = 'Could not create config/' . $newKey . '.json';
+      }
+    }
+
+    // 4 — Woolsy credits (1 credit teaser)
+    $allCreds = loadCredits();
+    if (!isset($allCreds[$newKey])) {
+      $allCreds[$newKey] = ['allocated' => 1.0, 'used' => 0.0];
+      saveCredits($allCreds);
+    }
+
+    // 5 — Copy R2 template tree
+    require_once __DIR__ . '/storage/r2-storage.php';
+    $r2result = _r2CopyTree('_template/', $newKey . '/');
+
+    // Redirect to post-provision checklist
+    $params = http_build_query([
+      'building'    => 'new',
+      'provisioned' => $newKey,
+      'displayName' => $displayName,
+      'state'       => $state,
+      'community'   => $community,
+      'r2copied'    => $r2result['copied'],
+      'r2errors'    => count($r2result['errors']),
+      'errors'      => implode('|', $provisionErrors),
+    ]);
+    header('Location: building-detail.php?' . $params);
+    exit;
+  }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isNew) {
 
   $action = $_POST['action'] ?? '';
@@ -371,13 +453,19 @@ if (!$isNew) {
   <div class="message <?= htmlspecialchars($messageType) ?>"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>
 
-<?php if ($isNew):
-  $savedTemplate    = $masterConfig['templateFolderId']    ?? '';
-  $savedAssociation = $masterConfig['associationFolderId'] ?? '';
-  $savedSheet       = $masterConfig['templateSheetId']     ?? '';
+<?php
+$provisioned    = trim($_GET['provisioned']    ?? '');
+$provKey        = $provisioned ?: '';
+$provDisplay    = trim($_GET['displayName']    ?? $provKey);
+$provState      = trim($_GET['state']          ?? 'FL');
+$provCommunity  = trim($_GET['community']      ?? '');
+$provR2Copied   = (int)($_GET['r2copied']      ?? -1);
+$provR2Errors   = (int)($_GET['r2errors']      ?? 0);
+$provFileErrors = array_filter(explode('|', $_GET['errors'] ?? ''));
+
+if ($isNew):
 ?>
 <!-- ===================== NEW BUILDING SETUP ===================== -->
-
 <style>
   .nb-phase       { background:#fff; border:1px solid #ddd; border-radius:6px; padding:1.5rem; margin-bottom:1.5rem; }
   .nb-phase h3    { margin:0 0 1rem; font-size:1.05rem; color:#1a3a5c; }
@@ -388,12 +476,8 @@ if (!$isNew) {
   .nb-hint        { font-size:0.8rem; color:#888; margin-top:0.15rem; }
   .nb-create-btn  { background:#1a5a2a; color:#fff; border:none; padding:0.55rem 1.4rem;
                     border-radius:4px; font-size:0.95rem; cursor:pointer; margin-top:0.5rem; }
-  .nb-create-btn:hover { background:#134520; }
+  .nb-create-btn:hover  { background:#134520; }
   .nb-create-btn:disabled { background:#999; cursor:default; }
-  .nb-success     { background:#f0faf0; border:1px solid #a0d0a0; border-radius:4px;
-                    padding:0.6rem 1rem; font-size:0.88rem; color:#1a5a1a; margin-top:0.75rem; }
-  .nb-error       { background:#fff0f0; border:1px solid #f0a0a0; border-radius:4px;
-                    padding:0.6rem 1rem; font-size:0.88rem; color:#a00; margin-top:0.75rem; }
   /* Checklist */
   .checklist      { list-style:none; padding:0; margin:0; }
   .checklist li   { display:flex; gap:0.75rem; align-items:flex-start; margin-bottom:1.4rem;
@@ -417,138 +501,159 @@ if (!$isNew) {
   .cl-copy:hover  { background:#f0f0f0; }
   .cl-note        { background:#fff8e8; border-left:3px solid #f0a800; padding:0.4rem 0.7rem;
                     font-size:0.83rem; color:#555; margin-top:0.5rem; border-radius:0 3px 3px 0; }
+  .cl-done-row    { background:#f0faf0; border:1px solid #a0d0a0; border-radius:6px;
+                    padding:0.75rem 1rem; font-size:0.88rem; color:#1a5a1a; margin-bottom:1.25rem; }
+  .cl-done-row ul { margin:0.4rem 0 0 1rem; padding:0; }
+  .cl-done-row li { margin:0.15rem 0; }
+  .cl-warn-row    { background:#fff8e8; border:1px solid #f0c060; border-radius:6px;
+                    padding:0.75rem 1rem; font-size:0.88rem; color:#7a4a00; margin-bottom:1.25rem; }
   .cl-check       { margin-top:0.6rem; display:flex; align-items:center; gap:0.4rem;
                     font-size:0.82rem; color:#888; }
   .cl-check input { cursor:pointer; width:15px; height:15px; }
 </style>
 
+<?php if (!$provisioned): ?>
+<!-- ── Phase 1: Identity form ── -->
 <div class="nb-phase">
-  <h3>Step 1 &mdash; Building Identity</h3>
-  <div class="nb-row">
-    <div class="nb-field">
-      <label>Building key <span style="color:red">*</span></label>
-      <input type="text" id="nb_key" placeholder="e.g. LyndhurstJ" style="width:160px;" oninput="nbUpdate()">
-      <span class="nb-hint">No spaces. Used in URLs and config.</span>
+  <h3>New Association Setup</h3>
+  <form method="post" id="provision-form">
+    <input type="hidden" name="action" value="provision">
+    <div class="nb-row">
+      <div class="nb-field">
+        <label>Building key <span style="color:red">*</span></label>
+        <input type="text" name="building_key" id="nb_key" placeholder="e.g. LyndhurstJ" style="width:160px;"
+               value="<?= htmlspecialchars($_POST['building_key'] ?? '') ?>" oninput="nbValidate()">
+        <span class="nb-hint">Letters, numbers, hyphens. Used in URLs and filenames.</span>
+      </div>
+      <div class="nb-field">
+        <label>Display name</label>
+        <input type="text" name="display_name" placeholder="e.g. Lyndhurst J" style="width:180px;"
+               value="<?= htmlspecialchars($_POST['display_name'] ?? '') ?>">
+      </div>
+      <div class="nb-field">
+        <label>State</label>
+        <input type="text" name="state" value="<?= htmlspecialchars($_POST['state'] ?? 'FL') ?>" style="width:50px;">
+      </div>
+      <div class="nb-field">
+        <label>Community</label>
+        <input type="text" name="community" placeholder="e.g. CVE (optional)" style="width:150px;"
+               value="<?= htmlspecialchars($_POST['community'] ?? '') ?>">
+      </div>
     </div>
-    <div class="nb-field">
-      <label>Display name</label>
-      <input type="text" id="nb_displayname" placeholder="e.g. Lyndhurst J" style="width:180px;" oninput="nbUpdate()">
-    </div>
-    <div class="nb-field">
-      <label>State</label>
-      <input type="text" id="nb_state" value="FL" style="width:50px;" oninput="nbUpdate()">
-    </div>
-    <div class="nb-field">
-      <label>Community</label>
-      <input type="text" id="nb_community" placeholder="e.g. CVE (optional)" style="width:150px;" oninput="nbUpdate()">
-    </div>
-  </div>
-  <div style="margin-top:0.75rem;">
-    <button class="nb-create-btn" id="nb_create_btn" onclick="showChecklist()" disabled>Generate Setup Checklist</button>
-  </div>
+    <button type="submit" class="nb-create-btn" id="nb_create_btn"
+            <?= empty($_POST['building_key']) ? 'disabled' : '' ?>>Create Association</button>
+  </form>
 </div>
 
-<div class="nb-phase" id="nb_checklist" style="display:none;">
-  <h3>Setup Checklist</h3>
-  <p style="font-size:0.88rem;color:#555;margin:0 0 1.25rem;">Work through these steps in order. Check each one off as you complete it.</p>
+<script>
+function nbValidate() {
+  var key = document.getElementById('nb_key').value.trim();
+  document.getElementById('nb_create_btn').disabled = !key;
+}
+</script>
+
+<?php else:
+  // Phase 2 — post-provision checklist
+  $bldSnippet  = "  '" . $provKey . "' => [\n    'state'     => '" . $provState . "',";
+  if ($provCommunity) $bldSnippet .= "\n    'community' => '" . $provCommunity . "',";
+  $bldSnippet .= "\n  ],";
+
+  $indexPhp = "<?php\ndefine('BUILDING', '" . $provKey . "');\nrequire '../Scripts/building-site.php';";
+
+  $adminUrl = 'https://sheepsite.com/Scripts/admin.php?building=' . urlencode($provKey);
+?>
+
+<!-- ── Phase 2: Post-provision checklist ── -->
+<div class="cl-done-row">
+  <strong>&#10003; Association provisioned: <?= htmlspecialchars($provKey) ?></strong>
+  <ul>
+    <li>credentials/<?= htmlspecialchars($provKey) ?>.json — created (empty resident accounts)</li>
+    <li>credentials/<?= htmlspecialchars($provKey) ?>_admin.json — created (admin / admin, mustChange)</li>
+    <li>config/<?= htmlspecialchars($provKey) ?>.json — created (defaults: 10 GB storage, empty siteURL/contactEmail)</li>
+    <li>Woolsy credits — initialized (1 credit)</li>
+    <?php if ($provR2Copied >= 0): ?>
+      <li>R2 template tree — <?= $provR2Copied ?> file(s) copied to <?= htmlspecialchars($provKey) ?>/<?= $provR2Errors > 0 ? ' <strong style="color:#c00;">(' . $provR2Errors . ' error(s) — check R2 dashboard)</strong>' : '' ?></li>
+    <?php endif; ?>
+  </ul>
+</div>
+
+<?php if ($provFileErrors): ?>
+<div class="cl-warn-row">
+  <strong>Warning — some files could not be created:</strong>
+  <ul><?php foreach ($provFileErrors as $e): ?><li><?= htmlspecialchars($e) ?></li><?php endforeach; ?></ul>
+  Check that credentials/ and config/ are writable by PHP on the server.
+</div>
+<?php endif; ?>
+
+<div class="nb-phase">
+  <h3>Remaining Setup Steps</h3>
+  <p style="font-size:0.88rem;color:#555;margin:0 0 1.25rem;">Complete these in order, then hand off the admin URL to the new association admin.</p>
   <ul class="checklist">
 
-    <!-- Step 1: buildings.php + credentials -->
+    <!-- Step 1: buildings.php -->
     <li>
       <div class="cl-num">1</div>
       <div class="cl-body">
-        <div class="cl-title">Add Building to Server Config</div>
+        <div class="cl-title">Add to buildings.php</div>
         <div class="cl-steps">
-          <strong>a)</strong> Open <code>buildings.php</code> on the server and add this entry:
-          <div class="cl-code" id="cl_snippet">Fill in building details above to generate snippet.<button class="cl-copy" onclick="copyCode('cl_snippet')">Copy</button></div>
-          Upload the updated <code>buildings.php</code> to the server.<br><br>
-          <strong>b)</strong> Create a new empty credentials file on the server at:
-          <div class="cl-code" id="cl_creds_path">credentials/BuildingKey.json<button class="cl-copy" onclick="copyCode('cl_creds_path')">Copy</button></div>
-          Contents must be exactly: <code>[]</code>
+          Edit <code>buildings.php</code> in the repo and add this entry, then upload to the server:
+          <div class="cl-code" id="cl_snippet"><?= htmlspecialchars($bldSnippet) ?><button class="cl-copy" onclick="copyCode('cl_snippet')">Copy</button></div>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,1)"> Done</label>
       </div>
     </li>
 
-    <!-- Step 2: MySQL database -->
+    <!-- Step 2: cPanel subdomain -->
     <li>
       <div class="cl-num">2</div>
       <div class="cl-body">
-        <div class="cl-title">Import Resident Data into MySQL</div>
+        <div class="cl-title">Create the Subdomain in cPanel</div>
         <div class="cl-steps">
-          Resident data lives in the MySQL database, not in a Google Sheet. Use the one-time import tool:<br><br>
-          <strong>Option A — Import from existing Google Sheet (existing associations):</strong>
+          In cPanel &rarr; Domains &rarr; Create a subdomain:
           <ol>
-            <li>Upload <code>import-sheet-to-db.php</code> to the server if not already there</li>
-            <li>Visit: <code>https://sheepsite.com/Scripts/import-sheet-to-db.php?building=<span id="cl_key_db"></span></code></li>
-            <li>This reads the sheet&rsquo;s Database and CarDB tabs and inserts all rows into MySQL</li>
-            <li>It is idempotent &mdash; safe to run multiple times; duplicate names are skipped</li>
+            <li>Subdomain: <strong><?= htmlspecialchars($provKey) ?></strong>, Domain: sheepsite.com</li>
+            <li>Document root: leave as default (e.g. <code>/home/account/<?= htmlspecialchars(strtolower($provKey)) ?>.sheepsite.com</code>)</li>
+            <li>For a custom domain: point its DNS A record to the server IP, then set the document root accordingly</li>
           </ol>
-          <strong>Option B — Enter data directly (new associations):</strong>
-          <ol>
-            <li>Set up the admin account first (Step 3), then log in</li>
-            <li>Use <strong>Manage Residents</strong> &rarr; <strong>Add Resident</strong> to enter each resident manually</li>
-          </ol>
-          <div class="cl-note"><strong>Note:</strong> The President&rsquo;s record (with <em>board_role = President</em> and a valid email) must exist in the database before the admin password reset will work. Enter the President first if using Option B.</div>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,2)"> Done</label>
       </div>
     </li>
 
-    <!-- Step 3: Admin account -->
+    <!-- Step 3: index.php -->
     <li>
       <div class="cl-num">3</div>
       <div class="cl-body">
-        <div class="cl-title">Set Up the Admin Account</div>
+        <div class="cl-title">Upload index.php to the Subdomain Root</div>
         <div class="cl-steps">
-          Visit the admin page for the new association &mdash; it will redirect automatically to the password reset flow:
-          <div class="cl-code" id="cl_admin_url">https://sheepsite.com/Scripts/admin.php?building=BuildingKey<button class="cl-copy" onclick="copyCode('cl_admin_url')">Copy</button></div>
-          <ol>
-            <li>Enter the <strong>President&rsquo;s unit number</strong> as the secret verification</li>
-            <li>A temporary password is emailed to the President (looked up from the MySQL database by <em>board_role = President</em>)</li>
-            <li>Log in with the temporary password &mdash; you will be prompted to set a permanent one immediately</li>
-          </ol>
-          <div class="cl-note"><strong>Note:</strong> If the President&rsquo;s record is not yet in MySQL, use the master password as a fallback to log in and set the admin password manually.</div>
+          Create a file named <code>index.php</code> in the subdomain document root with this content:
+          <div class="cl-code" id="cl_index"><?= htmlspecialchars($indexPhp) ?><button class="cl-copy" onclick="copyCode('cl_index')">Copy</button></div>
+          <div class="cl-note">Adjust the <code>require</code> path if your Scripts folder is at a different location.</div>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,3)"> Done</label>
       </div>
     </li>
 
-    <!-- Step 4: Create web accounts -->
+    <!-- Step 4: Hand off to admin -->
     <li>
       <div class="cl-num">4</div>
       <div class="cl-body">
-        <div class="cl-title">Create Resident Web Accounts</div>
+        <div class="cl-title">Hand Off to the Association Admin</div>
         <div class="cl-steps">
+          Send the admin the following URL and credentials. Their first login will force a password change and prompt them to set their email address.
+          <div class="cl-code" id="cl_admin_url"><?= htmlspecialchars($adminUrl) ?><button class="cl-copy" onclick="copyCode('cl_admin_url')">Copy</button></div>
+          <strong>Default credentials:</strong> username <code>admin</code> / password <code>admin</code><br>
+          The admin should immediately:
           <ol>
-            <li>Log in to the Admin Dashboard for the new association</li>
-            <li>Click <strong>Manage Users</strong> &rarr; <strong>Sync Now</strong></li>
-            <li>Sync compares the MySQL database against existing web accounts and lists everyone missing an account</li>
-            <li>Check all residents &rarr; click <strong>Recreate Checked</strong> &mdash; accounts are created with a temporary password and a welcome email is sent automatically to each resident&rsquo;s email address on file</li>
-            <li>For any resident without an email on file, use <strong>Add/Reset User</strong> to set a password manually and distribute it yourself</li>
+            <li>Set a strong password (required on first login)</li>
+            <li>Set their email address in <strong>Settings &rarr; Admin Accounts</strong></li>
+            <li>Fill in Building Settings (site URL, contact email, renewal date)</li>
+            <li>Upload documents to the public/private folders via <strong>File Management</strong></li>
+            <li>Run Woolsy setup once documents are in place</li>
+            <li>Add residents via <strong>Manage Residents</strong> and create their web accounts via <strong>Manage Users</strong></li>
           </ol>
         </div>
         <label class="cl-check"><input type="checkbox" onchange="clCheck(this,4)"> Done</label>
-      </div>
-    </li>
-
-    <!-- Step 5: Website -->
-    <li>
-      <div class="cl-num">5</div>
-      <div class="cl-body">
-        <div class="cl-title">Configure the Building Website</div>
-        <div class="cl-steps">
-          The building website is a PHP site hosted on the association&rsquo;s own server (not Website Builder).
-          See <code>NEW-SITE-GUIDE.md</code> in the repo for the full setup walkthrough. Key steps:<br><br>
-          <ol>
-            <li>Upload all site PHP files to the association&rsquo;s server</li>
-            <li>Add the footer script to every page. The only value that changes per building is <code>BUILDING_NAME</code>:
-              <div class="cl-code" id="cl_footer_script">Fill in building key above to generate script.<button class="cl-copy" onclick="copyCode('cl_footer_script')">Copy</button></div>
-            </li>
-            <li>Verify public and private folder links, resident login, password reset, and reports all work</li>
-          </ol>
-        </div>
-        <label class="cl-check"><input type="checkbox" onchange="clCheck(this,5)"> Done</label>
       </div>
     </li>
 
@@ -556,68 +661,9 @@ if (!$isNew) {
 </div>
 
 <script>
-function nbUpdate() {
-  var key = document.getElementById('nb_key').value.trim();
-  document.getElementById('nb_create_btn').disabled = !key;
-  updateChecklist();
-}
-
-function showChecklist() {
-  updateChecklist();
-  document.getElementById('nb_checklist').style.display = '';
-  document.getElementById('nb_checklist').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function updateChecklist() {
-  var key       = document.getElementById('nb_key').value.trim();
-  var state     = document.getElementById('nb_state').value.trim() || 'FL';
-  var community = document.getElementById('nb_community').value.trim();
-
-  // Step 1 snippet
-  if (key) {
-    var lines = ["  '" + key + "' => [",
-                 "    'state'     => '" + state + "',"];
-    if (community) lines.push("    'community' => '" + community + "',");
-    lines.push("  ],");
-    var snip = document.getElementById('cl_snippet');
-    var btn  = snip.querySelector('.cl-copy');
-    snip.textContent = lines.join('\n');
-    snip.appendChild(btn);
-  }
-
-  // Step 1 credentials path
-  var cp = document.getElementById('cl_creds_path');
-  var cpBtn = cp.querySelector('.cl-copy');
-  cp.textContent = key ? 'credentials/' + key + '.json' : 'credentials/BuildingKey.json';
-  cp.appendChild(cpBtn);
-
-  // Step 2 DB import URL
-  var dbKeyEl = document.getElementById('cl_key_db');
-  if (dbKeyEl) dbKeyEl.textContent = key || 'BuildingKey';
-
-  // Step 3 admin URL
-  var au = document.getElementById('cl_admin_url');
-  var auBtn = au.querySelector('.cl-copy');
-  au.textContent = key ? 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(key) : 'https://sheepsite.com/Scripts/admin.php?building=BuildingKey';
-  au.appendChild(auBtn);
-
-  // Step 5 footer script
-  var fs = document.getElementById('cl_footer_script');
-  var fsBtn = fs.querySelector('.cl-copy');
-  fs.textContent = key ? generateFooterScript(key) : 'Fill in building key above to generate script.';
-  fs.appendChild(fsBtn);
-}
-
-function generateFooterScript(key) {
-  return "<script>\nconst BUILDING_NAME = '" + key + "';\n\ndocument.addEventListener('DOMContentLoaded', function () {\n  const PUBLIC_URL  = 'https://sheepsite.com/Scripts/display-public-dir.php';\n  const PRIVATE_URL = 'https://sheepsite.com/Scripts/display-private-dir.php';\n\n  document.querySelectorAll('.gdrive-link').forEach(function (btn) {\n    var url = PUBLIC_URL + '?building=' + encodeURIComponent(BUILDING_NAME);\n    var subdir = btn.getAttribute('data-subdir');\n    if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n    url += '&return=' + encodeURIComponent(window.location.href);\n    btn.href = url;\n  });\n\n  document.querySelectorAll('iframe[data-script=\"protected-report\"]').forEach(function (iframe) {\n    var url = 'https://sheepsite.com/Scripts/protected-report.php?building=' + encodeURIComponent(BUILDING_NAME);\n    var page = iframe.getAttribute('data-page');\n    if (page) url += '&page=' + encodeURIComponent(page);\n    iframe.onload = function () { var l = document.getElementById('doc-loader'); if (l) l.style.display='none'; };\n    iframe.src = url;\n  });\n\n  document.querySelectorAll('iframe[data-script=\"public-report\"]').forEach(function (iframe) {\n    var url = 'https://sheepsite.com/Scripts/public-report.php?building=' + encodeURIComponent(BUILDING_NAME);\n    var page = iframe.getAttribute('data-page');\n    if (page) url += '&page=' + encodeURIComponent(page);\n    url += '&nav=0';\n    iframe.onload = function () { var l = document.getElementById('doc-loader'); if (l) l.style.display='none'; };\n    iframe.src = url;\n  });\n\n  document.querySelectorAll('iframe[data-script=\"get-doc-byname\"]').forEach(function (iframe) {\n    var url = 'https://sheepsite.com/Scripts/get-doc-byname.php?building=' + encodeURIComponent(BUILDING_NAME);\n    var subdir = iframe.getAttribute('data-subdir');\n    var filename = iframe.getAttribute('data-filename');\n    if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n    if (filename) url += '&filename=' + encodeURIComponent(filename);\n    iframe.style.display = 'none';\n    iframe.onload = function () { iframe.style.display='block'; var l=document.getElementById('doc-loader'); if(l) l.style.display='none'; };\n    iframe.src = url;\n  });\n\n  document.querySelectorAll('a[href*=\"admin.php\"]').forEach(function (link) {\n    link.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);\n  });\n});\n\nfunction openFolder(subdir) {\n  var url = 'https://sheepsite.com/Scripts/display-public-dir.php?building=' + encodeURIComponent(BUILDING_NAME) + '&return=' + encodeURIComponent(window.location.href);\n  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n  window.location.href = url;\n}\nfunction openPrivateFolder(subdir) {\n  var url = 'https://sheepsite.com/Scripts/display-private-dir.php?building=' + encodeURIComponent(BUILDING_NAME) + '&return=' + encodeURIComponent(window.location.href);\n  if (subdir) url += '&path=' + encodeURIComponent(subdir);\n  window.location.href = url;\n}\nfunction openReport(page) {\n  window.location.href = 'https://sheepsite.com/Scripts/protected-report.php?building=' + encodeURIComponent(BUILDING_NAME) + '&page=' + encodeURIComponent(page) + '&return=' + encodeURIComponent(window.location.href);\n}\nfunction openPublicReport(page) {\n  window.location.href = 'https://sheepsite.com/Scripts/public-report.php?building=' + encodeURIComponent(BUILDING_NAME) + '&page=' + encodeURIComponent(page);\n}\nfunction openAdmin() {\n  window.location.href = 'https://sheepsite.com/Scripts/admin.php?building=' + encodeURIComponent(BUILDING_NAME);\n}\nfunction openDoc(subdir, filename) {\n  var url = 'https://sheepsite.com/Scripts/get-doc-byname.php?building=' + encodeURIComponent(BUILDING_NAME) + '&filename=' + encodeURIComponent(filename);\n  if (subdir) url += '&subdir=' + encodeURIComponent(subdir);\n  window.open(url, '_blank');\n}\n<\/script>";
-}
-
 function clCheck(cb, num) {
   var el = document.querySelector('.checklist li:nth-child(' + num + ') .cl-num');
-  if (el) {
-    el.classList.toggle('done', cb.checked);
-    el.textContent = cb.checked ? '\u2713' : num;
-  }
+  if (el) { el.classList.toggle('done', cb.checked); el.textContent = cb.checked ? '\u2713' : num; }
 }
 
 function copyCode(id) {
@@ -636,6 +682,8 @@ function esc(s) {
 }
 
 </script>
+
+<?php endif; // !provisioned ?>
 
 <?php else: ?>
 <!-- ===================== EXISTING BUILDING ===================== -->
