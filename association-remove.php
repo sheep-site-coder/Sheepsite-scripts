@@ -109,6 +109,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $deleted[] = 'MySQL: ERROR — ' . $e->getMessage();
     }
 
+    // Delete all R2 objects under this building's prefix
+    require_once __DIR__ . '/storage/r2-storage.php';
+    $r2cfg     = _r2Cfg();
+    $r2deleted = 0;
+    $r2errors  = [];
+    $r2token   = null;
+    do {
+      $q = ['list-type' => '2', 'prefix' => $key . '/', 'max-keys' => '1000'];
+      if ($r2token) $q['continuation-token'] = $r2token;
+      [$listStatus, $body] = _r2Request('GET', '/' . $r2cfg['bucket'], $q);
+      if ($listStatus !== 200) { $r2errors[] = 'R2 list failed (HTTP ' . $listStatus . ')'; break; }
+      $sx = @simplexml_load_string($body);
+      if (!$sx) { $r2errors[] = 'R2 list parse failed'; break; }
+      foreach ($sx->Contents as $obj) {
+        $objKey = (string)$obj->Key;
+        [$dStatus, ] = _r2Request('DELETE', '/' . $r2cfg['bucket'] . '/' . ltrim($objKey, '/'));
+        if ($dStatus === 204 || $dStatus === 200) { $r2deleted++; }
+        else { $r2errors[] = $objKey; }
+      }
+      $r2token = (string)($sx->NextContinuationToken ?? '');
+    } while ($r2token !== '');
+
+    if (empty($r2errors)) {
+      $deleted[] = "R2: $r2deleted file(s) deleted";
+    } else {
+      $deleted[] = "R2: $r2deleted deleted, " . count($r2errors) . " failed — check R2 dashboard to clean up manually";
+    }
+
     $removed = $key;
     $message = count($deleted) . ' item(s) removed.';
     $msgType = 'ok';
@@ -186,21 +214,10 @@ $buildingKeys = array_keys($buildings);
   <h2 style="margin:0 0 1rem;font-size:1rem;">Removal complete for: <strong><?= htmlspecialchars($removed) ?></strong></h2>
   <p style="font-size:0.9rem;color:#555;margin:0 0 1.25rem;">Server files and database records have been deleted. Complete the following manual steps:</p>
 
-  <p style="font-size:0.85rem;font-weight:bold;margin:0 0 0.4rem;">1. Remove from buildings.php</p>
-  <p style="font-size:0.85rem;color:#555;margin:0 0 0.4rem;">Delete the following block from <code>buildings.php</code> on the server:</p>
+  <p style="font-size:0.85rem;font-weight:bold;margin:0 0 0.4rem;">One remaining manual step</p>
+  <p style="font-size:0.85rem;color:#555;margin:0 0 0.4rem;">Delete the following block from <code>buildings.php</code> on the server and re-upload it:</p>
   <div class="snippet" id="snippet-buildings"><?= "  '" . htmlspecialchars($removed) . "' => [\n    // ... remove this entire entry\n  ]," ?></div>
-
-  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">2. Remove Google Drive folders</p>
-  <p style="font-size:0.85rem;color:#555;margin:0 0 0.75rem;">
-    Log in to the SheepSite Google account and trash the association folder manually:<br>
-    <strong>Association Folders / <?= htmlspecialchars($removed) ?>/</strong>
-  </p>
-
-  <p style="font-size:0.85rem;font-weight:bold;margin:1rem 0 0.4rem;">3. Remove the Google Sheet (optional)</p>
-  <p style="font-size:0.85rem;color:#555;margin:0;">
-    The <strong><?= htmlspecialchars($removed) ?> Owner DB</strong> sheet is no longer used operationally.
-    You may keep it as an archive or trash it from Google Drive.
-  </p>
+  <p style="font-size:0.85rem;color:#555;margin:0.5rem 0 0;">All server files, R2 storage, and database records have already been deleted automatically.</p>
 </div>
 
 <?php else: ?>
@@ -208,8 +225,9 @@ $buildingKeys = array_keys($buildings);
 
 <div class="notice">
   <strong>What this tool does</strong>
-  Deletes all server-side files (credentials, config, tags, Woolsy data) and all MySQL database records for the selected association.
-  Google Drive folders must be removed manually — this tool will remind you after deletion.
+  Deletes all server-side files (credentials, config, tags, Woolsy data), all MySQL database records,
+  and all R2 files under the association's storage prefix.
+  The only manual step remaining after deletion is removing the entry from <code>buildings.php</code>.
 </div>
 
 <div class="card">
@@ -265,6 +283,8 @@ var filesByBuilding = <?php
       'faqs/woolsy_credits.json (entry)',
       'faqs/woolsy_usage.json (entry)',
       'credentials/login_stats.json (entry)',
+      'R2: all files under ' . $k . '/ (public + private)',
+      'MySQL: all rows in residents/car_db/unit_info/emergency/res_requests',
     ];
     $map[$k] = $files;
   }

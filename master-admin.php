@@ -432,14 +432,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     </div>
   </a>
 
-  <a href="migrate-to-r2.php" class="tool-card">
-    <div class="tool-icon">☁️</div>
-    <div>
-      <div class="tool-title">Migrate to R2</div>
-      <div class="tool-desc">Copy building files from Google Drive to Cloudflare R2.</div>
-    </div>
-  </a>
-
   <a href="docs/Sheepsite-Architecture.html" target="_blank" class="tool-card">
     <div class="tool-icon">🏗️</div>
     <div>
@@ -452,7 +444,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     <div class="tool-icon">➕</div>
     <div>
       <div class="tool-title">Add New Association</div>
-      <div class="tool-desc">Create Drive folders, configure server and database, generate setup checklist.</div>
+      <div class="tool-desc">Configure server files and MySQL database, generate a step-by-step setup checklist.</div>
     </div>
   </a>
 
@@ -460,7 +452,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     <div class="tool-icon">➖</div>
     <div>
       <div class="tool-title">Remove Association</div>
-      <div class="tool-desc">Delete server files and database records for a decommissioned association.</div>
+      <div class="tool-desc">Delete server files, R2 storage, and database records for a decommissioned association.</div>
     </div>
   </a>
 

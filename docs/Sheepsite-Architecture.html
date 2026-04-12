@@ -44,14 +44,14 @@
 <body>
 
 <h1>🐑 SheepSite — Architecture Manual</h1>
-<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated April 2026</div>
+<div class="subtitle">Technical reference for developers and the SheepSite operator &mdash; last updated April 2026 (R2 migration complete)</div>
 
 <nav>
 <ol class="toc">
   <li><a href="#overview">System Overview</a></li>
   <li><a href="#actors">Actors &amp; Roles</a></li>
   <li><a href="#topology">Deployment Topology</a></li>
-  <li><a href="#gas">Google Apps Script Layer &mdash; Drive Only</a></li>
+  <li><a href="#gas">R2 File Storage Architecture</a></li>
   <li><a href="#mysql">MySQL Resident Database</a></li>
   <li><a href="#files">File Inventory</a></li>
   <li><a href="#auth">Authentication Architecture</a></li>
@@ -69,7 +69,7 @@
 
 <p>SheepSite is a multi-building condominium website platform. It provides each building with:</p>
 <ul>
-  <li>Public and private Google Drive folder browsers</li>
+  <li>Public and private file browsers (Cloudflare R2)</li>
   <li>Resident login with per-building credential management</li>
   <li>Resident database with reports (elevator, parking, resident, board) served from MySQL</li>
   <li>Woolsy &mdash; an AI chatbot that answers resident questions from the building&rsquo;s governing documents</li>
@@ -81,8 +81,9 @@
 are served as subdomains of sheepsite.com (e.g., <code>LyndhurstH.sheepsite.com</code>) using a shared PHP
 template &mdash; <code>building-site.php</code> &mdash; with per-building configuration stored in
 <code>config/{building}.json</code>. Each subdomain&rsquo;s <code>index.php</code> simply defines the
-<code>BUILDING</code> constant and requires the shared template. Google Drive access is handled by a Google Apps Script web app &mdash; PHP never calls Google APIs
-directly (see <a href="#gas">Section 4</a> for why). Resident data, reports, and email are handled
+<code>BUILDING</code> constant and requires the shared template. File storage is handled by Cloudflare R2 via
+presigned PUT/GET URLs &mdash; PHP generates signed URLs and the browser uploads/downloads directly to R2
+(see <a href="#gas">Section 4</a>). Resident data, reports, and email are handled
 by PHP + MySQL (see <a href="#mysql">Section 5</a>).</p>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -101,16 +102,16 @@ by PHP + MySQL (see <a href="#mysql">Section 5</a>).</p>
 
 <div class="role-card">
   <h4>&#x1F3E2; Building Admin (President / Property Manager)</h4>
-  <p>Manages one building. Adds/removes resident accounts, imports owners from the Google Sheet,
-  handles password resets, monitors Drive storage, and manages the Woolsy knowledge base.</p>
+  <p>Manages one building. Adds/removes resident accounts, imports owners from the MySQL database,
+  handles password resets, monitors R2 storage, and manages the Woolsy knowledge base.</p>
   <p><strong>Entry point:</strong> <code>admin.php?building=X</code> &mdash; authenticated with
   <code>credentials/{building}_admin.json</code>. Session key: <code>manage_auth_{building}</code>.</p>
-  <p><strong>Sub-pages:</strong> manage-users.php, storage-report.php, woolsy-update.php, woolsy-admin.php</p>
+  <p><strong>Sub-pages:</strong> manage-users.php, storage-report.php, woolsy-update.php, woolsy-manage.php</p>
 </div>
 
 <div class="role-card">
   <h4>&#x1F3E0; Resident (Owner)</h4>
-  <p>Logs into the private area of their building&rsquo;s site to browse private Drive files,
+  <p>Logs into the private area of their building&rsquo;s site to browse private files (served from R2),
   view protected reports (elevator, parking, resident lists), chat with Woolsy, and change their password.</p>
   <p><strong>Entry point:</strong> <code>display-private-dir.php?building=X</code> &mdash; authenticated
   against <code>credentials/{building}.json</code>. Session key: <code>private_auth_{building}</code>.</p>
@@ -118,7 +119,7 @@ by PHP + MySQL (see <a href="#mysql">Section 5</a>).</p>
 
 <div class="role-card">
   <h4>&#x1F464; Public Visitor</h4>
-  <p>No login required. Can browse the public Drive folder, view public reports (board of directors),
+  <p>No login required. Can browse the public file folder (served from R2), view public reports (board of directors),
   and interact with the public Woolsy widget (deflections only &mdash; no AI cost).</p>
 </div>
 
@@ -129,21 +130,18 @@ by PHP + MySQL (see <a href="#mysql">Section 5</a>).</p>
 <h3>Server: sheepsite.com (cPanel / shared hosting)</h3>
 <table>
   <tr><th>Path</th><th>Contents</th></tr>
-  <tr><td><code>/sheepsite.com/Scripts/</code></td><td>All PHP scripts, JS files, and GAS reference files</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/</code></td><td>All PHP scripts, JS files, and reference files</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/credentials/</code></td><td>Per-building JSON credential files (not in git, writable by PHP)</td></tr>
-  <tr><td><code>/sheepsite.com/Scripts/cache/</code></td><td>Server-side Drive listing cache (not in git, writable by PHP). JSON files named <code>{prefix}_{building}_{md5(path)}.json</code>. Busted by admin writes; pre-populated by warm-cache.php.</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/faqs/</code></td><td>Woolsy knowledge base files, document indexes, credit balances</td></tr>
   <tr><td><code>/sheepsite.com/Scripts/docs/</code></td><td>Admin manual (<code>Sheepsite-Admin-Manual.html</code>), Resident manual (<code>Sheepsite-Resident-Manual.html</code>), Architecture manual. Built from <code>build-manual.py</code>, <code>build-resident.py</code>, <code>build-architecture.py</code> respectively. Manuals embed all images as base64. Resident manual linked from my-account.php and from the marketing get-started page.</td></tr>
-  <tr><td><code>/sheepsite.com/Scripts/sheets/</code></td><td>Google Apps Script source files (for reference; deployed via Google)</td></tr>
+  <tr><td><code>/sheepsite.com/Scripts/sheets/</code></td><td>Decommissioned Google Apps Script source files (retained for reference)</td></tr>
 </table>
 
-<h3>Google (Alain&rsquo;s account)</h3>
+<h3>Cloudflare R2 (file storage)</h3>
 <table>
   <tr><th>Where</th><th>What</th></tr>
-  <tr><td>Apps Script project: <em>dir-display-bridge</em></td><td>Drive browser web app &mdash; handles file listing, downloads, storage reports, Woolsy doc extraction, doc index building. <strong>Active for all buildings.</strong></td></tr>
-  <tr><td>Apps Script project: <em>building-script.gs</em> (one per building)</td><td>Per-building Sheets web app. <strong>Decommissioned &mdash; no longer called by PHP.</strong> Can be left in place or removed; triggers should be disabled.</td></tr>
-  <tr><td>Google Drive (one folder set per building)</td><td>Public folder tree (IncorporationDocs, RulesDocs, Forms, etc.) and Private folder tree (Financials, etc.)</td></tr>
-  <tr><td>Google Sheets (one per building)</td><td>Used only for the initial one-time data import into MySQL. After import the Sheet is no longer a data source.</td></tr>
+  <tr><td>R2 bucket (one shared bucket)</td><td>All building file storage. Objects keyed by <code>{building}/{tree}/{path/filename}</code>. Public tree (<code>public/</code>) and private tree (<code>private/</code>) are path-prefixed within the building's namespace.</td></tr>
+  <tr><td>CORS policy</td><td>Must list every origin that uploads directly (e.g. <code>sheepsite.com</code>, <code>LyndhurstH.sheepsite.com</code>, <code>LyndhurstI.sheepsite.com</code>, etc.). Browser PUT requests will be rejected by R2 CORS if the origin is not listed.</td></tr>
 </table>
 
 <h3>Building Websites (subdomains of sheepsite.com)</h3>
@@ -162,88 +160,75 @@ portal all operate with the same session.</p>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
 
-<h2 id="gas">4. Google Apps Script Layer &mdash; Drive Only</h2>
+<h2 id="gas">4. R2 File Storage Architecture</h2>
 
-<h3>Scope</h3>
-<p>Google Apps Script (GAS) is now used <strong>only for Google Drive access</strong> &mdash; file browsing,
-downloads, storage reports, and Woolsy document extraction. Resident data, reports (elevator, parking,
-resident, board), password reset emails, and owner import are all handled by PHP + MySQL
-(see <a href="#mysql">Section 5</a>). The <code>building-script.gs</code> per-building Sheets web app and
-its associated library functions are no longer called by PHP for DB-mode buildings.</p>
+<h3>Overview</h3>
+<p>All building file storage uses Cloudflare R2. PHP never proxies file data — uploads go directly from the
+browser to R2 via presigned PUT URLs, and downloads go directly from R2 via presigned GET URLs. PHP only
+generates and validates the signed URLs.</p>
 
-<h3>The Problem: PHP Cannot Call Google Drive Directly</h3>
-<p>Google Drive API requires OAuth 2.0 authentication. On shared hosting (cPanel), there is no
-practical way to run a service account or manage OAuth refresh tokens securely &mdash; private key
-files on a shared server are a security risk, and the OAuth flow is complex to maintain.</p>
-
-<h3>The Solution: Google Apps Script as a Proxy</h3>
-<p>A Google Apps Script project deployed as a web app runs <em>as Alain&rsquo;s Google account</em>.
-It has Drive access by virtue of being owned by the account that owns those files.
-PHP calls the web app via a simple HTTPS GET request &mdash; no OAuth, no credentials, no Google SDK.</p>
-
-<pre>Building Site (browser)
+<h3>Presigned Upload Flow (Browser → R2 Direct)</h3>
+<pre>Admin Browser
        |
-       | HTTP request
+       | 1. POST file-manager.php?json=presign_upload (filename, path)
        v
-PHP Script (sheepsite.com/Scripts/)
+PHP (file-manager.php / storage/r2-storage.php)
+       |  signs URL with AWS SigV4 (Content-Type, Content-Length, Host)
+       | 2. returns {url, headers} — no file data touches PHP
+       v
+Admin Browser
        |
-       | HTTPS GET with SECRET_TOKEN
+       | 3. XHR PUT directly to R2 presigned URL (timeout: 2 hours)
        v
-Google Apps Script Web App (deployed .../exec)
-       |
-       | DriveApp / SpreadsheetApp / DocumentApp
-       v
-Google Drive / Sheets / Docs</pre>
+Cloudflare R2</pre>
 
-<p>A <code>SECRET_TOKEN</code> in both the PHP script and the GAS project authenticates requests
-so the web app endpoint is not open to the public.</p>
+<p>The signed URL encodes the exact object key, content type, and content length. R2 enforces all three.
+PHP never sees the file bytes — files of any size (tested to 434 MB) upload reliably without PHP memory limits.</p>
 
-<h3>Drive Browser Web App: dir-display-bridge.gs</h3>
-<p>Single deployed web app. Dispatches on the <code>action</code> parameter:</p>
+<h3>presigned GET (Download)</h3>
+<p>Download links are presigned GET URLs generated by <code>_r2PresignedUrl()</code> in
+<code>storage/r2-storage.php</code>. Public-tree files can optionally be served publicly
+(no signature required) if the R2 bucket has public access enabled for the public prefix.
+Private-tree files always require a presigned URL.</p>
+
+<h3>Object Key Convention</h3>
 <table>
-  <tr><th>Action</th><th>What it does</th></tr>
-  <tr><td><code>list</code></td><td>Lists files in a public folder (for display-public-dir.php)</td></tr>
-  <tr><td><code>listPrivate</code></td><td>Lists files in a private folder (for display-private-dir.php)</td></tr>
-  <tr><td><code>download</code></td><td>Returns a temporary download URL for a file</td></tr>
-  <tr><td><code>storageReport</code></td><td>Returns storage usage breakdown by subfolder (for storage-report.php)</td></tr>
-  <tr><td><code>docCheckResult</code></td><td>Returns cached result of last doc change scan (for admin card)</td></tr>
-  <tr><td><code>docCheck</code></td><td>Runs an on-demand scan of RulesDocs/IncorporationDocs/Forms folders</td></tr>
-  <tr><td><code>listDocFiles</code></td><td>Lists all readable PDF files for Woolsy update probing</td></tr>
-  <tr><td><code>extractDocText</code></td><td>Extracts text from a PDF via Drive OCR (copy + convert to Doc + read)</td></tr>
-  <tr><td><code>stampBaseline</code></td><td>Records current Drive state as baseline after Woolsy update</td></tr>
-  <tr><td><code>buildDocIndex</code></td><td>Recursively walks the public folder tree and returns all file names</td></tr>
+  <tr><th>Tree</th><th>Key pattern</th><th>Example</th></tr>
+  <tr><td>Public</td><td><code>{building}/public/{subfolder}/{filename}</code></td><td><code>LyndhurstH/public/Forms/ParkingForm.pdf</code></td></tr>
+  <tr><td>Private</td><td><code>{building}/private/{subfolder}/{filename}</code></td><td><code>LyndhurstH/private/Financials/Budget2025.pdf</code></td></tr>
 </table>
-<p>A time-driven trigger runs <code>checkAllBuildings()</code> weekly to scan all buildings for
-doc changes and cache results in Script Properties. A <code>keepWarm()</code> trigger fires every
-few minutes to prevent cold starts on the web app.</p>
 
-<h3>Server-Side Listing Cache</h3>
-<p>GAS listing calls add 2&ndash;8 seconds per folder. To eliminate this for repeat visits, all folder listing responses are cached on the server filesystem in <code>cache/</code>:</p>
-<pre>Browser
-  |
-  v
-PHP (?json endpoint)
-  |-- cache HIT  → return JSON from cache/ instantly (milliseconds)
-  |
-  `-- cache MISS → call GAS → store in cache/ → return JSON
-                                    |
-                         next visitor: cache HIT</pre>
+<h3>Core R2 PHP Library</h3>
 <table>
-  <tr><th>Cache prefix</th><th>Used by</th><th>GAS action</th></tr>
-  <tr><td><code>pub</code></td><td>display-public-dir.php</td><td><code>list</code></td></tr>
-  <tr><td><code>priv</code></td><td>display-private-dir.php</td><td><code>listPrivate</code></td></tr>
-  <tr><td><code>adm</code></td><td>file-manager.php</td><td><code>listAdmin</code></td></tr>
+  <tr><th>File</th><th>Key functions</th></tr>
+  <tr><td><code>storage/r2-storage.php</code></td><td><code>_r2Cfg()</code> — reads <code>credentials/r2.json</code> for endpoint, bucket, access key, secret. <code>_r2Request(method, path, query, body, headers)</code> — signs and executes any R2 API call. <code>_r2PresignedUrl(key, expires)</code> — signs a GET URL. <code>_r2PresignedPutUrl(key, size, contentType, expires)</code> — signs a PUT URL. <code>_r2SumBytes(building)</code> — lists all objects under <code>{building}/</code> and sums sizes. <code>_r2ListFolder(building, tree, path)</code> — lists one folder level for the file browser.</td></tr>
+  <tr><td><code>storage/storage.php</code></td><td>Dispatch layer. <code>stListFolder(building, tree, path)</code>, <code>stPresignedUploadUrl(building, tree, path, filename, size, type)</code>, <code>stPresignedDownloadUrl(building, tree, objectKey)</code>, <code>stDeleteObject(building, tree, objectKey)</code>, <code>stRenameObject(...)</code>, <code>stCreateFolder(...)</code>. All calls route to R2.</td></tr>
 </table>
-<p><strong>Cache invalidation:</strong> no TTL. Cache is busted explicitly when an admin writes to a folder (upload, delete, rename, folder create/delete/rename, quarantine publish). After busting, file-manager.php immediately fires a background <code>?json=warm</code> request to re-populate the <code>pub</code>/<code>priv</code> caches for that folder, so the next resident visitor still gets a cache hit.</p>
-<p><strong>Cold start:</strong> <code>warm-cache.php</code> pre-populates all caches for a building by BFS-walking both trees. Called automatically after new association creation; run manually once for existing buildings.</p>
-<p><strong>Admin is always the cache warmer</strong> &mdash; since only admins upload files, every admin write re-warms the affected folder. Residents are pure cache consumers and never trigger a GAS call.</p>
 
-<h3>Sheets Web App: building-script.gs &mdash; Decommissioned</h3>
-<div class="warn"><strong>No longer used.</strong> All report generation (elevator, parking, resident, board), owner
-import, and password reset emails are handled by PHP + MySQL. The per-building Sheets web app is not called
-by any PHP script. Triggers (<code>onEditHandler</code>, <code>runScheduledUpdate</code>) should be disabled
-in each building&rsquo;s Apps Script project. The Google Sheet itself is retained as an archive; it is not
-a live data source.</div>
+<h3>Credentials</h3>
+<p>R2 credentials live in <code>credentials/r2.json</code> (gitignored):</p>
+<pre>{"endpoint":"https://&lt;account&gt;.r2.cloudflarestorage.com","bucket":"sheepsite","accessKey":"...","secretKey":"..."}</pre>
+
+<h3>Storage Accounting</h3>
+<p>Per-building storage usage (<code>storageUsed</code>) is stored in <code>config/{building}.json</code>
+and refreshed by calling <code>_r2SumBytes()</code>, which lists all R2 objects under <code>{building}/</code>
+and sums their sizes. Refresh happens:</p>
+<ul>
+  <li><strong>On admin.php page load</strong> — a background AJAX call to <code>?action=refreshStorage</code> updates the config and returns fresh bytes. The storage display updates in-place without blocking the page render.</li>
+  <li><strong>Nightly cron</strong> — <code>storage-cron.php</code> refreshes all buildings and checks renewal dates.</li>
+  <li><strong>On upload</strong> — file-manager.php adds the uploaded file size to the running total immediately after a successful PUT.</li>
+</ul>
+
+<h3>CORS Policy</h3>
+<p>The R2 bucket CORS policy must list every origin from which browsers upload directly. This includes
+<code>sheepsite.com</code> and each building subdomain (<code>LyndhurstH.sheepsite.com</code>, etc.) as
+well as any custom domains. Uploads from unlisted origins will be rejected by R2 before reaching PHP.</p>
+
+<h3>Google Apps Script — Decommissioned</h3>
+<div class="warn"><strong>GAS is no longer used for any file operations.</strong> The <code>dir-display-bridge.gs</code>
+web app (Drive browser proxy) and all per-building <code>building-script.gs</code> projects are decommissioned.
+No PHP script calls any GAS endpoint. The <code>dir-display-bridge.gs</code> file is retained in the repo for
+reference only. Google Sheets are retained as archives; they are not live data sources.</div>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
 
@@ -310,9 +295,9 @@ present on the server (which they always are on the live site). All buildings op
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>display-public-dir.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Browsable public Google Drive folder. No auth. JSON endpoint (<code>?json</code>) checks server-side listing cache first; on miss, calls GAS <code>list</code> action and caches result indefinitely. Cache busted by admin write operations. Download links served via GAS download action.</td></tr>
+      <td>Browsable public R2 file browser. No auth. JSON endpoint (<code>?json</code>) lists R2 objects under the building's public prefix. Download links are presigned R2 GET URLs generated per request.</td></tr>
   <tr><td><code>display-private-dir.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Private Drive folder browser. Session-based resident login. <code>mustChange</code> flag forces password change on first login. JSON endpoint checks server-side listing cache first; on miss, calls GAS <code>listPrivate</code> and caches result. Cache busted by admin write operations.</td></tr>
+      <td>Private R2 file browser. Session-based resident login. <code>mustChange</code> flag forces password change on first login. JSON endpoint lists R2 objects under the building's private prefix. Download links are presigned R2 GET URLs.</td></tr>
   <tr><td><code>protected-report.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Resident-authenticated reports (elevator, parking, resident). Reuses <code>private_auth_{building}</code> session. Queries MySQL directly and renders inline HTML. Elevator report: server-side grouping by unit+last_name with first names joined (&ldquo;John &amp; Jane&rdquo;); two-column layout. Resident and Parking: JSON-embedded data for client-side JS sort.</td></tr>
   <tr><td><code>public-report.php</code> <span class="tag tag-php">PHP</span></td>
@@ -333,31 +318,31 @@ present on the server (which they always are on the live site). All buildings op
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building admin dashboard. Two-tab layout: <strong>Dashboard</strong> tab (all feature cards: Manage Residents/Owners, Manage User Accounts, File Management, Tag Management, Storage Report, Woolsy, Billing, User Manual) and <strong>Settings</strong> tab (Building Settings, Admin Accounts, Change Admin Password). Settings tab is auto-activated after any settings form POST. <strong>Admin Accounts section:</strong> inline table of all admins with email edit; Remove button (blocked for self and last admin); collapsible Add form with password show/hide toggle; new accounts receive a welcome email and are flagged mustChange. <strong>Assume Admin banner:</strong> shown when master admin has assumed this building via master-admin.php. Woolsy prompt version check. Requires <code>manage_auth_{building}</code> session (stores <code>{user, email}</code>).</td></tr>
+      <td>Building admin dashboard. Two-tab layout: <strong>Dashboard</strong> tab (all feature cards: Manage Residents/Owners, Manage User Accounts, File Management, Tag Management, Storage Report, Woolsy, Billing, User Manual) and <strong>Settings</strong> tab (Building Settings, Admin Accounts, Change Admin Password). Settings tab is auto-activated after any settings form POST. <strong>Admin Accounts section:</strong> inline table of all admins with email edit; Remove button (blocked for self and last admin); collapsible Add form with password show/hide toggle; new accounts receive a welcome email and are flagged mustChange. <strong>Assume Admin banner:</strong> shown when master admin has assumed this building via master-admin.php. Woolsy prompt version check. <strong>Woolsy card:</strong> shows remaining / allocated credits in real numbers. <strong>Storage auto-refresh:</strong> on page load, a background AJAX call to <code>?action=refreshStorage</code> fetches live R2 usage via <code>_r2SumBytes()</code>, saves to config, and updates the storage display in-place. Requires <code>manage_auth_{building}</code> session (stores <code>{user, email}</code>).</td></tr>
   <tr><td><code>manage-users.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Add, remove, and reset passwords for resident web login accounts. Import reads directly from MySQL; password reset emails sent via <code>sendTempPasswordEmail()</code>. Sync compares web accounts against MySQL residents in both directions. Supports building admin and master admin login.</td></tr>
   <tr><td><code>database-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Full in-site resident database editor (DB-mode only). Grouped by floor/unit; four tabs per unit: <strong>Residents</strong>, <strong>Unit Info</strong>, <strong>Vehicle &amp; Parking</strong>, <strong>Emergency</strong>. Add/edit/delete residents; bulk CSV import. Owner/Resident badges shown in blue. Unit panel always re-fetches on open (no stale cache). Pending Requests panel (badge count) to accept or reject change requests submitted via my-unit.php. Accepting a request creates the DB record, creates a web login, and sends a welcome email. Requires admin session.</td></tr>
   <tr><td><code>storage-report.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Shows Google Drive storage usage for Public and Private folders, broken down by subfolder. Calls dir-display-bridge.gs storageReport action. Requires admin session.</td></tr>
+      <td>Shows R2 storage usage for Public and Private folders, broken down by subfolder. Calls <code>_r2SumBytes()</code> / lists R2 objects per prefix. Requires admin session.</td></tr>
   <tr><td><code>woolsy-update.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Woolsy knowledge base setup/update UI. Probes PDFs for readability, estimates credits, calls Claude API to generate/regenerate rules.md, presents section-level delta checklist for admin review. Handles setup, update, and prompt-version-outdated rebuild modes.</td></tr>
-  <tr><td><code>woolsy-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Building-level Woolsy admin sub-page (accessible from admin.php Woolsy card).</td></tr>
+  <tr><td><code>woolsy-manage.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Building-level Woolsy management page (accessible from admin.php Woolsy card). Shows a credit usage bar (remaining / allocated) with a &ldquo;Buy Credits →&rdquo; button at the top that generates a billing token and redirects to billing.php. Below the bar: knowledge base status, document change detection, and training controls.</td></tr>
   <tr><td><code>master-admin.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage (with last-updated age and ↺ per-card refresh button), ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. Each card has: <strong>Manage →</strong> (goes to building-detail.php) and <strong>Assume Admin</strong> (POST sets <code>manage_auth_{building}</code> session as <code>_master</code> and redirects to admin.php; blue banner in admin.php with &ldquo;Release ×&rdquo; link clears the session). Storage AJAX handler calls dir-display-bridge.gs storageReport. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
+      <td>SheepSite operator dashboard. Per-building cards showing Woolsy credits, storage (with last-updated age and ↺ per-card refresh button), ToS status, renewal date, and SUSPENDED/RENEWAL DUE badges. Each card has: <strong>Manage →</strong> (goes to building-detail.php) and <strong>Assume Admin</strong> (POST sets <code>manage_auth_{building}</code> session as <code>_master</code> and redirects to admin.php; blue banner in admin.php with &ldquo;Release ×&rdquo; link clears the session). Storage AJAX handler calls <code>_r2SumBytes()</code> and saves to config. System Tools: Woolsy Overview, License Agreements, Pricing, Architecture Manual, Add New Association, Remove Association.</td></tr>
   <tr><td><code>building-detail.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate, discountPct), Woolsy credits, storage, ToS, and Billing (invoice preview, generate invoice, invoice history, mark paid). Also handles <code>?building=new</code> — automated Drive folder + Sheet creation via GAS, plus setup checklist.</td></tr>
+      <td>Per-association management page (master admin). Configuration (siteURL, contactEmail, renewalDate, discountPct), Woolsy credits, storage, ToS, and Billing (invoice preview, generate invoice, invoice history, mark paid). Also handles <code>?building=new</code> — generates a step-by-step setup checklist for configuring server files and MySQL database.</td></tr>
   <tr><td><code>association-remove.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Master admin tool to decommission an association. <strong>Automatic:</strong> deletes server-side files (credentials, config, tags, Woolsy entries) and all MySQL rows for the building across all five tables. Requires typing the building key to confirm. Shows manual checklist for the two remaining manual steps: remove from buildings.php, trash Drive folders.</td></tr>
+      <td>Master admin tool to decommission an association. <strong>Automatic:</strong> deletes server-side files (credentials, config, tags, Woolsy entries), all MySQL rows for the building across all five tables, and all R2 objects under the building's prefix (paginated deletion). Requires typing the building key to confirm. The only remaining manual step is removing the entry from <code>buildings.php</code>.</td></tr>
   <tr><td><code>suspension.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Shared suspension check. Included by all resident-facing pages after <code>$building</code> is validated. Reads <code>config/{building}.json</code>; auto-sets <code>suspended:true</code> if <code>renewalDate</code> has passed. Outputs a "Service Unavailable" page (or JSON error for API endpoints) and exits.</td></tr>
   <tr><td><code>file-manager.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Admin file management tool for Drive folders. Upload, rename, delete files; create/delete/rename subfolders; large-file quarantine flow. Folder listings cached in both <code>sessionStorage</code> (client, keyed by building+tree+path) and server-side cache (see <code>listing-cache.php</code>). On every write: busts both caches for the affected folder and fires <code>?json=warm</code> to re-populate the <code>pub</code>/<code>priv</code> resident caches in the background. Storage refresh deferred until after first listing loads.</td></tr>
-  <tr><td><code>listing-cache.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Server-side Drive listing cache helper. Stores GAS listing responses as JSON files in <code>cache/</code> keyed by prefix+building+md5(path). Three prefixes: <code>pub</code> (public browser), <code>priv</code> (private browser), <code>adm</code> (admin file manager). No TTL &mdash; cache is valid indefinitely and busted explicitly on admin writes via <code>lcBustFolder()</code>. Included by display-public-dir.php, display-private-dir.php, file-manager.php, and warm-cache.php.</td></tr>
-  <tr><td><code>warm-cache.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>One-shot cache warmer. BFS-walks the full public and private folder trees using curl_multi (parallel per level), caching every listing. Requires master admin session. Called automatically (fire-and-forget) from building-detail.php after new association Drive folders are created. Can also be triggered manually via the browser console for existing buildings: <code>fetch('warm-cache.php', {method:'POST', body: new URLSearchParams({building:'X'})}).then(r=&gt;r.json()).then(console.log)</code>.</td></tr>
+      <td>Admin file management tool for R2 storage. Upload (presigned PUT — browser uploads directly to R2), rename, delete files; create/delete/rename subfolders. Folder listings cached in <code>sessionStorage</code> (client-side, keyed by building+tree+path). Replace-file flow: fetches a presigned PUT for the exact existing object key and atomically overwrites in place. Storage limit enforced before issuing presigned URLs; billing threshold checked on block. XHR timeout: 2 hours (supports very large files).</td></tr>
+  <tr><td><code>storage/r2-storage.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Cloudflare R2 core library. AWS SigV4 signing, API requests, presigned URL generation, folder listing, storage sum. See Section 4 for function list.</td></tr>
+  <tr><td><code>storage/storage.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>Dispatch layer over R2. Provides a stable API (<code>stListFolder</code>, <code>stPresignedUploadUrl</code>, <code>stPresignedDownloadUrl</code>, <code>stDeleteObject</code>, <code>stRenameObject</code>, <code>stCreateFolder</code>) called by file-manager.php, display-public-dir.php, and display-private-dir.php.</td></tr>
   <tr><td><code>tag-admin.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Admin interface for tagging documents (search feature).</td></tr>
   <tr><td><code>search.php</code> <span class="tag tag-php">PHP</span></td>
@@ -379,7 +364,7 @@ present on the server (which they always are on the live site). All buildings op
   <tr><td><code>billing-success.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Post-payment Stripe landing page (cosmetic). Actual fulfilment happens in billing-webhook.php.</td></tr>
   <tr><td><code>storage-cron.php</code> <span class="tag tag-php">PHP</span></td>
-      <td>Nightly cron script. Refreshes Drive storage for every building (calls dir-display-bridge.gs storageReport, saves to config/{building}.json). Also checks each building&rsquo;s renewal date — if within 30 days and no unpaid invoice exists for that period, auto-generates and emails an invoice. Run via cPanel Cron Jobs (CLI) or HTTP trigger with token.</td></tr>
+      <td>Nightly cron script. Refreshes R2 storage for every building (calls <code>_r2SumBytes()</code>, saves to <code>config/{building}.json</code>). Also checks each building&rsquo;s renewal date — if within 30 days and no unpaid invoice exists for that period, auto-generates and emails an invoice. Run via cPanel Cron Jobs (CLI) or HTTP trigger with token.</td></tr>
 </table>
 
 <h3>Woolsy Chatbot Scripts</h3>
@@ -399,38 +384,23 @@ present on the server (which they always are on the live site). All buildings op
 <table>
   <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>buildings.php</code> <span class="tag tag-php">PHP</span></td>
-      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>publicFolderId</code>, <code>privateFolderId</code>, <code>webAppURL</code> (retained as empty string; not called by any PHP script), <code>state</code> (two-letter state code for Woolsy FAQ layer), <code>community</code> (optional community name for shared FAQ layer, e.g. <code>CVE</code>).</td></tr>
+      <td><strong>The only file to edit when adding a building.</strong> Returns an associative array keyed by building name. Each entry: <code>state</code> (two-letter state code for Woolsy FAQ layer), <code>community</code> (optional community name for shared FAQ layer, e.g. <code>CVE</code>). Drive folder IDs and GAS URLs have been removed.</td></tr>
   <tr><td><code>footer-for-sites.js</code> <span class="tag tag-js">JS</span></td>
       <td>Reference document (not served directly). Legacy reference for the footer script pattern. New buildings use <code>building-site.php</code> which embeds all helpers directly. Documents button/iframe HTML snippets and helper functions (<code>openFolder</code>, <code>openPrivateFolder</code>, <code>openAdmin</code>, etc.).</td></tr>
 </table>
 
-<h3>Google Apps Script Files</h3>
+<h3>Google Apps Script Files (all decommissioned)</h3>
+<div class="warn"><strong>All GAS files are decommissioned.</strong> No PHP script calls any GAS endpoint. Files are retained in the repo for reference only.</div>
 <table>
-  <tr><th>File</th><th>Where it lives</th><th>Description</th></tr>
+  <tr><th>File</th><th>Description</th></tr>
   <tr><td><code>dir-display-bridge.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>Standalone project, deployed as web app</td>
-      <td>Drive proxy. All Drive/Docs access from PHP routes through here. See Section 4. <strong>Still active for all buildings.</strong></td></tr>
+      <td><strong>Decommissioned.</strong> Was the Drive browser proxy for all file ops. Replaced by R2 (see Section 4). Retained as reference.</td></tr>
   <tr><td><code>sheets/building-script.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>Per-building project, bound to the building&rsquo;s Sheet</td>
-      <td><strong>Decommissioned.</strong> Not called by any PHP script. Triggers should be disabled. Retained for reference / archive.</td></tr>
-  <tr><td><code>sheets/board-list.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>DatabaseSheetMaster library</td>
-      <td><strong>Decommissioned.</strong> PHP renders Board report from MySQL in public-report.php.</td></tr>
-  <tr><td><code>sheets/elevator-list.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>DatabaseSheetMaster library</td>
-      <td><strong>Decommissioned.</strong> PHP renders Elevator report from MySQL in protected-report.php.</td></tr>
-  <tr><td><code>sheets/parking-list.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>DatabaseSheetMaster library</td>
-      <td><strong>Decommissioned.</strong> PHP renders Parking report from MySQL in protected-report.php.</td></tr>
-  <tr><td><code>sheets/resident-list.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>DatabaseSheetMaster library</td>
-      <td><strong>Decommissioned.</strong> PHP renders Resident List from MySQL in protected-report.php.</td></tr>
-  <tr><td><code>sheets/owner-import.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>DatabaseSheetMaster library</td>
-      <td><strong>Decommissioned.</strong> manage-users.php reads directly from MySQL.</td></tr>
-  <tr><td><code>sheets/reset-password.gs</code> <span class="tag tag-gs">GAS</span></td>
-      <td>DatabaseSheetMaster library</td>
-      <td><strong>Decommissioned.</strong> Password reset emails sent directly from PHP via <code>sendTempPasswordEmail()</code>.</td></tr>
+      <td><strong>Decommissioned.</strong> Per-building Sheets web app. Not called by any PHP script. Triggers should be disabled.</td></tr>
+  <tr><td><code>sheets/board-list.gs</code>, <code>elevator-list.gs</code>, <code>parking-list.gs</code>, <code>resident-list.gs</code></td>
+      <td><strong>Decommissioned.</strong> All reports now rendered from MySQL in protected-report.php / public-report.php.</td></tr>
+  <tr><td><code>sheets/owner-import.gs</code>, <code>sheets/reset-password.gs</code></td>
+      <td><strong>Decommissioned.</strong> manage-users.php reads from MySQL; password reset emails sent by PHP directly.</td></tr>
 </table>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -529,8 +499,8 @@ without any page reload.</p>
 <table>
   <tr><th>File</th><th>Description</th><th>Built by</th></tr>
   <tr><td><code>faqs/{building}_rules.md</code></td><td>Structured Markdown summary of governing documents. First line is a version stamp: <code>&lt;!-- woolsy_prompt_version: N --&gt;</code></td><td>woolsy-update.php (Claude API call)</td></tr>
-  <tr><td><code>faqs/{building}_docindex.txt</code></td><td>Flat list of all file names in the public Drive folder tree, grouped by subfolder. Tells Woolsy what documents and forms exist.</td><td>admin.php Build Index button, also auto-rebuilt after each rules save</td></tr>
-  <tr><td><code>faqs/woolsy_credits.json</code></td><td>Per-building credit balances: <code>{"LyndhurstH": {"allocated": 5, "used": 1.23}}</code></td><td>Managed by master-admin.php (top-up), decremented by chatbot.php</td></tr>
+  <tr><td><code>faqs/{building}_docindex.txt</code></td><td>Flat list of all file names in the public R2 folder tree, grouped by subfolder. Tells Woolsy what documents and forms exist.</td><td>admin.php Build Index button; also auto-rebuilt from R2 listing after each rules save in woolsy-update.php</td></tr>
+  <tr><td><code>faqs/woolsy_credits.json</code></td><td>Per-building credit balances: <code>{"LyndhurstH": {"allocated": 5.0, "used": 1.23}}</code></td><td>Top-up via master-admin.php or building purchase via woolsy-manage.php; decremented by chatbot.php</td></tr>
 </table>
 
 <h3>Prompt Versioning</h3>
@@ -543,10 +513,13 @@ coverage without manual tracking.</p>
 <h3>Credit Model</h3>
 <ul>
   <li>1 credit = $1 of Claude API cost (internal accounting; Alain prices credits to buildings with markup)</li>
-  <li>Default allocation: 1 credit per building (teaser &mdash; card always shows from day 1)</li>
-  <li>Hard stop at limit: Woolsy returns &ldquo;unavailable&rdquo; message to residents</li>
-  <li>Low-credit warning at 80% usage (shown in admin card)</li>
+  <li>Default allocation: 1 credit per building (teaser — card always shows from day 1)</li>
+  <li>Hard stop at zero credits: Woolsy returns &ldquo;unavailable&rdquo; message to residents</li>
+  <li>90% usage threshold: triggers automatic billing email via <code>checkWoolsyThreshold()</code> in billing-helpers.php; generates an open invoice with a tokenized billing link</li>
+  <li>Credit status visible in admin.php Woolsy card (remaining / allocated) and in woolsy-manage.php credit bar</li>
+  <li>Building admins can buy credits directly from the woolsy-manage.php credit bar (&ldquo;Buy Credits →&rdquo; button)</li>
   <li>Master admin tops up via master-admin.php Woolsy Management card</li>
+  <li><strong>Purchase reset logic:</strong> on purchase, <code>allocated = remaining + qty</code> and <code>used = 0</code>. This prevents the &ldquo;allocated&rdquo; number from growing unboundedly across billing cycles.</li>
 </ul>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
@@ -555,16 +528,17 @@ coverage without manual tracking.</p>
 
 <table>
   <tr><th>File / Folder</th><th>Description</th><th>In git?</th></tr>
-  <tr><td><code>buildings.php</code> <span class="tag tag-data">data</span></td><td>Single config file for all buildings. Edit only this when adding a building.</td><td>Yes</td></tr>
+  <tr><td><code>buildings.php</code> <span class="tag tag-data">data</span></td><td>Single config file for all buildings. Edit only this when adding a building. Each entry contains: <code>state</code> (two-letter state code), optional <code>community</code>. Drive folder IDs removed.</td><td>Yes</td></tr>
   <tr><td><code>credentials/{building}.json</code> <span class="tag tag-data">data</span></td><td>Resident accounts (bcrypt). Array of {user, pass, mustChange?}.</td><td>No</td></tr>
   <tr><td><code>credentials/{building}_admin.json</code> <span class="tag tag-data">data</span></td><td>Building admin credentials (bcrypt). <strong>Array</strong> of <code>{user, pass, email, mustChange?}</code> objects. Supports multiple admins. <code>email</code> field used for change-request notifications and self-serve password reset. Loaded by <code>db/admin-helpers.php</code>; backward-compat with legacy single-object format.</td><td>No</td></tr>
   <tr><td><code>credentials/_master.json</code> <span class="tag tag-data">data</span></td><td>Master admin credentials (bcrypt). Used by master-admin.php and as override in building admin pages.</td><td>No</td></tr>
   <tr><td><code>credentials/.htaccess</code> <span class="tag tag-data">data</span></td><td>Blocks all web access to the credentials folder.</td><td>Yes</td></tr>
   <tr><td><code>credentials/db.json</code> <span class="tag tag-data">data</span></td><td>MySQL connection credentials. Read by <code>db/db.php</code>. Format: <code>{"host":"...","user":"...","pass":"...","db":"..."}</code>. Presence of this file (with <code>db/db.php</code>) activates DB-mode across all scripts.</td><td>No</td></tr>
+  <tr><td><code>credentials/r2.json</code> <span class="tag tag-data">data</span></td><td>Cloudflare R2 credentials. Read by <code>storage/r2-storage.php</code>. Format: <code>{"endpoint":"https://&lt;account&gt;.r2.cloudflarestorage.com","bucket":"sheepsite","accessKey":"...","secretKey":"..."}</code>.</td><td>No</td></tr>
   <tr><td><code>faqs/{building}_rules.md</code> <span class="tag tag-data">data</span></td><td>Woolsy knowledge base for one building. Versioned. Has .bak backup.</td><td>No</td></tr>
   <tr><td><code>faqs/{building}_docindex.txt</code> <span class="tag tag-data">data</span></td><td>Document index for Woolsy system prompt.</td><td>No</td></tr>
   <tr><td><code>faqs/woolsy_credits.json</code> <span class="tag tag-data">data</span></td><td>Credit balances for all buildings.</td><td>No</td></tr>
-  <tr><td><code>config/{building}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>discountPct</code> (optional, applied to site fee on invoices), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code>, <code>storageLimit</code>, <code>storageUpdated</code> (ISO timestamp of last cron refresh), <code>tosAccepted</code>, <code>hasDomain</code>, <code>floorGrouping</code>, <code>testSite</code> (bool — set by master admin via building-detail.php; puts the site in demo mode: amber banner on admin dashboard, Woolsy knowledge base updates blocked, and resident password changes/resets disabled so demo credentials stay intact). Billing threshold fields: <code>storageLimitEmailSent</code> (bool), <code>woolsyBillingEmailSent</code> (bool), <code>billingToken</code> ({token, type, expires, invoiceId}) — set when threshold email fires, cleared on payment.</td><td>No</td></tr>
+  <tr><td><code>config/{building}.json</code> <span class="tag tag-data">data</span></td><td>Per-building runtime config. Key fields: <code>siteURL</code>, <code>contactEmail</code>, <code>renewalDate</code> (YYYY-MM-DD), <code>discountPct</code> (optional, applied to site fee on invoices), <code>suspended</code> (bool — auto-set when overdue, cleared when renewal date updated to future), <code>storageUsed</code> (bytes; refreshed from R2 on admin.php page load and nightly by cron), <code>storageLimit</code> (bytes; default 10 GB), <code>storageUpdated</code> (ISO timestamp of last R2 refresh), <code>tosAccepted</code>, <code>hasDomain</code>, <code>floorGrouping</code>, <code>testSite</code> (bool — set by master admin via building-detail.php; puts the site in demo mode: amber banner on admin dashboard, Woolsy knowledge base updates blocked, and resident password changes/resets disabled so demo credentials stay intact). Billing threshold fields: <code>storageLimitEmailSent</code> (bool), <code>woolsyBillingEmailSent</code> (bool), <code>billingToken</code> ({token, type, expires, invoiceId}) — set when threshold email fires, cleared on payment.</td><td>No</td></tr>
   <tr><td><code>invoices/{building}/{id}.json</code> <span class="tag tag-data">data</span></td><td>One JSON file per invoice. Core fields: <code>id</code> (e.g. LyndhurstH-0001), <code>seq</code>, <code>building</code>, <code>date</code>, <code>dueDate</code>, <code>status</code> (unpaid/paid), <code>lineItems</code>, <code>total</code>, <code>paidDate</code>, <code>paymentMethod</code> (check/stripe — set when marked paid), <code>generatedBy</code> (manual/cron/auto). Type-specific fields: <code>invoiceType</code> (renewal/storage/woolsy), <code>newBytes</code> (storage invoices — the new limit to apply on payment), <code>creditsToAdd</code> (woolsy invoices — credits to add on payment). Folder is protected by .htaccess.</td><td>No</td></tr>
   <tr><td><code>config/stripe.json</code> <span class="tag tag-data">data</span></td><td>Stripe API keys: <code>{"secretKey":"sk_live_...","webhookSecret":"whsec_..."}</code>. Read by billing.php and billing-webhook.php.</td><td>No</td></tr>
   <tr><td><code>config/processed_payments.json</code> <span class="tag tag-data">data</span></td><td>Idempotency log for Stripe webhooks. Maps <code>paymentIntentId</code> to building/type/processed timestamp. Prevents double-fulfilment if Stripe retries the webhook. Created automatically on first payment.</td><td>No</td></tr>
@@ -581,24 +555,31 @@ exist only on the live server. They are excluded from git via <code>.gitignore</
 
 <h3>Adding a New Association</h3>
 
-<p>The automated path (recommended): in <code>master-admin.php</code>, click <strong>Add New Association</strong> in the System Tools grid. This opens <code>building-detail.php?building=new</code>, which:</p>
+<p>In <code>master-admin.php</code>, click <strong>Add New Association</strong> in the System Tools grid.
+This opens <code>building-detail.php?building=new</code>, which generates a step-by-step setup checklist.</p>
 <ol>
-  <li><strong>Phase 1:</strong> Enter building key, display name, state, community, and the three master IDs (template folder, association folder, template sheet). Click <strong>Create Drive Folders</strong> &mdash; GAS clones the template folder structure, sets Public sharing, copies the Owner DB sheet, and returns all folder/sheet IDs.</li>
-  <li><strong>Phase 2:</strong> A setup checklist appears with all values pre-filled: folder IDs, buildings.php snippet (copy button), admin URL, owner import walkthrough, and full footer script.</li>
+  <li>Add the building entry to <code>buildings.php</code> (key, state, optional community)</li>
+  <li>Create the R2 folder structure under <code>{building}/public/</code> and <code>{building}/private/</code></li>
+  <li>Create <code>credentials/{building}.json</code> (empty array <code>[]</code>) and <code>credentials/{building}_admin.json</code></li>
+  <li>Create <code>config/{building}.json</code> with initial settings (siteURL, contactEmail, renewalDate, storageLimit)</li>
+  <li>Run the forgot-password setup flow (<code>?setup=1</code>) to create the first admin account</li>
+  <li>Import residents from Google Sheet using <code>import-sheet-to-db.php</code> (one-time)</li>
+  <li>Run Woolsy setup in <code>woolsy-update.php</code> once documents are uploaded to R2</li>
 </ol>
-<p>Three steps remain manual: set <code>BUILDING_NAME</code> in the sheet script, deploy it as a web app, and install the two time-driven triggers.</p>
 <p>See <strong>NEW-SITE-GUIDE.html</strong> for the full walkthrough.</p>
 
 <h3>Removing an Association</h3>
 
 <p>In <code>master-admin.php</code>, click <strong>Remove Association</strong> in System Tools. The tool:</p>
 <ul>
-  <li>Shows a checklist of all server-side files that will be deleted (credentials, config, tags, Woolsy entries)</li>
+  <li>Shows a checklist of all items that will be deleted automatically</li>
+  <li>Deletes all server-side files (credentials, config, tags, Woolsy entries in woolsy_credits.json, woolsy_usage.json, login_stats.json)</li>
   <li>Deletes all MySQL rows for the building across the five tables (<code>residents</code>, <code>car_db</code>, <code>unit_info</code>, <code>emergency</code>, <code>res_requests</code>)</li>
-  <li>Requires typing the building key exactly to confirm &mdash; no undo</li>
-  <li>After deletion, shows a checklist of two remaining manual steps: remove the entry from <code>buildings.php</code>, and trash the Drive folders in the SheepSite Google account</li>
+  <li>Deletes all R2 objects under the building's prefix (paginated, handles any number of files)</li>
+  <li>Requires typing the building key exactly to confirm — no undo</li>
+  <li>After deletion, the only remaining manual step is removing the entry from <code>buildings.php</code></li>
 </ul>
-<div class="warn"><strong>Google Drive is not touched by this tool.</strong> Folder removal must be done manually.</div>
+<div class="tip"><strong>R2 storage is deleted automatically.</strong> No manual cloud cleanup required.</div>
 
 <hr style="border:none;border-top:2px solid #e0c0f0;margin:2.5rem 0;">
 
@@ -771,9 +752,11 @@ then bump <code>PROMPT_VERSION</code> and deploy. All buildings will be flagged 
 <ul>
   <li>The <code>credentials/</code> folder must remain writable by PHP (755 on the server)</li>
   <li><code>faqs/</code> folder must also be writable (Woolsy update writes and overwrites files there)</li>
+  <li><code>config/</code> and <code>invoices/</code> folders must also be writable by PHP</li>
   <li>After any PHP deploy, verify a known page loads before logging out of cPanel</li>
-  <li>The Apps Script GAS project does not need redeployment when PHP files change &mdash; only when <code>dir-display-bridge.gs</code> or <code>building-script.gs</code> changes</li>
-  <li>After any GAS master library change: Deploy → Manage deployments → New version (building scripts pick it up automatically if set to "latest version")</li>
+  <li>R2 credentials live in <code>credentials/r2.json</code> (gitignored). If the R2 access key is rotated, update this file on the server</li>
+  <li>After adding a new building subdomain origin, update the R2 bucket CORS policy to include it (otherwise browser uploads will be blocked)</li>
+  <li>The <code>.htaccess</code> file in Scripts/ contains only <code>SetEnv ANTHROPIC_API_KEY ...</code> — update it when rotating the API key</li>
 </ul>
 
 </body>
