@@ -1069,5 +1069,85 @@ docs/Sheepsite-Architecture.html
 
 ---
 
-*Snapshot updated: April 10, 2026 (session 33 — deployment complete)*
+---
+
+## Session 33 — R2 Migration Complete, New Association Provisioning
+
+### R2 Migration — Phase 5 Cleanup (complete)
+- All Drive/GAS file operations removed from every PHP script
+- `storage/drive-storage.php` and `migrate-to-r2.php` deleted
+- `buildings.php`: Drive folder IDs (`publicFolderId`, `privateFolderId`, `webAppURL`) removed from all entries
+- `display-public-dir.php` / `display-private-dir.php`: orphan `$folderId` references removed
+- `building-detail.php`: Drive folder wizard removed; Step 1 renamed "Building Identity"
+- `association-remove.php`: R2 object deletion added (paginated, all objects under `{building}/`)
+- `.htaccess`: PHP upload limits removed (irrelevant since uploads bypass PHP); only `SetEnv ANTHROPIC_API_KEY` remains
+- `cache/` directory no longer needed — confirmed deleted from server
+- GAS (`dir-display-bridge`) and Sheets web apps: all confirmed decommissioned, triggers disabled
+
+### Presigned Upload — Large File Fix
+- `file-manager.php` `uploadNext()`: added `xhr.timeout = 7200000`, `xhr.ontimeout` handler, `xhr.status === 0` case
+- 434 MB upload tested and confirmed working
+- Replace-file flow (`handleReplaceSelect`): rewritten to use presigned PUT (atomic overwrite, no rename/delete)
+
+### Admin UX Improvements
+- **Default storage limit**: raised to 10 GB everywhere (was 524 MB)
+- **admin.php Woolsy card**: shows exact credit numbers (remaining / allocated)
+- **admin.php storage**: auto-refreshes from R2 on page load (background AJAX `?action=refreshStorage`)
+- **woolsy-manage.php**: credit usage bar + "Buy Credits →" button moved to very top of page
+- **billing.php**: credit purchase reset — `allocated = remaining + qty`, `used = 0` (prevents unbounded growth)
+
+### master-admin.php cleanup
+- "Migrate to R2" card removed
+- "Add New Association" and "Remove Association" descriptions updated to match current code
+
+### New Association Provisioning (building-detail.php?building=new — full redesign)
+- Phase 1: form collects key, display name, state, community
+- "Create Association" button POSTs → server auto-provisions:
+  - `credentials/{building}.json` (empty `[]`)
+  - `credentials/{building}_admin.json` (admin/admin + mustChange:true)
+  - `config/{building}.json` (10 GB default, blank siteURL/contactEmail)
+  - `woolsy_credits.json` entry (1 credit)
+  - R2 `_template/` tree copied to `{building}/`
+- Phase 2: post-provision screen shows what was done + remaining manual steps:
+  1. Add `buildings.php` snippet (copy button)
+  2. Create subdomain in cPanel
+  3. Upload `index.php` snippet (copy button)
+  4. Hand off admin URL + admin/admin credentials
+- `storage/r2-storage.php`: `_r2CopyTree(sourcePrefix, destPrefix)` added
+- `r2-copy-template.php` (one-time tool): copied QGscratch/ → `_template/` in R2 to seed template; deleted from server
+
+### Architecture Doc — Full R2 Update
+- Section 4 replaced: "GAS Layer" → "R2 File Storage Architecture" (presigned PUT/GET flow, r2-storage.php/storage.php reference, CORS policy, storage accounting)
+- All Drive/GAS references replaced with R2 equivalents throughout
+- `cache/` row removed from topology; Google table replaced with Cloudflare R2 table
+- GAS file table collapsed to decommissioned block
+- Section 8 (Woolsy): credit model updated (90% threshold, Buy Credits in woolsy-manage.php, purchase-reset logic)
+- Section 9: `config/{building}.json` updated (10 GB default, R2 refresh on admin.php load); `credentials/r2.json` added
+- Section 10: Adding/Removing rewritten for current R2 flow
+- Section 12: GAS maintenance notes replaced with R2 notes
+
+---
+
+## Next Steps
+
+- Upload session 33 files to server:
+  - `building-detail.php`
+  - `association-remove.php`
+  - `admin.php`
+  - `billing.php`
+  - `woolsy-manage.php`
+  - `master-admin.php`
+  - `storage/r2-storage.php`
+  - `storage/storage.php`
+  - `file-manager.php`
+  - `.htaccess`
+  - `buildings.php`
+  - `docs/Sheepsite-Architecture.html`
+- Add R2 CORS entries for all building subdomains and custom domains
+- **Invoice cron** — `storage-cron.php` renewal invoice generation still unconfirmed; verify with log
+- **Extract governing docs for LyndhurstI** — same Woolsy process as LyndhurstH when docs available
+
+---
+
+*Snapshot updated: April 12, 2026 (session 33 — R2 migration complete, new association provisioning)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*
