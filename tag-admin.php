@@ -526,5 +526,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
 
 })();
 </script>
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

@@ -196,5 +196,6 @@ fetch(base + '&json=private')
   });
 </script>
 
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

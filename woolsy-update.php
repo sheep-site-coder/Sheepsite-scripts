@@ -1120,5 +1120,6 @@ function escAttr(str) {
   return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 </script>
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

@@ -18,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+require_once __DIR__ . '/login-stats.php';
 session_start();
 
 header('Content-Type: application/json');
@@ -62,6 +63,7 @@ if ($action === 'login') {
     foreach ($users as $u) {
         if ($u['user'] === $username && password_verify($password, $u['pass'])) {
             $_SESSION[$sessionKey] = $username;
+            logLogin($building, $username);
             echo json_encode(['ok' => true, 'username' => $username]);
             exit;
         }

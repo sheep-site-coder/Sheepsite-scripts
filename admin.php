@@ -288,9 +288,19 @@ $settingsMessageType = 'ok';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_building_settings'])) {
   $config = loadBuildingConfig($building);
-  $config['contactEmail'] = trim($_POST['contact_email'] ?? '');
+  $config['contactEmail']   = trim($_POST['contact_email']     ?? '');
+  $config['displayName']    = trim($_POST['display_name']      ?? '');
+  $config['headerImageUrl'] = trim($_POST['header_image_url']  ?? '');
+  $config['calendarUrl']    = trim($_POST['calendar_url']      ?? '');
+  $config['facebookUrl']    = trim($_POST['facebook_url']      ?? '');
+  $config['propertyMgmt']   = [
+    'name'        => trim($_POST['pm_name']         ?? ''),
+    'phone'       => trim($_POST['pm_phone']        ?? ''),
+    'url'         => trim($_POST['pm_url']          ?? ''),
+    'buttonLabel' => trim($_POST['pm_button_label'] ?? ''),
+  ];
   if (saveBuildingConfig($building, $config)) {
-    $settingsMessage = 'Building settings saved.';
+    $settingsMessage = 'Website settings saved.';
   } else {
     $settingsMessage     = 'Could not save — check that the config/ folder is writable.';
     $settingsMessageType = 'error';
@@ -679,50 +689,156 @@ if (!$mustChange) {
 
 <?php if ($activeTab === 'settings'): ?>
   <?php
-    $contactEmail = htmlspecialchars($bldCfg['contactEmail'] ?? '');
-    $siteURL      = htmlspecialchars($bldCfg['siteURL']      ?? '');
+    $ws_contactEmail   = htmlspecialchars($bldCfg['contactEmail']           ?? '');
+    $ws_siteURL        = htmlspecialchars($bldCfg['siteURL']                ?? '');
+    $ws_displayName    = htmlspecialchars($bldCfg['displayName']            ?? '');
+    $ws_headerImage    = htmlspecialchars($bldCfg['headerImageUrl']         ?? '');
+    $ws_calendarUrl    = htmlspecialchars($bldCfg['calendarUrl']            ?? '');
+    $ws_facebookUrl    = htmlspecialchars($bldCfg['facebookUrl']            ?? '');
+    $ws_pmName        = htmlspecialchars($bldCfg['propertyMgmt']['name']        ?? '');
+    $ws_pmPhone       = htmlspecialchars($bldCfg['propertyMgmt']['phone']       ?? '');
+    $ws_pmUrl         = htmlspecialchars($bldCfg['propertyMgmt']['url']         ?? '');
+    $ws_pmButtonLabel = htmlspecialchars($bldCfg['propertyMgmt']['buttonLabel'] ?? '');
+    $wsDisabled = $isTestSite ? 'disabled' : '';
+    $wsInputStyle = 'width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;' . ($isTestSite ? 'background:#f5f5f5;color:#999;' : '');
   ?>
   <div class="card" style="flex-direction:column;gap:0.5rem;cursor:default;">
     <div style="display:flex;gap:1.25rem;align-items:flex-start;">
-      <div class="card-icon">⚙️</div>
+      <div class="card-icon">🌐</div>
       <div>
-        <div class="card-title" style="color:inherit;">Building Settings</div>
-        <div class="card-desc">Billing contact email and website URL for this building.</div>
+        <div class="card-title" style="color:inherit;">Website Settings</div>
+        <div class="card-desc">Display name, URLs, branding, and billing contact for this building.</div>
       </div>
     </div>
     <?php if ($settingsMessage): ?>
       <div class="message <?= $settingsMessageType ?>"><?= htmlspecialchars($settingsMessage) ?></div>
     <?php endif; ?>
     <form method="post" action="admin.php?building=<?= urlencode($building) ?>&tab=settings"
-          style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.25rem;">
-      <div style="flex:1;min-width:220px;">
-        <label for="contact_email" style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
-          Billing contact email
-        </label>
-        <input type="text" id="contact_email" name="contact_email"
-               value="<?= $contactEmail ?>"
-               placeholder="board@example.com"
-               <?= $isTestSite ? 'disabled title="Not available in demo mode"' : '' ?>
-               style="width:100%;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;<?= $isTestSite ? 'background:#f5f5f5;color:#999;' : '' ?>">
+          style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.25rem;">
+
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Association display name</label>
+          <input type="text" name="display_name" value="<?= $ws_displayName ?>"
+                 placeholder="Lyndhurst H Condo" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Building website URL</label>
+          <?php if ($ws_siteURL): ?>
+            <a href="<?= $ws_siteURL ?>" target="_blank" style="font-size:0.9rem;"><?= $ws_siteURL ?></a>
+          <?php else: ?>
+            <span style="font-size:0.9rem;color:#999;">Not set — contact SheepSite</span>
+          <?php endif; ?>
+        </div>
       </div>
-      <div style="flex:1;min-width:220px;">
-        <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">
-          Building website URL
-        </label>
-        <?php if ($siteURL): ?>
-          <a href="<?= $siteURL ?>" target="_blank" style="font-size:0.9rem;"><?= $siteURL ?></a>
-        <?php else: ?>
-          <span style="font-size:0.9rem;color:#999;">Not set — configure in Master Admin</span>
-        <?php endif; ?>
+
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Header image filename <small style="font-weight:normal;color:#888;">(in Scripts/assets/)</small></label>
+          <input type="text" name="header_image_url" value="<?= $ws_headerImage ?>"
+                 placeholder="LyndhurstH-header.jpg" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Google Calendar URL</label>
+          <input type="text" name="calendar_url" value="<?= $ws_calendarUrl ?>"
+                 placeholder="https://calendar.google.com/..." <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+        </div>
       </div>
-      <button type="submit" name="save_building_settings" class="save-btn" style="white-space:nowrap;"
-              <?= $isTestSite ? 'disabled title="Not available in demo mode"' : '' ?>>Save</button>
+
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Facebook URL</label>
+          <input type="text" name="facebook_url" value="<?= $ws_facebookUrl ?>"
+                 placeholder="https://facebook.com/groups/..." <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.82rem;font-weight:bold;display:block;margin-bottom:0.25rem;">Billing contact email</label>
+          <input type="text" id="contact_email" name="contact_email" value="<?= $ws_contactEmail ?>"
+                 placeholder="board@example.com" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #eee;padding-top:0.75rem;">
+        <div style="font-size:0.82rem;font-weight:bold;margin-bottom:0.5rem;color:#555;">Property Management Company</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+          <div style="flex:2;min-width:180px;">
+            <label style="font-size:0.8rem;display:block;margin-bottom:0.2rem;">Company name</label>
+            <input type="text" name="pm_name" value="<?= $ws_pmName ?>"
+                   placeholder="Seacrest" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+          </div>
+          <div style="flex:1;min-width:130px;">
+            <label style="font-size:0.8rem;display:block;margin-bottom:0.2rem;">Phone</label>
+            <input type="text" name="pm_phone" value="<?= $ws_pmPhone ?>"
+                   placeholder="1-888-828-6464" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+          </div>
+          <div style="flex:3;min-width:220px;">
+            <label style="font-size:0.8rem;display:block;margin-bottom:0.2rem;">Portal URL</label>
+            <input type="text" name="pm_url" value="<?= $ws_pmUrl ?>"
+                   placeholder="https://home.seacrestservices.com/login" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+          </div>
+          <div style="flex:1;min-width:110px;">
+            <label style="font-size:0.8rem;display:block;margin-bottom:0.2rem;">Button label</label>
+            <input type="text" name="pm_button_label" value="<?= $ws_pmButtonLabel ?>"
+                   placeholder="Vantaca" <?= $wsDisabled ?> style="<?= $wsInputStyle ?>">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;">
+        <button type="submit" name="save_building_settings" class="save-btn"
+                <?= $isTestSite ? 'disabled title="Not available in demo mode"' : '' ?>>Save Website Settings</button>
+      </div>
     </form>
-    <p style="font-size:0.78rem;color:#999;margin:0.1rem 0 0;">
-      Website URL enables "Back to site" links in welcome emails and resident pages.
-      Billing contact email is for invoices. Resident change request notifications go to admin account emails.
+    <p style="font-size:0.78rem;color:#999;margin:0;">
+      Billing contact email is used for invoices. Resident change request notifications go to admin account emails, not here.
     </p>
   </div>
+
+  </div>
+
+  <?php
+    $tosCard = null;
+    if (file_exists(CONFIG_DIR . 'tos.json')) {
+      $tosCfg  = json_decode(file_get_contents(CONFIG_DIR . 'tos.json'), true) ?? [];
+      $tosScope = $tosCfg['scope'] ?? [];
+      if ($tosScope === 'all' || (is_array($tosScope) && in_array($building, $tosScope, true))) {
+        $tosCard = [
+          'version'   => (int)($tosCfg['version'] ?? 1),
+          'date'      => $tosCfg['effectiveDate'] ?? '',
+          'docPath'   => $tosCfg['documentPath']  ?? 'docs/terms-of-service.html',
+          'accepted'  => $bldCfg['tosAccepted']   ?? null,
+        ];
+      }
+    }
+  ?>
+  <?php if ($tosCard): ?>
+  <div class="card" style="flex-direction:column;gap:0.5rem;cursor:default;margin-top:1rem;">
+    <div style="display:flex;gap:1.25rem;align-items:flex-start;">
+      <div class="card-icon">📄</div>
+      <div>
+        <div class="card-title" style="color:inherit;">License Agreement</div>
+        <div class="card-desc">SheepSite Terms of Service accepted for this building.</div>
+      </div>
+    </div>
+    <div style="font-size:0.9rem;display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:0.25rem;">
+      <span><strong>Version:</strong> <?= $tosCard['version'] ?></span>
+      <?php if ($tosCard['date']): ?>
+        <span><strong>Effective:</strong> <?= htmlspecialchars($tosCard['date']) ?></span>
+      <?php endif; ?>
+      <?php if ($tosCard['accepted']): ?>
+        <span><strong>Accepted:</strong> <?= htmlspecialchars($tosCard['accepted']['date'] ?? '') ?>
+          <?php if (!empty($tosCard['accepted']['who'])): ?>
+            by <?= htmlspecialchars($tosCard['accepted']['who']) ?>
+          <?php endif; ?>
+        </span>
+      <?php endif; ?>
+      <span>
+        <a href="<?= htmlspecialchars($tosCard['docPath']) ?>" target="_blank"
+           style="color:#0070f3;text-decoration:none;font-weight:bold;">View Terms of Service ↗</a>
+      </span>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <hr>
 
@@ -884,6 +1000,8 @@ function togglePwVis(btn) {
     .catch(function () {});
 })();
 </script>
+
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 
 </body>
 </html>

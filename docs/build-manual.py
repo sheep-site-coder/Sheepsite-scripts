@@ -127,7 +127,7 @@ html = f"""<!DOCTYPE html>
 
 <h1>SheepSite Admin Manual</h1>
 <p class="subtitle">For Board Members Managing the Building Website</p>
-<p class="version">Version 2.1 &nbsp;&middot;&nbsp; April 2026</p>
+<p class="version">Version 2.2 &nbsp;&middot;&nbsp; April 2026</p>
 
 <div class="toc">
   <h3>Contents</h3>
@@ -164,7 +164,10 @@ html = f"""<!DOCTYPE html>
 <h3>Accessing the Admin Area</h3>
 <p>The admin area is accessed directly from the building website. In the site menu, open the <strong>Admin</strong> dropdown and select <strong>Site Admin</strong>. Log in with your admin credentials. If this is your first login, you will be prompted to set a permanent password.</p>
 
-<blockquote><strong>Forgot your password?</strong> Click the &ldquo;Forgot password?&rdquo; link on the login page. Enter your <strong>admin username</strong> and the <strong>President&rsquo;s unit number</strong> as the security verification. A temporary password will be sent to the email address on file for your admin account.</blockquote>
+<blockquote>
+  <strong>Forgot your password?</strong> Click the <strong>Forgot password?</strong> link on the admin login page. You will be asked for two things: your <strong>admin username</strong> and a <strong>Secret #</strong> known to authorized board members. Both must match what is on file &mdash; if either is wrong, no hint is given. If they match, a temporary password is emailed immediately to the email address registered to your admin account. Log in with it and you will be prompted to choose a new password right away.<br><br>
+  <em>Important:</em> this works only if your admin account has an email address on file. If you are not sure, ask another admin to check your account in the <strong>Admin Accounts</strong> section of the Settings tab and add your email if it is missing.
+</blockquote>
 
 <h3>Terms of Service</h3>
 <p>When you log in to the admin panel, you may be presented with the SheepSite Terms of Service agreement before accessing any admin features &mdash; on your first login, or whenever SheepSite has updated its terms. You must read the agreement in full and click <strong>I Accept</strong> to continue. Your acceptance is recorded with a timestamp.</p>
@@ -188,8 +191,9 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Manage User Accounts</strong></td><td>Add or reset individual web login accounts. Run Sync to create accounts for all database residents at once, or identify and remove orphaned accounts.</td></tr>
   <tr><td><strong>File Management</strong></td><td>Upload, organize, rename, and delete documents in the public and private folders.</td></tr>
   <tr><td><strong>Tag Management</strong></td><td>Add and manage tags on documents to improve search and organization.</td></tr>
-  <tr><td><strong>Storage Report</strong></td><td>View how much Google Drive storage your building is using, broken down by folder.</td></tr>
+  <tr><td><strong>Storage Report</strong></td><td>View how much storage your building is using, broken down by folder.</td></tr>
   <tr><td><strong>Woolsy AI Assistant</strong></td><td>Set up or update the AI assistant&rsquo;s knowledge of your building&rsquo;s governing documents. Shows current status and credit usage.</td></tr>
+  <tr><td><strong>Billing &amp; Invoices</strong></td><td>View all invoices for your building &mdash; renewal, storage upgrades, and Woolsy credits. Pay open invoices online via the <strong>Pay &rarr;</strong> link. See Section 10 for full details.</td></tr>
   <tr><td><strong>User Manual</strong></td><td>Opens this manual.</td></tr>
 </table>
 
@@ -197,10 +201,55 @@ html = f"""<!DOCTYPE html>
 <p>Click <strong>Settings</strong> at the top to switch to the Settings tab, which contains building configuration and admin account management:</p>
 <table>
   <tr><th>Section</th><th>What It Does</th></tr>
-  <tr><td><strong>Building Settings</strong></td><td>Update the building&rsquo;s <strong>billing contact email</strong> address (used for invoices). The building website URL is shown here for reference but is managed by SheepSite.</td></tr>
+  <tr><td><strong>Website Settings</strong></td><td>Configure the association display name, branding, social and calendar links, property management company details, and billing contact email. See below for a full description of each field.</td></tr>
+  <tr><td><strong>License Agreement</strong></td><td>Shows the version and effective date of the Terms of Service you have accepted, along with who accepted it and when. Includes a <strong>View Terms of Service &rarr;</strong> link to open the full document at any time.</td></tr>
   <tr><td><strong>Admin Accounts</strong></td><td>View and manage all administrator accounts for this building. Add new admins, update email addresses for notifications, or remove accounts. Each admin has a separate username, password, and email address.</td></tr>
   <tr><td><strong>Change Admin Password</strong></td><td>Change your own admin password. Enter your current password, then your new password twice.</td></tr>
 </table>
+
+<h3>Need Help? &mdash; Ask Woolsy</h3>
+<p>A <strong>Need Help?</strong> button is always visible in the bottom-right corner of every admin page. Click it to open an inline chat with Woolsy, who can answer questions about using the admin panel &mdash; how to add a resident, reset a password, manage files, handle billing, and anything else covered in this manual. Woolsy credit usage applies.</p>
+
+<h3>Website Settings</h3>
+<p>The <strong>Website Settings</strong> card in the Settings tab lets you control how your building&rsquo;s website presents itself to residents and what optional integrations are active. Each field is described below.</p>
+
+<table>
+  <tr><th>Field</th><th>What It Does</th></tr>
+  <tr>
+    <td><strong>Association display name</strong></td>
+    <td>The full name of your association as it appears in welcome emails, password reset messages, and other system-generated communications sent to residents (e.g. &ldquo;Lyndhurst H Condominium&rdquo;).</td>
+  </tr>
+  <tr>
+    <td><strong>Building website URL</strong></td>
+    <td>The address of your building&rsquo;s public website. Shown here for reference &mdash; this is set by SheepSite and cannot be changed from this page.</td>
+  </tr>
+  <tr>
+    <td><strong>Header image filename</strong></td>
+    <td>The filename of the banner image displayed at the top of your site (e.g. <code>LyndhurstH-header.jpg</code>). The image must be uploaded to the <code>Scripts/assets/</code> folder on the server by SheepSite. Contact SheepSite to update the header image.</td>
+  </tr>
+  <tr>
+    <td><strong>Google Calendar URL</strong></td>
+    <td>Embeds or links a Google Calendar on your website so residents can see upcoming building events. See the note below for how to obtain the correct URL.</td>
+  </tr>
+  <tr>
+    <td><strong>Facebook URL</strong></td>
+    <td>A link to your building&rsquo;s Facebook group or page. When set, a Facebook button appears on your site so residents can easily find the group.</td>
+  </tr>
+  <tr>
+    <td><strong>Billing contact email</strong></td>
+    <td>The email address that receives SheepSite invoices and payment notifications. This should be a board email address that is actively monitored. It does <em>not</em> receive resident change request notifications &mdash; those go to individual admin account email addresses.</td>
+  </tr>
+  <tr>
+    <td><strong>Property Management Company</strong></td>
+    <td>Name, phone number, portal URL, and portal button label for your property management company (e.g. Seacrest / Vantaca). When filled in, a button linking to the management portal appears on your site for residents. Leave blank if not applicable.</td>
+  </tr>
+</table>
+
+<div class="tip">
+  <strong>Google Calendar — using the correct URL:</strong> To embed or link your Google Calendar without requiring residents to log in, you must use the <strong>Public URL</strong>, not the shareable link.<br><br>
+  In Google Calendar, open <strong>Settings &rarr; Settings for my calendars</strong>, select your calendar, then scroll down to <strong>Integrate calendar</strong>. Copy the <strong>Public URL to this calendar</strong> field and paste it here.<br><br>
+  <strong>Note:</strong> The <em>Get shareable link</em> option available near the top of calendar settings is designed for sharing with specific Google users and will require residents to log in to their Google account before they can view the calendar. Always use the <strong>Public URL</strong> from the Integrate calendar section instead.
+</div>
 
 <h3>Admin Accounts</h3>
 <p>Each building can have more than one administrator account. All admin accounts are listed in the <strong>Admin Accounts</strong> section of the <strong>Settings</strong> tab. Each account shows its username and a field to set the email address used for resident change-request notifications.</p>
@@ -273,6 +322,17 @@ html = f"""<!DOCTYPE html>
   <li><strong>Reject</strong> &mdash; removes the request from the queue with no further action</li>
 </ul>
 <p>You do not need to copy-paste any data manually &mdash; accepting a request does everything in one step.</p>
+
+<h3>How Residents Manage Their Own Information</h3>
+<p>Residents can update certain information themselves through <strong>My Account</strong> on the building website &mdash; no need to contact the board for routine changes. Once logged in, a resident can:</p>
+<ul>
+  <li>View all details on file for their unit (residents, vehicle &amp; parking, emergency contacts)</li>
+  <li>Submit a change request for any field &mdash; name, email, phone, vehicle, parking spot, etc.</li>
+  <li>Request to add a new resident to their unit</li>
+</ul>
+<p>Change requests land in your <strong>Pending Queue</strong> (see above) and do not take effect until you review and accept them. The resident is notified by email either way.</p>
+<p><strong>Adding a resident:</strong> When a resident submits an &ldquo;Add Resident&rdquo; request, it appears in the Pending Queue with the submitted details. Clicking <strong>Accept</strong> creates the database record, generates a web login, and sends the new resident a welcome email with a temporary password &mdash; all in one step.</p>
+<p><strong>Removing a resident:</strong> Resident removals are handled by the admin only &mdash; residents cannot remove themselves or others. Expand the unit in <strong>Manage Residents/Owners</strong>, click <strong>Edit</strong> on the person card, and use <strong>Delete</strong> to remove the record and revoke their web login at the same time.</p>
 
 <h3>Automated Reports</h3>
 <p>The following reports are served directly from the resident database and are always current:</p>
@@ -348,8 +408,6 @@ html = f"""<!DOCTYPE html>
 
 <h3>The File Manager</h3>
 <p>The built-in file manager lets you upload, organize, and delete documents without leaving the website. Access it from the Admin Dashboard via the <strong>File Management</strong> card, or directly from any document browser page on your site.</p>
-<p>Folder listings are remembered during your session &mdash; the first time you open a folder the system fetches it from Google Drive, and every subsequent visit within the same session is instant. The listing is automatically refreshed any time you upload, delete, rename, or move files.</p>
-
 <h4>Uploading Files</h4>
 <ul>
   <li><strong>Drag and drop</strong> &mdash; drag one or more files from your computer directly onto the upload area</li>
@@ -364,11 +422,6 @@ html = f"""<!DOCTYPE html>
   <li><strong>Deselect files</strong> &mdash; uncheck one or more of the selected files to bring the total size within your limit, then proceed with the reduced selection</li>
   <li><strong>Add storage</strong> &mdash; click the <strong>Add Storage</strong> link in the warning to go directly to the billing page, where you can choose a storage upgrade tier and pay online. The new limit takes effect immediately after payment and you can then proceed with your upload.</li>
 </ul>
-
-<h4>Large Files (over 30 MB)</h4>
-<p>Files larger than 30 MB cannot be uploaded through the standard file manager. When one or more selected files exceed this threshold, the file manager will open a <strong>new browser tab</strong> pointing to the building&rsquo;s large-file upload area (BigUploads folder). Upload your file there directly.</p>
-<p>Once the upload is complete, return to the admin site and open the <strong>Quarantine</strong> section in the file manager. Files uploaded via the large-file area land in Quarantine first and are <strong>not yet visible on the website</strong>. Review each file, then click <strong>Publish</strong> to move it to the correct folder and make it visible to residents, or <strong>Delete</strong> to remove it.</p>
-<blockquote><strong>Note:</strong> Always come back to Quarantine after a large-file upload &mdash; files left there are not accessible to residents until published.</blockquote>
 
 <h4>Organizing Files</h4>
 <ul>
@@ -472,7 +525,7 @@ html = f"""<!DOCTYPE html>
     {img_tag("image10.jpg", "Cloud storage", "100%")}
   </div>
   <div style="flex:2;">
-    <p>The Storage Report shows how much Google Drive storage your building is using. Access it from the Admin Dashboard.</p>
+    <p>The Storage Report shows how much storage your building is using across all files. Access it from the Admin Dashboard.</p>
     <p>The report shows:</p>
     <ul>
       <li><strong>Grand total</strong> &mdash; combined Public + Private storage</li>
@@ -484,7 +537,7 @@ html = f"""<!DOCTYPE html>
 
 <h3>Storage Limit</h3>
 <p>Each building has a storage limit set by SheepSite. If an upload would exceed the limit, it will be blocked and you will see a message in the file manager.</p>
-<p>When the limit is reached, an invoice is automatically created and an email notification is sent to the building&rsquo;s contact address with a link to pay online. Storage is available in upgrade tiers &mdash; you choose the size that works for your building. The new limit takes effect immediately after payment. You can also pay by check &mdash; see <strong>Section 10 &mdash; Billing &amp; Invoices</strong> for details.</p>
+<p>When storage fills up, SheepSite will contact you to discuss a storage upgrade. Storage is available in upgrade tiers &mdash; you choose the size that works for your building. The new limit takes effect once the upgrade is arranged. See <strong>Section 10 &mdash; Billing &amp; Invoices</strong> for details.</p>
 <blockquote><strong>Tip:</strong> Running the Storage Report regularly lets you keep an eye on usage before you hit the limit. Large files such as high-resolution scans and videos fill storage quickly &mdash; PDFs are much more space-efficient for most documents.</blockquote>
 
 {divider()}
@@ -551,7 +604,7 @@ html = f"""<!DOCTYPE html>
 <ul>
   <li>The card shows <strong>used / allocated</strong> credits and a progress bar</li>
   <li>A warning appears when usage reaches 80% of the allocated amount</li>
-  <li>At 90% usage, an invoice is automatically created and an email is sent to the building&rsquo;s contact address with a link to pay online &mdash; credits are applied immediately after payment. You can also pay by check &mdash; see <strong>Section 10 &mdash; Billing &amp; Invoices</strong>.</li>
+  <li>At 90% usage, SheepSite will contact you to arrange a credit top-up &mdash; credits are applied immediately after payment. You can also pay by check &mdash; see <strong>Section 10 &mdash; Billing &amp; Invoices</strong>.</li>
   <li>When credits are exhausted, Woolsy displays a message to residents to contact the building administrator</li>
 </ul>
 
@@ -623,17 +676,17 @@ For maintenance requests, contact ABC Management at 555-123-4567 or manager@abcm
 {section("Section 10 &mdash; Billing &amp; Invoices")}
 
 <h3>Overview</h3>
-<p>Your Admin Dashboard includes a <strong>Billing</strong> section that shows your invoice history. Invoices are created automatically when a service limit is reached (storage or Woolsy credits) or when your annual subscription is due for renewal. You can view each invoice by clicking its ID, and pay online via the <strong>Pay &rarr;</strong> link if available.</p>
+<p>Your Admin Dashboard includes a <strong>Billing</strong> section that shows your invoice history. Invoices are issued for storage upgrades, Woolsy credit top-ups, and annual subscription renewals. You can view each invoice by clicking its ID, and pay online via the <strong>Pay &rarr;</strong> link if available.</p>
 
 <h3>Types of Invoices</h3>
 <ul>
-  <li><strong>Annual renewal</strong> &mdash; covers your yearly subscription. Generated about 30 days before your renewal date.</li>
-  <li><strong>Storage upgrade</strong> &mdash; created when an upload is blocked because your storage is full. The invoice is for the next available storage tier.</li>
-  <li><strong>Woolsy credits</strong> &mdash; created when Woolsy credits reach 90% usage. The invoice covers a credit top-up to keep Woolsy available to residents.</li>
+  <li><strong>Annual renewal</strong> &mdash; covers your yearly subscription. SheepSite will reach out when your renewal is approaching.</li>
+  <li><strong>Storage upgrade</strong> &mdash; issued when a storage tier upgrade is arranged after your storage is full.</li>
+  <li><strong>Woolsy credits</strong> &mdash; issued when Woolsy credits reach 90% usage. The invoice covers a credit top-up to keep Woolsy available to residents.</li>
 </ul>
 
 <h3>Paying Online</h3>
-<p>When a threshold invoice is triggered (storage or Woolsy), an email is sent to your building&rsquo;s contact address with a secure payment link. Click <strong>Pay &rarr;</strong> in that email or in the Billing section of your dashboard to pay by credit card via Stripe. The service is updated immediately after payment &mdash; storage limit raised or credits added.</p>
+<p>When an invoice is ready, an email is sent to your building&rsquo;s contact address with a secure payment link. Click <strong>Pay &rarr;</strong> in that email or in the Billing section of your dashboard to pay by credit card. Online payments are processed through <strong>Stripe</strong> &mdash; a leading payment platform trusted by millions of businesses worldwide. SheepSite never sees or stores your card details; they go directly to Stripe&rsquo;s secure servers. The service is updated immediately after payment &mdash; storage limit raised or credits added.</p>
 
 <h3>Paying by Check</h3>
 <p>If you prefer to pay by check, send the payment to SheepSite and notify your account manager. The operator will mark the invoice as paid in the system, which applies the same service changes (storage upgrade, credits added, or renewal date advanced) and sends you a receipt by email.</p>
@@ -647,26 +700,29 @@ For maintenance requests, contact ABC Management at 555-123-4567 or manager@abcm
 
 <div style="display:flex; gap:1.5em; align-items:flex-start;">
   <div style="flex:2;">
-    <p>Use this template when introducing residents to the new website. Customize as needed.</p>
+    <p>Use the template below to announce the site to your residents. Copy it into your email client, fill in the bracketed placeholders, and send it to all unit owners. Customize the tone as you see fit &mdash; the goal is to get residents excited about what&rsquo;s available to them.</p>
     <blockquote>
-      <p>Subject: Your Building Website Is Now Live</p>
-      <p>Dear Residents,</p>
-      <p>In compliance with the latest condominium requirements in the state of Florida, [BUILDING NAME] now has a website with all of the required information and resources.</p>
-      <p>You can visit the site at: <strong>[WEBSITE URL]</strong></p>
-      <p><strong>Public resources</strong> (no login required) include building rules, forms, incorporation documents, the board of directors list, and general announcements.</p>
-      <p><strong>Private resources</strong> (login required) include board meeting minutes, financial statements, budgets, contracts, the resident directory, and the parking list.</p>
-      <p>Your login credentials are:<br>
-      Username: <strong>[first initial + last name, e.g. jsmith]</strong><br>
-      Temporary password: <strong>[TEMP PASSWORD]</strong></p>
-      <p>You will be asked to choose a new password the first time you log in.</p>
-      <p>Once logged in, use the <strong>Search</strong> feature to quickly find any document &mdash; just type a keyword and the site will locate it for you.</p>
-      <p>If you have trouble logging in or need your password reset, click &ldquo;Forgot password?&rdquo; on the login page.</p>
-      <p>Please contact [BOARD CONTACT] if you have any questions.</p>
+      <p><strong>Subject:</strong> Welcome to Your New Building Website</p>
+      <p>Dear [BUILDING NAME] Residents,</p>
+      <p>We&rsquo;re pleased to announce that your building now has a modern, easy-to-use website designed to keep you informed and connected. You can access it any time at:</p>
+      <p style="text-align:center;"><strong>[WEBSITE URL]</strong></p>
+      <p><strong>No login needed</strong> for general information &mdash; building rules, forms, board of directors, announcements, and more are available to anyone who visits the site.</p>
+      <p><strong>Log in as a resident</strong> to unlock the full experience:</p>
+      <ul>
+        <li><strong>Private documents</strong> &mdash; board meeting minutes, financial statements, budgets, contracts, and other member-only files</li>
+        <li><strong>Resident directory</strong> &mdash; contact information for your neighbors (owners only)</li>
+        <li><strong>Document search</strong> &mdash; type any keyword and instantly find it across all building documents</li>
+        <li><strong>Woolsy AI Assistant</strong> &mdash; ask questions about building rules, policies, or documents and get answers in plain language, no digging required</li>
+        <li><strong>My Account</strong> &mdash; view your unit details and submit updates (vehicle changes, contact info, etc.) directly to the board</li>
+      </ul>
+      <p>You should have received a separate welcome email with your username and a temporary password. Check your inbox (and spam folder) for a message from SheepSite. Log in with those credentials &mdash; you will be prompted to set a permanent password the first time.</p>
+      <p>If you cannot find the welcome email, go to the site, click <strong>Forgot password?</strong> on the login page, and enter your username (typically first initial + last name, e.g. <em>jsmith</em>). A new temporary password will be sent to your email address on file &mdash; no need to contact the board.</p>
+      <p>Questions? Reach out to [BOARD CONTACT] and we&rsquo;ll be happy to help.</p>
       <p>Regards,<br>The [BUILDING NAME] Board of Directors</p>
     </blockquote>
   </div>
   <div style="flex:1; text-align:center;">
-    {img_tag("image18.png", "Sheep at computer", "100%")}
+    {img_tag(WOOLSY_WORKING, "Woolsy", "100%")}
   </div>
 </div>
 

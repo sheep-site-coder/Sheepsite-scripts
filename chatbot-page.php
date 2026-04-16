@@ -7,20 +7,7 @@
 
 session_start();
 
-define('LOGIN_STATS_FILE', __DIR__ . '/credentials/login_stats.json');
-
-function logLogin(string $building, string $username): void {
-    $today  = date('Y-m-d');
-    $cutoff = date('Y-m-d', strtotime('-12 months'));
-    $data   = file_exists(LOGIN_STATS_FILE)
-        ? (json_decode(file_get_contents(LOGIN_STATS_FILE), true) ?? [])
-        : [];
-    $data[$building][$username][$today] = ($data[$building][$username][$today] ?? 0) + 1;
-    foreach ($data[$building][$username] as $date => $count) {
-        if ($date < $cutoff) unset($data[$building][$username][$date]);
-    }
-    file_put_contents(LOGIN_STATS_FILE, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-}
+require_once __DIR__ . '/login-stats.php';
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 
@@ -63,8 +50,13 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
-$loggedIn = !empty($_SESSION[$sessionKey]);
-$username = $loggedIn ? $_SESSION[$sessionKey] : '';
+$adminSessionKey = 'manage_auth_' . $building;
+$isAdminViewing  = !empty($_SESSION[$adminSessionKey]);
+
+$loggedIn = $isAdminViewing || !empty($_SESSION[$sessionKey]);
+$username = $isAdminViewing
+    ? ($_SESSION[$adminSessionKey]['user'] ?? 'admin')
+    : ($loggedIn ? $_SESSION[$sessionKey] : '');
 
 ?>
 <!DOCTYPE html>

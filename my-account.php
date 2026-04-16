@@ -10,6 +10,7 @@ session_start();
 
 define('CREDENTIALS_DIR', __DIR__ . '/credentials/');
 define('CONFIG_DIR',      __DIR__ . '/config/');
+require_once __DIR__ . '/login-stats.php';
 
 $buildings = require __DIR__ . '/buildings.php';
 
@@ -18,8 +19,14 @@ if (!$building || !array_key_exists($building, $buildings)) {
   die('<p style="color:red;">Invalid or missing building name.</p>');
 }
 
-$buildLabel = ucwords(str_replace(['_', '-'], ' ', $building));
-$sessionKey = 'private_auth_' . $building;
+$buildLabel      = ucwords(str_replace(['_', '-'], ' ', $building));
+$sessionKey      = 'private_auth_' . $building;
+$adminSessionKey = 'manage_auth_' . $building;
+
+if (!empty($_SESSION[$adminSessionKey])) {
+  header('Location: admin.php?building=' . urlencode($building));
+  exit;
+}
 
 // Load config for siteURL (needed on both login and main page)
 $configFile = CONFIG_DIR . $building . '.json';
@@ -50,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
 
   if ($authenticated) {
     $_SESSION[$sessionKey] = $username;
+    logLogin($building, $username);
     if ($mustChange) {
       header('Location: change-password.php?building=' . urlencode($building)
            . '&mustchange=1'

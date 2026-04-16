@@ -158,7 +158,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($tosDate): ?>
       <span><strong>Effective Date:</strong> <?= htmlspecialchars($tosDate) ?></span>
     <?php endif; ?>
-    <span><a href="<?= htmlspecialchars($docPath) ?>" target="_blank" style="color:#0070f3;font-size:0.85rem;text-decoration:none;">View full document ↗</a></span>
+    <span>
+      <a href="<?= htmlspecialchars($docPath) ?>" target="_blank"
+         style="color:#0070f3;font-weight:bold;text-decoration:none;">
+        View / Download ↗
+      </a>
+      <span style="color:#999;font-size:0.8rem;margin-left:4px;">(open in browser, then print to save as PDF)</span>
+    </span>
   </div>
 
   <div class="doc-frame">

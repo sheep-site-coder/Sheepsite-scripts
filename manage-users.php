@@ -792,5 +792,6 @@ function togglePass(uid) {
 }
 
 </script>
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

@@ -1862,5 +1862,6 @@ init();
     </div>
   </div>
 </div>
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

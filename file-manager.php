@@ -1350,5 +1350,6 @@ $_pageStorageLimit = (int)($_pageBldCfg['storageLimit']  ?? (int)($_pagePricing[
 </div>
 
 
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

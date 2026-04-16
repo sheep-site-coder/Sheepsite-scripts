@@ -489,5 +489,6 @@ function buyWoolsyCredits(e) {
     .catch(function () { btn.disabled = false; btn.textContent = 'Buy Credits \u2192'; });
 }
 </script>
+<?php require __DIR__ . '/woolsy-admin-widget.php'; ?>
 </body>
 </html>

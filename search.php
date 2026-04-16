@@ -12,6 +12,7 @@ session_start();
 
 define('CREDENTIALS_DIR',   __DIR__ . '/credentials/');
 define('TAGS_DIR',          __DIR__ . '/tags/');
+require_once __DIR__ . '/login-stats.php';
 require_once __DIR__ . '/storage/r2-storage.php';
 
 $buildings = require __DIR__ . '/buildings.php';
@@ -65,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
 
   if ($authenticated) {
     $_SESSION[$sessionKey] = $username;
+    logLogin($building, $username);
     $mustChange = false;
     foreach ($users as $u) {
       if ($u['user'] === $username && !empty($u['mustChange'])) {
@@ -89,9 +91,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
 }
 
 // -------------------------------------------------------
+// Admin bypass — only when ?adminview=1 is explicitly set
+// -------------------------------------------------------
+$adminSessionKey = 'manage_auth_' . $building;
+$isAdminViewing  = !empty($_SESSION[$adminSessionKey]) && !empty($_GET['adminview']);
+
+// -------------------------------------------------------
 // Login — show form if not authenticated
 // -------------------------------------------------------
-if (empty($_SESSION[$sessionKey])) {
+if (!$isAdminViewing && empty($_SESSION[$sessionKey])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -114,6 +122,10 @@ if (empty($_SESSION[$sessionKey])) {
     .back-btn  { display: inline-block; margin-bottom: 1.5rem; font-size: 0.9rem;
                  color: #0070f3; text-decoration: none; }
     .back-btn:hover { text-decoration: underline; }
+    .admin-bypass { background:#f0f7ff; border:1px solid #b3d4f5; border-radius:6px;
+                    padding:0.75rem 1rem; margin-bottom:1.5rem; font-size:0.9rem; }
+    .admin-bypass a { color:#0070f3; font-weight:bold; text-decoration:none; }
+    .admin-bypass a:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -122,6 +134,13 @@ if (empty($_SESSION[$sessionKey])) {
   <?php endif; ?>
   <h1><?= htmlspecialchars($buildLabel) ?></h1>
   <div class="subtitle">File search — login required</div>
+
+  <?php if (!empty($_SESSION[$adminSessionKey])): ?>
+    <div class="admin-bypass">
+      Logged in as admin &mdash;
+      <a href="<?= htmlspecialchars($baseURL . '&adminview=1') ?>">Continue as Admin →</a>
+    </div>
+  <?php endif; ?>
 
   <?php if ($loginError): ?>
     <p class="error"><?= htmlspecialchars($loginError) ?></p>
@@ -148,17 +167,19 @@ if (empty($_SESSION[$sessionKey])) {
 // -------------------------------------------------------
 // mustChange check
 // -------------------------------------------------------
-$credFile = CREDENTIALS_DIR . $building . '.json';
-$allUsers = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
-foreach ($allUsers as $u) {
-  if ($u['user'] === $_SESSION[$sessionKey] && !empty($u['mustChange'])) {
-    $searchRedirect = 'search.php?building=' . urlencode($building)
-                    . ($returnURL ? '&return=' . urlencode($returnURL) : '');
-    header('Location: change-password.php?building=' . urlencode($building)
-         . '&mustchange=1'
-         . '&redirect=' . urlencode($searchRedirect)
-         . ($returnURL ? '&return=' . urlencode($returnURL) : ''));
-    exit;
+if (!$isAdminViewing) {
+  $credFile = CREDENTIALS_DIR . $building . '.json';
+  $allUsers = file_exists($credFile) ? json_decode(file_get_contents($credFile), true) : [];
+  foreach ($allUsers as $u) {
+    if ($u['user'] === $_SESSION[$sessionKey] && !empty($u['mustChange'])) {
+      $searchRedirect = 'search.php?building=' . urlencode($building)
+                      . ($returnURL ? '&return=' . urlencode($returnURL) : '');
+      header('Location: change-password.php?building=' . urlencode($building)
+           . '&mustchange=1'
+           . '&redirect=' . urlencode($searchRedirect)
+           . ($returnURL ? '&return=' . urlencode($returnURL) : ''));
+      exit;
+    }
   }
 }
 
@@ -248,7 +269,9 @@ if (isset($_GET['json']) && $_GET['json'] === 'search') {
   exit;
 }
 
-$currentUser = $_SESSION[$sessionKey];
+$currentUser = $isAdminViewing
+    ? ($_SESSION[$adminSessionKey]['user'] ?? 'admin')
+    : $_SESSION[$sessionKey];
 ?>
 <!DOCTYPE html>
 <html lang="en">
