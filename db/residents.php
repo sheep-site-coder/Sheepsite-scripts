@@ -8,7 +8,7 @@
 //
 // Field name mapping (GAS column → MySQL column):
 //   residents:  Unit # → unit, Full Time → full_time,
-//               Resident → is_resident, Owner → is_owner,
+//               Resident → is_resident, Owner → is_owner, Renter → is_renter,
 //               First Name → first_name, Last Name → last_name,
 //               eMail → email, Phone #1 → phone1, Phone #2 → phone2,
 //               Board → board_role
@@ -31,6 +31,7 @@ function residentToGas_(array $row): array {
     'Full Time'  => !empty($row['full_time']),
     'Resident'   => !empty($row['is_resident']),
     'Owner'      => !empty($row['is_owner']),
+    'Renter'     => !empty($row['is_renter']),
     'First Name' => $row['first_name'] ?? '',
     'Last Name'  => $row['last_name']  ?? '',
     'eMail'      => $row['email']      ?? '',
@@ -47,12 +48,19 @@ function residentFromGas_(array $data): array {
   if (isset($data['Full Time']))  $db['full_time']   = $data['Full Time']  ? 1 : 0;
   if (isset($data['Resident']))   $db['is_resident'] = $data['Resident']   ? 1 : 0;
   if (isset($data['Owner']))      $db['is_owner']    = $data['Owner']      ? 1 : 0;
+  if (isset($data['Renter']))     $db['is_renter']   = $data['Renter']     ? 1 : 0;
   if (isset($data['First Name'])) $db['first_name']  = trim($data['First Name']);
   if (isset($data['Last Name']))  $db['last_name']   = trim($data['Last Name']);
   if (isset($data['eMail']))      $db['email']       = trim($data['eMail']);
   if (isset($data['Phone #1']))   $db['phone1']      = trim($data['Phone #1']);
   if (isset($data['Phone #2']))   $db['phone2']      = trim($data['Phone #2']);
   if (isset($data['Board']))      $db['board_role']  = trim($data['Board']);
+  // Renter is mutually exclusive with Owner, Resident, Full Time
+  if (!empty($db['is_renter'])) {
+    $db['is_owner']    = 0;
+    $db['is_resident'] = 0;
+    $db['full_time']   = 0;
+  }
   return $db;
 }
 
@@ -479,6 +487,7 @@ function dbImportResidents(string $building, array $owners): array {
 //   full_time    TINYINT DEFAULT 0,
 //   is_resident  TINYINT DEFAULT 0,
 //   is_owner     TINYINT DEFAULT 0,
+//   is_renter    TINYINT DEFAULT 0,
 //   notes        TEXT,
 //   submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 //   INDEX (building)
@@ -490,8 +499,8 @@ function dbAddRequest(string $building, array $data): array {
   $stmt = $pdo->prepare(
     'INSERT INTO res_requests
        (building, unit, submitted_by, req_type, first_name, last_name,
-        email, phone1, phone2, full_time, is_resident, is_owner, notes)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        email, phone1, phone2, full_time, is_resident, is_owner, is_renter, notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
   );
   $stmt->execute([
     $building,
@@ -506,6 +515,7 @@ function dbAddRequest(string $building, array $data): array {
     !empty($data['full_time'])   ? 1 : 0,
     !empty($data['is_resident']) ? 1 : 0,
     !empty($data['is_owner'])    ? 1 : 0,
+    !empty($data['is_renter'])   ? 1 : 0,
     trim($data['notes']        ?? ''),
   ]);
   return ['ok' => true, 'id' => (int)$pdo->lastInsertId()];

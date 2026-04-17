@@ -179,13 +179,14 @@ if ($action) {
         : gasPost($webAppURL, array_merge($body, ['action' => 'addDatabaseRow', 'token' => OWNER_IMPORT_TOKEN]));
       if (!empty($gasResult['error'])) { echo json_encode($gasResult); exit; }
 
-      // 2. Create web account only if resident has an email address
-      $first = trim($body['First Name'] ?? '');
-      $last  = trim($body['Last Name']  ?? '');
-      $email = trim($body['eMail']      ?? '');
+      // 2. Create web account only if resident has an email and is not a renter
+      $first    = trim($body['First Name'] ?? '');
+      $last     = trim($body['Last Name']  ?? '');
+      $email    = trim($body['eMail']      ?? '');
+      $isRenter = !empty($body['Renter']);
 
-      if (!$email) {
-        echo json_encode(['ok' => true, 'noEmail' => true]);
+      if (!$email || $isRenter) {
+        echo json_encode(['ok' => true, 'noEmail' => !$email, 'isRenter' => $isRenter]);
         exit;
       }
 
@@ -256,9 +257,10 @@ if ($action) {
         }
       }
 
-      // If an email was just added and no web account exists yet, create one now
+      // If an email was just added and no web account exists yet, create one now (not for renters)
       $newEmail = trim($body['eMail'] ?? '');
-      if ($newEmail) {
+      $isRenter = !empty($body['Renter']);
+      if ($newEmail && !$isRenter) {
         $currentFirst = $newFirst ?: $oldFirst;
         $currentLast  = $newLast  ?: $oldLast;
         $users        = loadUsers($building);
@@ -404,16 +406,18 @@ if ($action) {
         'Full Time'  => (bool)$req['full_time'],
         'Resident'   => (bool)$req['is_resident'],
         'Owner'      => (bool)$req['is_owner'],
+        'Renter'     => (bool)($req['is_renter'] ?? false),
       ]);
       if (!empty($addResult['error'])) { echo json_encode($addResult); exit; }
 
-      // Create web account + send welcome email if email provided
+      // Create web account only if not a renter and email is provided
       $email     = trim($req['email'] ?? '');
       $first     = trim($req['first_name'] ?? '');
       $last      = trim($req['last_name']  ?? '');
+      $isRenter  = !empty($req['is_renter']);
       $emailSent = false;
       $username  = null;
-      if ($email) {
+      if ($email && !$isRenter) {
         $users    = loadUsers($building);
         $existing = array_column($users, 'user');
         $username = generateUsername($first, $last, $existing);
@@ -647,7 +651,7 @@ $config = loadConfig($building);
 </div>
 
 <div class="toolbar">
-  <input type="search" id="unit-search" placeholder="Search units or names…" oninput="filterUnits(this.value)">
+  <input type="search" id="unit-search" placeholder="Search units, names, or status…" oninput="filterUnits(this.value)">
   <button class="btn btn-secondary" id="copy-emails-btn" onclick="copyAllEmails()"
     title="Copies all resident emails to the clipboard. Then simply Paste into the CC or BCC field of your email.">Get Email List</button>
   <button class="btn btn-secondary" onclick="toggleCsvPanel()">⤓ Import from CSV</button>
@@ -905,9 +909,25 @@ function renderResidentTab(unit, residents) {
     <button class="btn btn-secondary btn-sm" onclick="toggleAddPerson('${esc(unit)}')">+ Add Resident</button>`;
 }
 
+// Status checkbox mutual exclusion helpers
+function onRenterChange(rtrEl, ftId, resId, ownId) {
+  [ftId, resId, ownId].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.disabled = rtrEl.checked;
+    if (rtrEl.checked) el.checked = false;
+  });
+}
+function onStatusChange(statusEl, rtrId, ftId, resId, ownId) {
+  var anyChecked = [ftId, resId, ownId].some(function(id) { return document.getElementById(id).checked; });
+  var rtrEl = document.getElementById(rtrId);
+  rtrEl.disabled = anyChecked;
+  if (anyChecked) rtrEl.checked = false;
+}
+
 function residentCardHtml(unit, r) {
   const name       = `${r['First Name']} ${r['Last Name']}`.trim();
   const flagParts  = [
+    r['Renter']    ? `<span style="color:#b45309;font-weight:600;">Renter</span>` : '',
     r['Full Time'] ? 'Full Time' : '',
     r['Resident']  ? `<span style="color:#1d4ed8;font-weight:600;">Resident</span>` : '',
     r['Owner']     ? `<span style="color:#1d4ed8;font-weight:600;">Owner</span>` : '',
@@ -964,10 +984,15 @@ function editResidentFormHtml(unit, r) {
     </div>
     <div style="margin-top:0.6rem;">
       <label style="font-size:0.78rem;color:#555;font-weight:600;">Status</label>
-      <div style="display:flex;gap:1rem;margin-top:0.25rem;">
-        <label class="checkbox-row"><input type="checkbox" id="ef-ft-${id}"${r['Full Time'] ? ' checked' : ''}> Full Time</label>
-        <label class="checkbox-row"><input type="checkbox" id="ef-res-${id}"${r['Resident'] ? ' checked' : ''}> Resident</label>
-        <label class="checkbox-row"><input type="checkbox" id="ef-own-${id}"${r['Owner'] ? ' checked' : ''}> Owner</label>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.25rem;">
+        <label class="checkbox-row"><input type="checkbox" id="ef-ft-${id}"${r['Full Time'] ? ' checked' : ''}${r['Renter'] ? ' disabled' : ''}
+          onchange="onStatusChange(this,'ef-rtr-${id}','ef-ft-${id}','ef-res-${id}','ef-own-${id}')"> Full Time</label>
+        <label class="checkbox-row"><input type="checkbox" id="ef-res-${id}"${r['Resident'] ? ' checked' : ''}${r['Renter'] ? ' disabled' : ''}
+          onchange="onStatusChange(this,'ef-rtr-${id}','ef-ft-${id}','ef-res-${id}','ef-own-${id}')"> Resident</label>
+        <label class="checkbox-row"><input type="checkbox" id="ef-own-${id}"${r['Owner'] ? ' checked' : ''}${r['Renter'] ? ' disabled' : ''}
+          onchange="onStatusChange(this,'ef-rtr-${id}','ef-ft-${id}','ef-res-${id}','ef-own-${id}')"> Owner</label>
+        <label class="checkbox-row"><input type="checkbox" id="ef-rtr-${id}"${r['Renter'] ? ' checked' : ''}
+          onchange="onRenterChange(this,'ef-ft-${id}','ef-res-${id}','ef-own-${id}')"> Renter</label>
       </div>
     </div>
     <div class="form-actions">
@@ -997,10 +1022,15 @@ function addPersonFormHtml(unit) {
     </div>
     <div style="margin-top:0.6rem;">
       <label style="font-size:0.78rem;color:#555;font-weight:600;">Status</label>
-      <div style="display:flex;gap:1rem;margin-top:0.25rem;">
-        <label class="checkbox-row"><input type="checkbox" id="ap-ft-${esc(unit)}"> Full Time</label>
-        <label class="checkbox-row"><input type="checkbox" id="ap-res-${esc(unit)}" checked> Resident</label>
-        <label class="checkbox-row"><input type="checkbox" id="ap-own-${esc(unit)}" checked> Owner</label>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.25rem;">
+        <label class="checkbox-row"><input type="checkbox" id="ap-ft-${esc(unit)}"
+          onchange="onStatusChange(this,'ap-rtr-${esc(unit)}','ap-ft-${esc(unit)}','ap-res-${esc(unit)}','ap-own-${esc(unit)}')"> Full Time</label>
+        <label class="checkbox-row"><input type="checkbox" id="ap-res-${esc(unit)}" checked
+          onchange="onStatusChange(this,'ap-rtr-${esc(unit)}','ap-ft-${esc(unit)}','ap-res-${esc(unit)}','ap-own-${esc(unit)}')"> Resident</label>
+        <label class="checkbox-row"><input type="checkbox" id="ap-own-${esc(unit)}" checked
+          onchange="onStatusChange(this,'ap-rtr-${esc(unit)}','ap-ft-${esc(unit)}','ap-res-${esc(unit)}','ap-own-${esc(unit)}')"> Owner</label>
+        <label class="checkbox-row"><input type="checkbox" id="ap-rtr-${esc(unit)}"
+          onchange="onRenterChange(this,'ap-ft-${esc(unit)}','ap-res-${esc(unit)}','ap-own-${esc(unit)}')"> Renter</label>
       </div>
     </div>
     <div class="form-actions">
@@ -1274,13 +1304,16 @@ async function saveAddPerson(unit) {
     'Full Time':   document.getElementById('ap-ft-'    + unit).checked,
     'Resident':    document.getElementById('ap-res-'   + unit).checked,
     'Owner':       document.getElementById('ap-own-'   + unit).checked,
+    'Renter':      document.getElementById('ap-rtr-'   + unit).checked,
   };
 
   const res = await apiPost('addDatabaseRow', payload);
   if (res.error) { showMsg(msgEl, res.error, 'error'); return; }
 
   let successMsg;
-  if (res.noEmail) {
+  if (res.isRenter) {
+    successMsg = '✓ Added to database as Renter. No web account created — renters do not receive portal access.';
+  } else if (res.noEmail) {
     successMsg = '✓ Added to database. No web account created — add an email address first, then create their login from Manage User Accounts.';
   } else if (res.emailSent) {
     successMsg = `✓ Added. Login account created for <strong>${res.username}</strong> and temporary password emailed to resident.`;
@@ -1314,6 +1347,7 @@ async function saveEditResident(unit, origFirst, origLast, id) {
     'Full Time':   document.getElementById('ef-ft-'    + id).checked,
     'Resident':    document.getElementById('ef-res-'   + id).checked,
     'Owner':       document.getElementById('ef-own-'   + id).checked,
+    'Renter':      document.getElementById('ef-rtr-'   + id).checked,
   };
 
   const res = await apiPost('editDatabaseRow', payload);
@@ -1549,9 +1583,16 @@ function filterUnits(query) {
   if (!q) { renderUnits(unitOrder); return; }
   const filtered = unitOrder.filter(unit => {
     if (unit.toLowerCase().includes(q)) return true;
-    return (unitMap[unit] || []).some(r =>
-      (r['First Name'] + ' ' + r['Last Name']).toLowerCase().includes(q)
-    );
+    return (unitMap[unit] || []).some(r => {
+      if ((r['First Name'] + ' ' + r['Last Name']).toLowerCase().includes(q)) return true;
+      const status = [
+        r['Renter']    ? 'renter'    : '',
+        r['Owner']     ? 'owner'     : '',
+        r['Resident']  ? 'resident'  : '',
+        r['Full Time'] ? 'full time' : '',
+      ].filter(Boolean).join(' ');
+      return status.includes(q);
+    });
   });
   renderUnits(filtered);
 }

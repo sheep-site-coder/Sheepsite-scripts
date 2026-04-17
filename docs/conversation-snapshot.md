@@ -1128,26 +1128,28 @@ docs/Sheepsite-Architecture.html
 
 ---
 
+## Session 35 — Renter status, search improvements
+
+### Renter resident type
+- New `is_renter` column in `residents` and `res_requests` MySQL tables (both already migrated on server)
+- `db/residents.php`: `Renter` field added to `residentToGas_()` / `residentFromGas_()`; mutual exclusion enforced on save (renter forces owner/resident/full_time = 0); `dbAddRequest()` includes `is_renter`
+- `db/schema.sql`: `is_renter` column added to table definition
+- `database-admin.php`: Renter checkbox in Add and Edit forms with JS mutual exclusion (checking Renter disables/unchecks the other three; checking any other disables Renter); amber "Renter" badge in unit panel; account creation skipped for renters in all three paths (addDatabaseRow, editDatabaseRow, approveRequest)
+- `manage-users.php`: Sync excludes renters from "missing accounts" bucket; reports count as "X renter(s) skipped — no accounts created for renters"
+- Renters remain on all resident lists, reports, and the email list — only difference is no portal account
+- `docs/build-manual.py`: new "Resident Status Flags" section with table + Renter callout box; Adding a Resident steps updated; Sync section notes renter skip behaviour; manual rebuilt
+
+### Search improvements (database-admin.php)
+- Search box now matches status flags: typing "renter", "owner", "resident", or "full time" filters units to those containing a person with that status
+- Placeholder updated to "Search units, names, or status…"
+
 ## Next Steps
 
-- Upload session 33 files to server:
-  - `building-detail.php`
-  - `association-remove.php`
-  - `admin.php`
-  - `billing.php`
-  - `woolsy-manage.php`
-  - `master-admin.php`
-  - `storage/r2-storage.php`
-  - `storage/storage.php`
-  - `file-manager.php`
-  - `.htaccess`
-  - `buildings.php`
-  - `docs/Sheepsite-Architecture.html`
 - Add R2 CORS entries for all building subdomains and custom domains
-- **Invoice cron** — `storage-cron.php` renewal invoice generation still unconfirmed; verify with log
-- **Extract governing docs for LyndhurstI** — same Woolsy process as LyndhurstH when docs available
+- Clean up untracked dev scratch files: `r2-list.php`, `r2-upload-test.php`, `test/`
+- Upload session 35 files: `database-admin.php`, `manage-users.php`, `db/residents.php`, `docs/Sheepsite-Admin-Manual.html`
 
 ---
 
-*Snapshot updated: April 12, 2026 (session 33 — R2 migration complete, new association provisioning)*
+*Snapshot updated: April 17, 2026 (session 35 — Renter status, search by status)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

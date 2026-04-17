@@ -282,18 +282,47 @@ html = f"""<!DOCTYPE html>
 <p>Units are grouped by floor. Click any unit to expand it and see four tabs:</p>
 <table>
   <tr><th>Tab</th><th>What it contains</th></tr>
-  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time), email, phones</td></tr>
+  <tr><td><strong>Residents</strong></td><td>Each person in the unit &mdash; name, status (Owner/Resident/Full Time/Renter), email, phones</td></tr>
   <tr><td><strong>Unit Info</strong></td><td>Insurance company and policy number, AC replacement date, water tank replacement date, unit notes</td></tr>
   <tr><td><strong>Vehicle &amp; Parking</strong></td><td>Car make/model/color, license plate, parking spot, notes</td></tr>
   <tr><td><strong>Emergency</strong></td><td>Emergency contacts and condo sitters &mdash; name, email, phones</td></tr>
 </table>
 
+<h3>Resident Status Flags</h3>
+<p>Each person in the database carries one or more status flags that describe their role in the unit. These flags control how the system treats them.</p>
+<table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td><strong>Owner</strong></td><td>Unit owner of record</td></tr>
+  <tr><td><strong>Resident</strong></td><td>Lives in the unit (may or may not be the owner)</td></tr>
+  <tr><td><strong>Full Time</strong></td><td>Full-time occupant (as opposed to seasonal)</td></tr>
+  <tr><td><strong>Renter</strong></td><td>Tenant renting the unit &mdash; see important note below</td></tr>
+</table>
+<p>Owner, Resident, and Full Time can be combined freely. <strong>Renter is mutually exclusive</strong> &mdash; selecting it automatically clears the other three, and the others are disabled while Renter is checked.</p>
+
+<div class="tip"><strong>Renters &mdash; what changes and what does not</strong><br><br>
+A renter is a full resident of the building for record-keeping purposes:
+<ul>
+  <li>They appear on <strong>all resident lists</strong> and reports</li>
+  <li>Their email address is included in the <strong>community-wide email list</strong></li>
+  <li>Their vehicle, emergency contact, and unit info are tracked the same as any other resident</li>
+</ul>
+The <em>only</em> difference is access to the building website portal:
+<ul>
+  <li>No web login account is created for a renter, even if an email address is on file</li>
+  <li>Renters cannot log in to view private documents or the resident directory</li>
+  <li>Sync (in Manage User Accounts) skips renters and reports a count rather than flagging them as missing accounts</li>
+</ul>
+This reflects Florida condo law: the password-protected website section is an owner entitlement. Renters who need access to building documents should contact the unit owner or the board directly.
+</div>
+
 <h3>Adding a Resident</h3>
 <ol>
   <li>Click the unit to expand it, then click <strong>+ Add Resident</strong></li>
-  <li>Fill in at minimum First Name, Last Name, and Unit # &mdash; all other fields are optional</li>
-  <li>If you provide an email address, a web login is created automatically and a welcome email with a temporary password is sent to the resident</li>
-  <li>If no email is provided, only the database record is created. You can add the email later &mdash; the login will be created at that point</li>
+  <li>Fill in at minimum First Name and Last Name &mdash; all other fields are optional</li>
+  <li>Set the appropriate <strong>Status</strong> flags. If the person is a tenant, check <strong>Renter</strong> &mdash; this will clear and disable the other status checkboxes automatically</li>
+  <li>If the person is <em>not</em> a renter and you provide an email address, a web login is created automatically and a welcome email with a temporary password is sent to them</li>
+  <li>If the person is a renter, only the database record is created regardless of whether an email is provided</li>
+  <li>If no email is provided for a non-renter, only the database record is created. You can add the email later &mdash; the login will be created at that point</li>
 </ol>
 
 <h3>Editing or Deleting a Resident</h3>
@@ -376,6 +405,7 @@ html = f"""<!DOCTYPE html>
   <tr><td><strong>Orphaned accounts</strong> (yellow)</td><td>Web logins with no matching resident in the database &mdash; e.g. someone who moved out</td><td>Check the ones to remove, click <strong>Remove checked</strong>, or dismiss to keep them</td></tr>
   <tr><td><strong>Missing accounts</strong> (blue)</td><td>Database residents with no web login &mdash; e.g. newly imported residents</td><td>Check the ones to activate, click <strong>Recreate checked</strong> &mdash; a temporary password is generated and emailed automatically</td></tr>
 </table>
+<p>Sync also reports how many <strong>renters</strong> were found in the database and skipped. This is normal &mdash; renters are intentionally excluded from web account creation and are never listed as missing accounts.</p>
 
 <div class="tip"><strong>Tip:</strong> Sync is safe to run at any time &mdash; nothing is modified until you review and confirm. You can dismiss either panel independently if you don&rsquo;t need to act on it right now.</div>
 

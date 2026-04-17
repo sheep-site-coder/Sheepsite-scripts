@@ -304,6 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $owners = array_map(fn($r) => [
         'firstName' => $r['First Name'],
         'lastName'  => $r['Last Name'],
+        'isRenter'  => !empty($r['Renter']),
       ], $dbResult['rows'] ?? []);
       $data = ['owners' => $owners];
       $syncError = false;
@@ -346,13 +347,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
       $_SESSION['sync_orphans_' . $building] = $orphans;
 
-      // Missing: database residents with no web account
-      $missing = [];
-      $taken   = [];
+      // Missing: database residents with no web account (renters excluded)
+      $missing     = [];
+      $renterCount = 0;
+      $taken       = [];
       foreach ($data['owners'] as $owner) {
         $firstName = $owner['firstName'] ?? '';
         $lastName  = $owner['lastName']  ?? '';
         if (!$lastName) continue;
+        if (!empty($owner['isRenter'])) { $renterCount++; continue; }
         $base = makeUsername($firstName, $lastName);
         $taken[$base] = ($taken[$base] ?? 0) + 1;
         $uname = $taken[$base] === 1 ? $base : $base . $taken[$base];
@@ -365,6 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $parts = [];
       if (count($orphans) > 0) $parts[] = count($orphans) . ' orphaned account(s) found';
       if (count($missing) > 0) $parts[] = count($missing) . ' database resident(s) missing a web account';
+      if ($renterCount > 0)    $parts[] = $renterCount . ' renter(s) skipped — no accounts created for renters';
       $message = 'Sync complete' . (count($parts) ? ' — ' . implode('; ', $parts) . '. Review below.' : ' — everything looks good.');
     }
   }
