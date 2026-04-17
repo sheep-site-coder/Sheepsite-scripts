@@ -37,7 +37,7 @@ if (isset($_GET['json'])) {
 // -------------------------------------------------------
 if (isset($_GET['file'])) {
   $filePath = trim($_GET['file'], '/');
-  if (!$filePath || !preg_match('/^[a-zA-Z0-9_.() \/-]+$/', $filePath)) {
+  if (!$filePath || str_contains($filePath, '..') || str_contains($filePath, "\0")) {
     die('<p style="color:red;">Invalid file path.</p>');
   }
   $info = stGetDownloadInfo($building, $filePath, 'public');

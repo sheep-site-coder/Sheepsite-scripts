@@ -432,6 +432,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'refreshStorage') {
     </div>
   </a>
 
+  <a href="accounting.php" class="tool-card">
+    <div class="tool-icon">💰</div>
+    <div>
+      <div class="tool-title">Revenue Reports</div>
+      <div class="tool-desc">Generate Wave-compatible CSV reports of all paid invoices.</div>
+    </div>
+  </a>
+
   <a href="docs/Sheepsite-Architecture.html" target="_blank" class="tool-card">
     <div class="tool-icon">🏗️</div>
     <div>

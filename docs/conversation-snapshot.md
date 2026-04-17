@@ -1143,13 +1143,40 @@ docs/Sheepsite-Architecture.html
 - Search box now matches status flags: typing "renter", "owner", "resident", or "full time" filters units to those containing a person with that status
 - Placeholder updated to "Search units, names, or status…"
 
+## Session 35 (continued) — Accounting / Revenue Reports
+
+### `accounting.php` (NEW)
+- Master admin only; linked from System Tools grid in master-admin.php
+- Scans all `invoices/{building}/*.json` files across all buildings for paid invoices
+- **Non-overlapping reports**: each report covers from the day after the last report ended through yesterday; same-day payments always land in the next report (no gaps, no duplicates)
+- **Create Report** button shows exact date range and transaction count before generating
+- Reports saved to `config/accounting_reports/` as `sheepsite-revenue-{from}_{to}.csv`
+- Report manifest stored in `config/accounting_reports/index.json`
+- CSV format: UTF-8 with BOM (Excel-compatible), columns: `Date,Description,Amount`
+- Description format: `Lyndhurst H — Annual Renewal (LyndhurstH-0003)`
+- Past reports listed newest-first with Download CSV buttons
+- Designed for Wave accounting import: export here, enter expenses directly in Wave
+
+### `display-private-dir.php` + `display-public-dir.php` — file ID validation fix
+- Old regex (`/^[a-zA-Z0-9_.() \/-]+$/`) was designed for Google Drive IDs and rejected R2 file paths containing `#`, `'`, `[`, `]`, `,`, accented characters, etc.
+- Replaced with path-traversal guard: blocks `..` and null bytes only
+- Real security is in `r2GetDownloadInfo()` which validates the key belongs to the building
+
+### Architecture doc updated
+- `accounting.php` added to File Inventory (Admin PHP Scripts table)
+- `config/accounting_reports/` added to Data & Config Files table
+
+---
+
 ## Next Steps
 
 - Add R2 CORS entries for all building subdomains and custom domains
 - Clean up untracked dev scratch files: `r2-list.php`, `r2-upload-test.php`, `test/`
 - Upload session 35 files: `database-admin.php`, `manage-users.php`, `db/residents.php`, `docs/Sheepsite-Admin-Manual.html`
+- Upload accounting session files: `accounting.php`, `master-admin.php`, `display-private-dir.php`, `display-public-dir.php`
+- Run `python3 docs/build-architecture.py` → upload `docs/Sheepsite-Architecture.html`
 
 ---
 
-*Snapshot updated: April 17, 2026 (session 35 — Renter status, search by status)*
+*Snapshot updated: April 17, 2026 (session 35 — Renter status, search by status, accounting/revenue reports, R2 file ID fix)*
 *Working directory: /Users/alain/github/Sheepsite-scripts*

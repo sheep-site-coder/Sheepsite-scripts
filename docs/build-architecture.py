@@ -364,6 +364,8 @@ present on the server (which they always are on the live site). All buildings op
       <td>Post-payment Stripe landing page (cosmetic). Actual fulfilment happens in billing-webhook.php.</td></tr>
   <tr><td><code>storage-cron.php</code> <span class="tag tag-php">PHP</span></td>
       <td>Nightly cron script. Refreshes Drive storage for every building (calls dir-display-bridge.gs storageReport, saves to config/{{building}}.json). Also checks each building&rsquo;s renewal date — if within 30 days and no unpaid invoice exists for that period, auto-generates and emails an invoice. Run via cPanel Cron Jobs (CLI) or HTTP trigger with token.</td></tr>
+  <tr><td><code>accounting.php</code> <span class="tag tag-php">PHP</span></td>
+      <td>SheepSite LLC revenue reporting tool. Master admin only. Scans all paid invoices across all buildings and generates Wave-compatible CSV reports (UTF-8 with BOM; columns: Date, Description, Amount). Reports are non-overlapping: each run covers from the day after the previous report ended through yesterday, so same-day payments always fall into the next report. Report index stored in <code>config/accounting_reports/index.json</code>; CSV files stored alongside it. Linked from the System Tools grid in master-admin.php.</td></tr>
 </table>
 
 <h3>Woolsy Chatbot Scripts</h3>
@@ -552,6 +554,7 @@ coverage without manual tracking.</p>
   <tr><td><code>invoices/{{building}}/{{id}}.json</code> <span class="tag tag-data">data</span></td><td>One JSON file per invoice. Core fields: <code>id</code> (e.g. LyndhurstH-0001), <code>seq</code>, <code>building</code>, <code>date</code>, <code>dueDate</code>, <code>status</code> (unpaid/paid), <code>lineItems</code>, <code>total</code>, <code>paidDate</code>, <code>paymentMethod</code> (check/stripe — set when marked paid), <code>generatedBy</code> (manual/cron/auto). Type-specific fields: <code>invoiceType</code> (renewal/storage/woolsy), <code>newBytes</code> (storage invoices — the new limit to apply on payment), <code>creditsToAdd</code> (woolsy invoices — credits to add on payment). Folder is protected by .htaccess.</td><td>No</td></tr>
   <tr><td><code>config/stripe.json</code> <span class="tag tag-data">data</span></td><td>Stripe API keys: <code>{{"secretKey":"sk_live_...","webhookSecret":"whsec_..."}}</code>. Read by billing.php and billing-webhook.php.</td><td>No</td></tr>
   <tr><td><code>config/processed_payments.json</code> <span class="tag tag-data">data</span></td><td>Idempotency log for Stripe webhooks. Maps <code>paymentIntentId</code> to building/type/processed timestamp. Prevents double-fulfilment if Stripe retries the webhook. Created automatically on first payment.</td><td>No</td></tr>
+  <tr><td><code>config/accounting_reports/</code> <span class="tag tag-data">data</span></td><td>Revenue report storage. <code>index.json</code> is the report manifest (array of {{from, to, file, count, total}}). Each report is a CSV file named <code>sheepsite-revenue-{{from}}_{{to}}.csv</code>. Protected by .htaccess. Created automatically by accounting.php on first report generation.</td><td>No</td></tr>
   <tr><td><code>assets/sheepsite-mascot.jpg</code></td><td>SheepSite mascot image. Referenced by URL in HTML invoice and receipt emails.</td><td>No (binary)</td></tr>
 </table>
 
